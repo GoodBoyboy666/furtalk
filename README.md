@@ -167,7 +167,7 @@ docker compose up -d
   `widget/dist/furtalk.js` 及 source map。
 - 部署：将 `widget/dist/` 产物托管到独立 CDN / 静态托管，通过 `<script>` 加载；
   组件自动从 `import.meta.url` 推导 Furtalk 服务源（可用 `service-origin` 属性覆盖）。
-- 部署要求：授权流程依赖 `window.opener`，不得使用 `noopener`，也不得对该流程设置
+- 部署要求：授权流程依赖 `window.opener`，禁止使用 `noopener`，也禁止对该流程设置
   `Cross-Origin-Opener-Policy: same-origin`（`same-origin-allow-popups` 兼容）；
   评论会话依赖 CHIPS Partitioned cookie。
 - 挂载属性与详细约定见 `widget/README.md`。
