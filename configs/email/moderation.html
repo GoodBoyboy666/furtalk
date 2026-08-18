@@ -3,24 +3,60 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="format-detection" content="telephone=no, date=no, address=no, email=no">
+  <meta name="color-scheme" content="light">
   <title>{{if .AwaitingModeration}}评论待审核{{else}}新评论{{end}}</title>
 </head>
-<body style="margin:0;padding:0;background-color:#f6f7fb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f6f7fb;padding:40px 16px;">
+<body style="margin:0;padding:0;background-color:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f1f5f9;width:100%;margin:0;padding:40px 16px;">
     <tr>
       <td align="center">
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;background-color:#ffffff;border-radius:16px;border:1px solid #e2e8f0;box-shadow:0 4px 16px rgba(15,23,42,0.04);overflow:hidden;">
           <tr>
-            <td style="background-color:#ffffff;border-radius:16px;padding:36px 32px;">
-              <p style="margin:0 0 32px;font-size:17px;line-height:1;font-weight:700;letter-spacing:-0.2px;color:#2563eb;">Furtalk</p>
-              <h1 style="margin:0 0 12px;font-size:24px;line-height:1.35;letter-spacing:-0.4px;color:#111827;">{{if .AwaitingModeration}}评论待审核{{else}}新评论{{end}}</h1>
-              <p style="margin:0 0 24px;font-size:15px;color:#4b5563;line-height:1.7;">{{if .AwaitingModeration}}有一条新评论正在等待审核。{{else}}有新评论发表。{{end}}</p>
-              <p style="margin:0 0 10px;font-size:13px;color:#6b7280;">{{.AuthorNickname}} 评论说：</p>
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0;background-color:#f5f7fb;border-radius:10px;">
+            <td style="height:4px;background-color:#2563eb;"></td>
+          </tr>
+          <tr>
+            <td style="padding:36px 32px 32px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:28px;">
                 <tr>
-                  <td style="padding:18px 20px;font-size:15px;color:#1f2937;line-height:1.7;white-space:pre-wrap;">{{.CommentBody}}</td>
+                  <td align="left" style="vertical-align:middle;">
+                    <span style="font-size:20px;font-weight:800;letter-spacing:-0.4px;color:#2563eb;">Furtalk</span>
+                  </td>
+                  <td align="right" style="vertical-align:middle;">
+                    {{if .AwaitingModeration}}
+                    <span style="display:inline-block;background-color:#fffbeb;color:#b45309;border:1px solid #fde68a;padding:4px 10px;border-radius:9999px;font-size:12px;font-weight:600;line-height:1;">待审核</span>
+                    {{else}}
+                    <span style="display:inline-block;background-color:#eff6ff;color:#2563eb;border:1px solid #dbeafe;padding:4px 10px;border-radius:9999px;font-size:12px;font-weight:600;line-height:1;">新评论</span>
+                    {{end}}
+                  </td>
                 </tr>
               </table>
+
+              <h1 style="margin:0 0 12px;font-size:22px;line-height:1.35;font-weight:700;letter-spacing:-0.3px;color:#0f172a;">{{if .AwaitingModeration}}评论待审核通知{{else}}收到新评论{{end}}</h1>
+              <p style="margin:0 0 20px;font-size:15px;color:#475569;line-height:1.65;">{{if .AwaitingModeration}}站点收到一条新的待审核评论，审核通过后将在前台展示。{{else}}您的站点收到了一条新评论。{{end}}</p>
+
+              <p style="margin:0 0 10px;font-size:13px;font-weight:600;color:#64748b;">
+                <span style="color:#0f172a;">{{.AuthorNickname}}</span> 评论说：
+              </p>
+
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 24px;background-color:#f8fafc;border:1px solid #e2e8f0;border-left:4px solid #2563eb;border-radius:10px;">
+                <tr>
+                  <td style="padding:18px 20px;font-size:15px;color:#1e293b;line-height:1.7;white-space:pre-wrap;word-break:break-word;">{{.CommentBody}}</td>
+                </tr>
+              </table>
+
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;margin:0 0 28px;">
+                <tr>
+                  <td style="padding:12px 16px;font-size:13px;color:#64748b;line-height:1.6;">
+                    📌 <strong>管理提醒</strong>：请前往 Furtalk 管理控制台查看详情或进行审核操作。
+                  </td>
+                </tr>
+              </table>
+
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top:1px solid #e2e8f0;margin:0 0 20px;"><tr><td></td></tr></table>
+
+              <p style="margin:0 0 6px;font-size:12px;color:#94a3b8;line-height:1.5;text-align:center;">此邮件由系统自动发送，请勿直接回复。</p>
+              <p style="margin:0;font-size:12px;color:#94a3b8;line-height:1.5;text-align:center;">© Furtalk · 简洁现代的开源评论系统</p>
             </td>
           </tr>
         </table>
