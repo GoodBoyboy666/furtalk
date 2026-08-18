@@ -1,0 +1,13 @@
+.git
+.trellis
+bin
+tmp
+atlas
+
+**/node_modules
+web/dist
+web/dist-ssr
+internal/platform/webui/dist
+
+# The comment widget is a separate deployment artifact and is not part of this image.
+widget

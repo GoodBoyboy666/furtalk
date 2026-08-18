@@ -1,0 +1,121 @@
+name: GitHub Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository without submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      # GitHub tag globs are intentionally broad; reject every non-contract tag
+      # before initializing a submodule or running any build/release side effect.
+      - name: Validate release tag
+        id: tag
+        shell: bash
+        run: |
+          ./scripts/release-tag.sh "$GITHUB_REF_NAME" > "$RUNNER_TEMP/release-tag.env"
+          cat "$RUNNER_TEMP/release-tag.env"
+          cat "$RUNNER_TEMP/release-tag.env" >> "$GITHUB_OUTPUT"
+
+      - name: Initialize Web submodule only
+        run: git submodule update --init --depth 1 web
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.15.0
+          run_install: false
+
+      - name: Build Web once
+        run: |
+          pnpm --dir web install --frozen-lockfile
+          pnpm --dir web build
+          ./scripts/stage-web.sh
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.13"
+          cache: true
+
+      - name: Build and package release assets
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ steps.tag.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+
+          build_asset() {
+            local goos=$1
+            local goarch=$2
+            local binary_name="furtalk-${RELEASE_VERSION}-${goos}-${goarch}"
+            local binary_path="$(mktemp -d)/${binary_name}"
+            local archive
+
+            if [ "$goos" = windows ]; then
+              binary_name="${binary_name}.exe"
+              binary_path="$(dirname "$binary_path")/${binary_name}"
+            fi
+
+            CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" \
+              go build -tags embed -trimpath -ldflags '-s -w' -o "$binary_path" ./cmd/app
+
+            if [ "$goos" = linux ]; then
+              archive="dist/furtalk-${RELEASE_VERSION}-${goos}-${goarch}.tar.gz"
+              tar -C "$(dirname "$binary_path")" -czf "$GITHUB_WORKSPACE/$archive" "$(basename "$binary_path")"
+            else
+              archive="dist/furtalk-${RELEASE_VERSION}-${goos}-${goarch}.zip"
+              (cd "$(dirname "$binary_path")" && zip -q "$GITHUB_WORKSPACE/$archive" "$(basename "$binary_path")")
+            fi
+          }
+
+          build_asset linux amd64
+          build_asset linux arm64
+          build_asset windows amd64
+          build_asset windows arm64
+          (cd dist && sha256sum *.tar.gz *.zip > SHA256SUMS)
+
+      - name: Create or update draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.tag.outputs.tag }}
+          RELEASE_PRERELEASE: ${{ steps.tag.outputs.prerelease }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            edit_args=(--draft=true --prerelease="$RELEASE_PRERELEASE")
+            if [ "$RELEASE_PRERELEASE" = true ]; then
+              edit_args+=(--latest=false)
+            fi
+            gh release edit "$RELEASE_TAG" "${edit_args[@]}"
+          else
+            release_args=(--verify-tag --draft --generate-notes)
+            if [ "$RELEASE_PRERELEASE" = true ]; then
+              release_args+=(--prerelease --latest=false)
+            fi
+            gh release create "$RELEASE_TAG" "${release_args[@]}"
+          fi
+
+      - name: Upload release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.tag.outputs.tag }}
+        run: gh release upload "$RELEASE_TAG" dist/* --clobber

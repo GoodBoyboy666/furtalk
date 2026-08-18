@@ -1,0 +1,113 @@
+# Furtalk backend static configuration template (YAML).
+# Copy to configs/config.yaml or set the equivalent FURTALK_* environment variables.
+# Priority: non-empty environment variables > this file > built-in defaults.
+# The file schema mirrors the nested Config sections. Unknown keys fail startup.
+#
+# 配置级别（必需 / 推荐 / 可选）：
+# - 必需  缺失或为空时启动校验失败，阻止应用启动。
+# - 推荐 缺失时使用内置安全默认值，并在启动日志输出一次 warn 告警。
+# - 可选  缺失时保持惰性/内存行为，不报错不告警。
+
+# [必需] 实例公开 Origin，用于 JWT issuer/OAuth/退订链接等。
+# [必需] 注意：WebAuthn RP 与 JWT issuer 都必须显式提供，不再从此值派生。
+http:
+  address: ":8080"
+  public_base_url: "https://furtalk.example.com"
+  # [推荐] 可信代理 CIDR 列表。
+  # 仅当直接对端位于这些 CIDR 内时才解析 X-Forwarded-For 可信代理链：
+  # 从最右一跳向左跳过可信地址，选择第一个非可信地址作为客户端 IP；
+  # 未配置时只信任直接连接地址（fail-closed）。
+  # trusted_proxies:
+  #   - "10.0.0.0/8"
+  #   - "192.168.0.0/16"
+  # [推荐] 优雅关闭宽限。
+  # shutdown_timeout: "10s"
+  # [推荐] HTTP 读头超时。
+  # read_header_timeout: "5s"
+  # [推荐] HTTP 读超时。
+  # read_timeout: "15s"
+  # [推荐] HTTP 写超时。
+  # write_timeout: "60s"
+  # [推荐] HTTP 空闲连接超时。
+  # idle_timeout: "60s"
+  # [推荐] HTTP 请求头上限（字节）。
+  # max_header_bytes: 65536
+  # [推荐] 请求体上限（字节）。
+  # body_limit: 1048576
+  # [推荐] 限流速率（每秒请求数）。
+  # rate_limit_rate: 10
+  # [推荐] 限流突发容量。
+  # rate_limit_burst: 100
+
+# [必需] 数据库方言。其余 database 字段按方言条件必填：SQLite 只读取 path，
+# PostgreSQL 只读取 host/port/name/user/password/ssl_mode。
+# 官方 Docker 镜像的入口在应用配置加载前执行 Atlas，因此容器部署必须通过对应的
+# FURTALK_DATABASE_* 环境变量提供这些字段；此 section 仍适用于直接运行二进制。
+database:
+  # sqlite (pure-Go glebarez driver) or postgres。
+  dialect: sqlite
+  # [SQLite 必需] 文件路径或 SQLite file URI。
+  path: "/app/data/furtalk.db"
+  # [PostgreSQL 必需] 未选择 postgres 时以下字段会被忽略。
+  # host: "db.example.com"
+  # port: 5432
+  # name: "furtalk"
+  # user: "furtalk"
+  # password: "replace-me"
+  # ssl_mode: "require"
+
+cache:
+  # [可选] 空值选择有界进程内存储；设置 Redis URL 后为强依赖。
+  # redis_url: "redis://user:pass@redis.example.com:6379/0"
+
+# [必需] JWT 签发与 provider 机密加密主密钥。
+tokens:
+  jwt_issuer: "https://furtalk.example.com"
+  # [推荐] 固定 HS256。
+  # jwt_algorithm: HS256
+  # Raw text only, at least 32 bytes; no Base64 decoding is applied.
+  # 示例占位值短于 32 字节，直接复制会触发启动校验失败；请替换为随机密钥。
+  jwt_key: "replace-me"
+  # [推荐] 第一方 JWT 有效期。
+  # jwt_lifetime: "168h"
+  # [推荐] 内嵌组件 JWT 有效期。
+  # widget_jwt_lifetime: "24h"
+  # Raw text only, at least 32 bytes; no Base64 decoding is applied.
+  # 示例占位值短于 32 字节，直接复制会触发启动校验失败；请替换为随机密钥。
+  secret_key: "replace-me"
+
+# [必需] WebAuthn Relying Party 边界必须显式提供，不从 public_base_url 推导。
+webauthn:
+  rp_id: "furtalk.example.com"
+  rp_origins:
+    - "https://furtalk.example.com"
+  # [推荐] WebAuthn RP 展示名。
+  # rp_name: "Furtalk"
+
+oauth:
+  # [推荐] OAuth HTTP 超时。
+  # client_timeout: "10s"
+
+# [默认] 后端日志输出格式：json（机器可采集）或 text（终端阅读，缺省值，不告警）。
+logging:
+  # format: "text"
+
+smtp:
+  # [可选] host 为空时通知使用惰性/不投递行为，此时 port/tls/timeout 不告警。
+  # host: "smtp.example.com"
+  # [推荐] 仅当 host 设置后生效，取值 1-65535。
+  # port: 587
+  # [必需，启用 SMTP 时] from 需为合法邮箱地址。
+  # from: "noreply@example.com"
+  # [推荐] 仅当 host 设置后生效，取值 starttls | tls | none。
+  # tls: "starttls"
+  # [可选] 凭据。
+  # username: "user"
+  # password: "secret"
+  # [推荐] 仅当 host 设置后生效。
+  # timeout: "30s"
+
+# 邮件 HTML 模板：位于 configs/email 目录，五个文件名为
+# login_code.html / password_reset_code.html / moderation.html /
+# published.html / reply.html，启动时一次性加载并校验，缺失或语法错误阻止启动。
+# 模板只渲染 HTML 正文；主题与纯文本正文由代码生成。

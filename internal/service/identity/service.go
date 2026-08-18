@@ -1,0 +1,166 @@
+// Package identity 是身份与授权用例的业务层。
+// 数据经 repository 读写；设置策略与 OAuth provider 解密由 setting 层提供；
+// 本包不触碰 GORM，也不依赖任何 HTTP 框架。
+package identity
+
+import (
+	"context"
+	"log/slog"
+	"time"
+
+	"furtalk/internal/domain"
+	"furtalk/internal/platform/cache"
+	"furtalk/internal/platform/logging"
+	"furtalk/internal/platform/mailer"
+	"furtalk/internal/repository"
+	"furtalk/internal/service/setting"
+)
+
+// 邮箱验证码与密码策略的进程常量。
+const (
+	emailCodeTTL         = 5 * time.Minute
+	emailCodeMaxAttempts = 3
+	emailCodeLength      = 6
+	minPasswordLength    = 8
+	emailCodePurpose     = "login"
+	// passwordResetPurpose 是密码重置验证码的用途键，与登录验证码隔离。
+	passwordResetPurpose = "password_reset"
+	// passwordResetCodeTTL 是密码重置验证码的有效期。
+	passwordResetCodeTTL = 10 * time.Minute
+	// passwordResetMaxAttempts 是密码重置验证码允许的最大失败次数。
+	passwordResetMaxAttempts = 5
+	// EmailCodeAction 是邮箱验证码发送的 CAPTCHA 策略操作键。
+	EmailCodeAction = "email_code"
+	// EmailCodeLoginAction 是邮箱验证码登录的 CAPTCHA 策略操作键。
+	EmailCodeLoginAction = "email_code_login"
+	// PasswordLoginAction 是邮箱密码登录的 CAPTCHA 策略操作键。
+	PasswordLoginAction = "password_login"
+	// PasswordResetAction 是匿名请求密码重置验证码的 CAPTCHA 策略操作键。
+	// 默认关闭；开启时只门禁请求验证码阶段，提交验证码与新密码不重复要求。
+	PasswordResetAction = "password_reset"
+)
+
+// Service 实现身份用例，是模块的门面。
+type Service struct {
+	txRunner       TxRunner
+	users          *repository.UserRepo
+	passkeys       *repository.PasskeyRepo
+	identities     *repository.ExternalIdentityRepo
+	prefs          *repository.PreferenceRepo
+	emailCodes     EmailCodeStore
+	ephemeral      EphemeralStore
+	cache          cache.Store
+	policy         PolicyReader
+	captchaPolicy  CaptchaPolicyReader
+	captcha        CaptchaVerifier
+	providers      OAuthProviderReader
+	signer         TokenSigner
+	mailer         mailer.Mailer
+	templates      mailer.TemplateRenderer
+	log            *slog.Logger
+	now            func() time.Time
+	codeTTL        time.Duration
+	maxAttempts    int
+	passkeyAdapter PasskeyAdapter
+	oauth          OAuthProviderFactory
+	baseURL        string
+	failFast       func(error)
+	commentDeleter domain.CommentDeleter
+}
+
+// Dependencies 是 identity 模块构建函数的装配输入。
+type Dependencies struct {
+	TxRunner       TxRunner
+	Users          *repository.UserRepo
+	Passkeys       *repository.PasskeyRepo
+	Identities     *repository.ExternalIdentityRepo
+	Prefs          *repository.PreferenceRepo
+	Cache          cache.Store
+	Policy         PolicyReader
+	CaptchaPolicy  CaptchaPolicyReader
+	Captcha        CaptchaVerifier
+	Providers      OAuthProviderReader
+	Signer         TokenSigner
+	Mailer         mailer.Mailer
+	Templates      mailer.TemplateRenderer
+	PasskeyAdapter PasskeyAdapter
+	OAuthFactory   OAuthProviderFactory
+	BaseURL        string
+	FailFast       func(error)
+	CommentDeleter domain.CommentDeleter
+	Logger         *slog.Logger
+}
+
+// NewService 构建身份服务。
+func NewService(deps Dependencies) *Service {
+	deps.Logger = logging.Normalize(deps.Logger)
+	if deps.FailFast == nil {
+		deps.FailFast = func(error) {}
+	}
+	return &Service{
+		txRunner:       deps.TxRunner,
+		users:          deps.Users,
+		passkeys:       deps.Passkeys,
+		identities:     deps.Identities,
+		prefs:          deps.Prefs,
+		emailCodes:     cacheEmailCodeStore{store: deps.Cache},
+		ephemeral:      deps.Cache,
+		cache:          deps.Cache,
+		policy:         deps.Policy,
+		captchaPolicy:  deps.CaptchaPolicy,
+		captcha:        deps.Captcha,
+		providers:      deps.Providers,
+		signer:         deps.Signer,
+		mailer:         deps.Mailer,
+		templates:      deps.Templates,
+		log:            deps.Logger,
+		now:            time.Now,
+		codeTTL:        emailCodeTTL,
+		maxAttempts:    emailCodeMaxAttempts,
+		passkeyAdapter: deps.PasskeyAdapter,
+		oauth:          deps.OAuthFactory,
+		baseURL:        deps.BaseURL,
+		failFast:       deps.FailFast,
+		commentDeleter: deps.CommentDeleter,
+	}
+}
+
+// SetCommentDeleter 安装评论清理写接口。
+// comment.Service 与 identity.Service 相互引用，组合根构造两侧后调用本方法接线。
+func (s *Service) SetCommentDeleter(w domain.CommentDeleter) {
+	s.commentDeleter = w
+}
+
+// PolicyReader 提供身份用例所需的动态实例策略（来自 setting 层）。
+type PolicyReader interface {
+	// Policy 返回公开注册开关与当前评论模式。
+	Policy(ctx context.Context) (publicRegistration bool, commentMode string, err error)
+	// EmailPolicy 返回当前邮箱域名名单与 Gravatar 头像基址。
+	EmailPolicy(ctx context.Context) (whitelist, blacklist []string, gravatarBase string, err error)
+}
+
+// CaptchaPolicyReader 提供身份用例所需的动态 CAPTCHA action 策略（来自 setting 层）。
+type CaptchaPolicyReader interface {
+	// CaptchaPolicy 返回当前 action 到是否强制验证的映射。
+	CaptchaPolicy(ctx context.Context) (map[string]bool, error)
+}
+
+// CaptchaVerifier 是邮箱验证码发送前的 CAPTCHA 校验边界。
+// 只返回 nil 或 domain 的 CAPTCHA 错误（必要时包装这些 sentinel）。
+type CaptchaVerifier interface {
+	Verify(ctx context.Context, action, token string) error
+}
+
+// OAuthProviderReader 提供已启用且已配置的 OAuth/OIDC 提供商数据（来自 setting 层）。
+type OAuthProviderReader interface {
+	OAuthProviders(ctx context.Context) ([]AuthProvider, error)
+	OAuthProvider(ctx context.Context, providerKey string) (*AuthProvider, error)
+}
+
+// AuthProvider 是解密后的 OAuth/OIDC 提供商配置，由 setting 层提供。
+type AuthProvider = setting.AuthProvider
+
+// TxRunner 是身份用例使用的事务边界。
+type TxRunner interface {
+	RunInTx(ctx context.Context, fn func(ctx context.Context) error) error
+}

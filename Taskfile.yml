@@ -1,0 +1,282 @@
+version: "3"
+
+tasks:
+  build:
+    desc: Build the backend, Web, and Widget packages
+    cmds:
+      - task: backend:build
+      - task: web:build
+      - task: widget:build
+
+  check:
+    desc: Run the backend, Web, and Widget quality gates
+    cmds:
+      - task: backend:check
+      - task: web:check
+      - task: widget:check
+
+  release:
+    desc: Build embedded-Web Linux/Windows release binaries for amd64 and arm64 into bin/
+    cmds:
+      - pnpm --dir web install --frozen-lockfile
+      - task: web:build
+      - ./scripts/stage-web.sh
+      - task: release:amd64
+      - task: release:arm64
+
+  release:test:
+    desc: Verify release tag and Web staging scripts
+    cmds:
+      - ./scripts/release-scripts-test.sh
+
+  release:amd64:
+    desc: Build Linux/Windows amd64 release binaries into bin/
+    cmds:
+      - task: release:build
+        vars:
+          GOOS: linux
+          GOARCH: amd64
+          OUTPUT: bin/furtalk-linux-amd64
+      - task: release:build
+        vars:
+          GOOS: windows
+          GOARCH: amd64
+          OUTPUT: bin/furtalk-windows-amd64.exe
+
+  release:arm64:
+    desc: Build Linux/Windows arm64 release binaries into bin/
+    cmds:
+      - task: release:build
+        vars:
+          GOOS: linux
+          GOARCH: arm64
+          OUTPUT: bin/furtalk-linux-arm64
+      - task: release:build
+        vars:
+          GOOS: windows
+          GOARCH: arm64
+          OUTPUT: bin/furtalk-windows-arm64.exe
+
+  release:build:
+    desc: Cross-compile one release binary (internal)
+    internal: true
+    cmds:
+      - mkdir -p bin
+      - CGO_ENABLED=0 GOOS={{.GOOS}} GOARCH={{.GOARCH}} go build -tags embed -trimpath -ldflags "-s -w" -o {{.OUTPUT}} ./cmd/app
+
+  backend:fmt:
+    desc: Fail if any Go source file is not gofmt-formatted
+    cmds:
+      - unformatted=$(gofmt -l .); if [ -n "$unformatted" ]; then echo "gofmt needed on:"; echo "$unformatted"; exit 1; fi
+
+  backend:build:
+    desc: Build the Go backend
+    cmds:
+      - go build ./...
+
+  backend:vet:
+    desc: Run go vet on the backend
+    cmds:
+      - go vet ./...
+
+  backend:test:
+    desc: Run all backend tests
+    cmds:
+      - go test ./...
+
+  backend:test-race:
+    desc: Run backend tests with the race detector
+    cmds:
+      - go test -race ./...
+
+  backend:check-arch:
+    desc: Enforce layer dependency rules (domain/repository/service/middleware/handler/router/platform)
+    cmds:
+      - python scripts/check_architecture.py
+
+  backend:cgo0:
+    desc: Verify the runtime graph stays CGO-free
+    cmds:
+      - CGO_ENABLED=0 go build ./...
+
+  backend:check:
+    desc: Run the full backend quality gate (format, build, vet, test, architecture, CGO-free)
+    deps:
+      - backend:fmt
+      - backend:build
+      - backend:vet
+      - backend:test
+      - backend:check-arch
+      - backend:cgo0
+
+  backend:run:
+    desc: Run the server with dev defaults (requires FURTALK_TOKENS_JWT_KEY etc.)
+    cmds:
+      - go run ./cmd/app
+
+  web:build:
+    desc: Build the Web SPA
+    cmds:
+      - pnpm --dir web build
+
+  web:check:
+    desc: Run the web package quality gate (routes, lint, format, typecheck, tests, api contract, build)
+    cmds:
+      - pnpm --dir web generate-routes
+      - pnpm --dir web lint
+      - pnpm --dir web check
+      - pnpm --dir web exec tsc --noEmit
+      - pnpm --dir web test
+      - pnpm --dir web check:api-contract
+      - pnpm --dir web build
+
+  widget:build:
+    desc: Build the embeddable comment widget into widget/dist
+    cmds:
+      - pnpm --dir widget build
+
+  widget:check:
+    desc: Run the widget package quality gate (test, lint, check, typecheck, build)
+    cmds:
+      - pnpm --dir widget test
+      - pnpm --dir widget lint
+      - pnpm --dir widget check
+      - pnpm --dir widget typecheck
+      - pnpm --dir widget build
+
+  atlas:preflight:
+    desc: Require the pinned Atlas Community version for all migration tasks
+    cmds:
+      - pwsh scripts/atlas.ps1 -Command preflight
+
+  atlas:inspect-sqlite:
+    desc: Regenerate atlas/schema.sqlite.sql and inspect the desired schema
+    cmds:
+      - pwsh scripts/atlas.ps1 -Command inspect-sqlite
+
+  atlas:inspect-postgres:
+    desc: Regenerate atlas/schema.postgres.sql and inspect the desired schema (requires ATLAS_POSTGRES_DEV_URL)
+    cmds:
+      - pwsh scripts/atlas.ps1 -Command inspect-postgres
+
+  atlas:diff-sqlite:
+    desc: 'Regenerate the SQLite desired schema and create a named versioned migration (usage: task atlas:diff-sqlite -- <name>)'
+    cmds:
+      - pwsh scripts/atlas.ps1 -Command diff-sqlite -Name "{{.CLI_ARGS}}"
+
+  atlas:diff-postgres:
+    desc: 'Regenerate the PostgreSQL desired schema and create a named versioned migration (usage: task atlas:diff-postgres -- <name>; requires ATLAS_POSTGRES_DEV_URL)'
+    cmds:
+      - pwsh scripts/atlas.ps1 -Command diff-postgres -Name "{{.CLI_ARGS}}"
+
+  atlas:validate-sqlite:
+    desc: Validate SQLite migration directory integrity and replayability
+    cmds:
+      - pwsh scripts/atlas.ps1 -Command validate-sqlite
+
+  atlas:validate-postgres:
+    desc: Validate PostgreSQL migration directory integrity and replayability (requires ATLAS_POSTGRES_DEV_URL)
+    cmds:
+      - pwsh scripts/atlas.ps1 -Command validate-postgres
+
+  atlas:hash-sqlite:
+    desc: Refresh the SQLite atlas.sum after manual edits to an unapplied migration
+    cmds:
+      - pwsh scripts/atlas.ps1 -Command hash-sqlite
+
+  atlas:hash-postgres:
+    desc: Refresh the PostgreSQL atlas.sum after manual edits to an unapplied migration (requires ATLAS_POSTGRES_DEV_URL)
+    cmds:
+      - pwsh scripts/atlas.ps1 -Command hash-postgres
+
+  vet:
+    desc: Alias for backend:vet
+    cmds:
+      - task: backend:vet
+
+  test:
+    desc: Alias for backend:test
+    cmds:
+      - task: backend:test
+
+  test-race:
+    desc: Alias for backend:test-race
+    cmds:
+      - task: backend:test-race
+
+  lint:
+    desc: Alias for the backend lint gate (format, vet, architecture)
+    cmds:
+      - task: backend:fmt
+      - task: backend:vet
+      - task: backend:check-arch
+
+  check-arch:
+    desc: Alias for backend:check-arch
+    cmds:
+      - task: backend:check-arch
+
+  cgo0:
+    desc: Alias for backend:cgo0
+    cmds:
+      - task: backend:cgo0
+
+  run:
+    desc: Alias for backend:run
+    cmds:
+      - task: backend:run
+
+  widget:
+    desc: Alias for widget:build
+    cmds:
+      - task: widget:build
+
+  widget-check:
+    desc: Alias for widget:check
+    cmds:
+      - task: widget:check
+
+  atlas-preflight:
+    desc: Alias for atlas:preflight
+    cmds:
+      - task: atlas:preflight
+
+  atlas-inspect-sqlite:
+    desc: Alias for atlas:inspect-sqlite
+    cmds:
+      - task: atlas:inspect-sqlite
+
+  atlas-inspect-postgres:
+    desc: Alias for atlas:inspect-postgres
+    cmds:
+      - task: atlas:inspect-postgres
+
+  migrate-diff-sqlite:
+    desc: Alias for atlas:diff-sqlite
+    cmds:
+      - task: atlas:diff-sqlite
+
+  migrate-diff-postgres:
+    desc: Alias for atlas:diff-postgres
+    cmds:
+      - task: atlas:diff-postgres
+
+  migrate-validate-sqlite:
+    desc: Alias for atlas:validate-sqlite
+    cmds:
+      - task: atlas:validate-sqlite
+
+  migrate-validate-postgres:
+    desc: Alias for atlas:validate-postgres
+    cmds:
+      - task: atlas:validate-postgres
+
+  migrate-hash-sqlite:
+    desc: Alias for atlas:hash-sqlite
+    cmds:
+      - task: atlas:hash-sqlite
+
+  migrate-hash-postgres:
+    desc: Alias for atlas:hash-postgres
+    cmds:
+      - task: atlas:hash-postgres

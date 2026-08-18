@@ -1,0 +1,6 @@
+[submodule "web"]
+	path = web
+	url = https://github.com/GoodBoyboy666/furtalk-web.git
+[submodule "widget"]
+	path = widget
+	url = https://github.com/GoodBoyboy666/furtalk-widget.git

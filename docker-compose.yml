@@ -1,0 +1,22 @@
+# Default single-container deployment.  The image entrypoint is intentionally
+# not overridden: it applies the packaged migrations before starting Furtalk.
+services:
+  furtalk:
+    image: "${FURTALK_IMAGE:-ghcr.io/goodboyboy666/furtalk:${FURTALK_IMAGE_TAG:-latest}}"
+    restart: unless-stopped
+    ports:
+      - "${FURTALK_HTTP_PORT:-8080}:8080"
+    environment:
+      FURTALK_HTTP_PUBLIC_BASE_URL: "${FURTALK_HTTP_PUBLIC_BASE_URL:?set FURTALK_HTTP_PUBLIC_BASE_URL}"
+      FURTALK_TOKENS_JWT_ISSUER: "${FURTALK_TOKENS_JWT_ISSUER:?set FURTALK_TOKENS_JWT_ISSUER}"
+      FURTALK_TOKENS_JWT_KEY: "${FURTALK_TOKENS_JWT_KEY:?set FURTALK_TOKENS_JWT_KEY}"
+      FURTALK_TOKENS_SECRET_KEY: "${FURTALK_TOKENS_SECRET_KEY:?set FURTALK_TOKENS_SECRET_KEY}"
+      FURTALK_WEBAUTHN_RP_ID: "${FURTALK_WEBAUTHN_RP_ID:?set FURTALK_WEBAUTHN_RP_ID}"
+      FURTALK_WEBAUTHN_RP_ORIGINS: "${FURTALK_WEBAUTHN_RP_ORIGINS:?set FURTALK_WEBAUTHN_RP_ORIGINS}"
+      FURTALK_DATABASE_DIALECT: sqlite
+      FURTALK_DATABASE_PATH: /app/data/furtalk.db
+    volumes:
+      - furtalk-data:/app/data
+
+volumes:
+  furtalk-data:

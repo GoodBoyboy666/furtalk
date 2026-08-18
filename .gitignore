@@ -1,0 +1,9 @@
+.idea/*
+# Staged Web bundle consumed only by `go build -tags embed`.
+internal/platform/webui/dist/
+tmp/*
+widget/dist/
+web/dist/
+bin/*
+.env
+atlas/
