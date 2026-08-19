@@ -37,7 +37,7 @@ RUN mkdir -p /out \
 
 FROM alpine:3.22 AS runtime
 
-RUN apk add --no-cache ca-certificates tzdata \
+RUN apk add --no-cache ca-certificates tzdata su-exec \
     && addgroup -S furtalk \
     && adduser -S -D -H -G furtalk furtalk \
     && mkdir -p /app/data /app/configs \
@@ -55,7 +55,6 @@ COPY --from=atlas /atlas /usr/local/bin/atlas
 RUN chown -R furtalk:furtalk /app/configs \
     && chmod 0755 /app/docker-entrypoint.sh
 
-USER furtalk
 EXPOSE 8080
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
 CMD ["--web"]
