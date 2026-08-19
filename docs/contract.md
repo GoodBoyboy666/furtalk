@@ -124,6 +124,7 @@
 |---|---|---|---|
 | GET | /api/v1/widget/sites/{site_id}/runtime-config | 公开 | 站点运行时配置（含按 action 的公共 CAPTCHA 投影） |
 | GET | /api/v1/widget/sites/{site_id}/comments | 公开 | 评论列表（`page_key` 必填；`(created_at,id)` keyset 游标分页，响应含 `thread.comments_enabled` 与 `next_cursor`） |
+| GET | /api/v1/widget/sites/{site_id}/latest-comments | 公开 | 站点最新评论列表（默认 25，最大 25；按 `(created_at DESC, id DESC)` 排序，包含页面元数据） |
 | POST | /api/v1/widget/sites/{site_id}/comments | 可选 widget credential | 统一评论创建：匿名普通邮箱单次提交；管理员邮箱无凭据时返回受控 `need_auth_code`（线程关闭时 409 `thread_closed`） |
 | DELETE | /api/v1/widget/comments/{comment_id} | widget credential | 删除自己的评论 |
 | POST | /api/v1/widget/comment-authorizations/exchange | 公开 | 把一次性授权码兑换为 `widget_authenticated` 并写入 CHIPS Cookie |

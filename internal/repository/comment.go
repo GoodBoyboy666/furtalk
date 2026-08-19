@@ -396,6 +396,30 @@ func (r *CommentRepo) ListPublic(ctx context.Context, siteID, threadID int64, so
 	return rows, nil
 }
 
+// ListLatestPublic 返回某个站点中最新发布的评论，关联所属线程的页面元数据及作者当前公开资料。
+// 固定按 (created_at DESC, id DESC) 稳定排序。
+// 规范化邮箱只在仓储/服务边界读取，用于派生头像 URL，绝不进入 HTTP DTO。
+func (r *CommentRepo) ListLatestPublic(ctx context.Context, siteID int64, limit int) ([]domain.LatestPublicComment, error) {
+	if limit <= 0 {
+		limit = 25
+	}
+	var rows []domain.LatestPublicComment
+	err := gormtx.DB(ctx, r.db).
+		Table("comments").
+		Joins("JOIN users ON users.id = comments.user_id").
+		Joins("LEFT JOIN users AS reply_users ON reply_users.id = comments.reply_to_user_id").
+		Joins("JOIN threads ON threads.id = comments.thread_id AND threads.site_id = comments.site_id").
+		Select("comments.*, users.email_normalized AS author_email_normalized, users.nickname AS author_nickname, users.website_url AS author_website, users.role AS author_role, reply_users.nickname AS reply_to_nickname, threads.page_key AS page_key, threads.page_url AS page_url, threads.page_title AS page_title").
+		Where("comments.site_id = ? AND comments.status = ?", siteID, domain.CommentStatusPublished).
+		Order(applyCursorOrder("comments", domain.CommentSortDesc)).
+		Limit(limit).
+		Find(&rows).Error
+	if err != nil {
+		return nil, fmt.Errorf("list latest public comments: %w", err)
+	}
+	return rows, nil
+}
+
 // ListAdmin 返回符合管理员过滤条件、且与作者邮箱连接的评论。
 // 规范化邮箱只在仓储/服务边界读取，用于派生头像 URL，绝不进入 HTTP DTO。
 func (r *CommentRepo) ListAdmin(ctx context.Context, filter domain.AdminFilter) ([]domain.AdminComment, error) {

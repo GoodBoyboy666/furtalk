@@ -205,6 +205,32 @@ type ThreadCommentsResponse struct {
 	NextCursor *string            `json:"next_cursor"`
 }
 
+// LatestCommentResponse 是站点公开最新评论视图。
+type LatestCommentResponse struct {
+	ID              string     `json:"id"`
+	SiteID          string     `json:"site_id"`
+	ThreadID        string     `json:"thread_id"`
+	PageKey         string     `json:"page_key"`
+	PageURL         *string    `json:"page_url"`
+	PageTitle       *string    `json:"page_title"`
+	UserID          string     `json:"user_id"`
+	Body            string     `json:"body"`
+	Status          string     `json:"status"`
+	AuthorNickname  string     `json:"author_nickname"`
+	AuthorWebsite   *string    `json:"author_website"`
+	AuthorRole      string     `json:"author_role"`
+	AvatarURL       string     `json:"avatar_url"`
+	ReplyToUserID   *string    `json:"reply_to_user_id"`
+	ReplyToNickname *string    `json:"reply_to_nickname"`
+	CreatedAt       time.Time  `json:"created_at"`
+	PublishedAt     *time.Time `json:"published_at"`
+}
+
+// LatestCommentListResponse 是站点公开最新评论列表。
+type LatestCommentListResponse struct {
+	Comments []LatestCommentResponse `json:"comments"`
+}
+
 // MeCommentResponse 是本人评论的展示视图，不含邮箱/IP/UA 等管理字段。
 type MeCommentResponse struct {
 	ID             string  `json:"id"`
@@ -403,6 +429,36 @@ func toCommentResponse(view comment.CommentView) CommentResponse {
 		ParentID:        formatOptionalID(view.ParentID),
 		RootID:          formatOptionalID(view.RootID),
 		Depth:           view.Depth,
+		Body:            view.BodyMarkdown,
+		Status:          string(view.Status),
+		AuthorNickname:  view.AuthorNickname,
+		AuthorWebsite:   view.AuthorWebsite,
+		AuthorRole:      string(view.AuthorRole),
+		AvatarURL:       view.AuthorAvatarURL,
+		ReplyToUserID:   formatOptionalID(view.ReplyToUserID),
+		ReplyToNickname: view.ReplyToNickname,
+		CreatedAt:       view.CreatedAt,
+		PublishedAt:     view.PublishedAt,
+	}
+}
+
+func toLatestCommentListResponse(views []comment.LatestCommentView) LatestCommentListResponse {
+	comments := make([]LatestCommentResponse, 0, len(views))
+	for _, v := range views {
+		comments = append(comments, toLatestCommentResponse(v))
+	}
+	return LatestCommentListResponse{Comments: comments}
+}
+
+func toLatestCommentResponse(view comment.LatestCommentView) LatestCommentResponse {
+	return LatestCommentResponse{
+		ID:              strconv.FormatInt(view.ID, 10),
+		SiteID:          strconv.FormatInt(view.SiteID, 10),
+		ThreadID:        strconv.FormatInt(view.ThreadID, 10),
+		PageKey:         view.PageKey,
+		PageURL:         view.PageURL,
+		PageTitle:       view.PageTitle,
+		UserID:          strconv.FormatInt(view.UserID, 10),
 		Body:            view.BodyMarkdown,
 		Status:          string(view.Status),
 		AuthorNickname:  view.AuthorNickname,

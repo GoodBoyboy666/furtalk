@@ -62,6 +62,46 @@ func (s *Service) ListPublic(ctx context.Context, siteID int64, pageKey, cursorR
 	return view, nil
 }
 
+// ListLatestPublic 返回站点最新发布的评论列表（最多 25 条）。
+// 仅返回 published 评论，关联所属线程的页面元数据及作者当前公开资料。
+func (s *Service) ListLatestPublic(ctx context.Context, siteID int64, limit int) ([]LatestCommentView, error) {
+	if err := s.validateSiteActive(ctx, siteID); err != nil {
+		return nil, err
+	}
+	limit = normalizeLatestLimit(limit)
+	pol, err := s.settings.CommentPolicy(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.comments.ListLatestPublic(ctx, siteID, limit)
+	if err != nil {
+		return nil, err
+	}
+	views := make([]LatestCommentView, 0, len(rows))
+	for i := range rows {
+		views = append(views, LatestCommentView{
+			ID:              rows[i].ID,
+			SiteID:          rows[i].SiteID,
+			ThreadID:        rows[i].ThreadID,
+			PageKey:         rows[i].PageKey,
+			PageURL:         rows[i].PageURL,
+			PageTitle:       rows[i].PageTitle,
+			UserID:          rows[i].UserID,
+			BodyMarkdown:    rows[i].BodyMarkdown,
+			Status:          rows[i].Status,
+			AuthorNickname:  rows[i].AuthorNickname,
+			AuthorWebsite:   rows[i].AuthorWebsite,
+			AuthorRole:      rows[i].AuthorRole,
+			AuthorAvatarURL: value.GravatarURL(rows[i].AuthorEmailNormalized, pol.GravatarBaseURL),
+			ReplyToUserID:   rows[i].ReplyToUserID,
+			ReplyToNickname: rows[i].ReplyToNickname,
+			CreatedAt:       rows[i].CreatedAt,
+			PublishedAt:     rows[i].PublishedAt,
+		})
+	}
+	return views, nil
+}
+
 // normalizeSort 解析公开 sort 参数并校验：空值回落到实例策略默认方向，
 // 显式值必须是受控的 asc/desc，非法值返回验证错误。
 func normalizeSort(raw, defaultSort string) (domain.CommentSort, error) {

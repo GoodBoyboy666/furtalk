@@ -50,3 +50,14 @@ func normalizeLimit(limit int) int {
 	}
 	return limit
 }
+
+// normalizeLatestLimit 把站点最新评论请求的返回数量限制在允许范围内（默认 25，最大 25）。
+func normalizeLatestLimit(limit int) int {
+	if limit <= 0 {
+		return defaultLatestLimit
+	}
+	if limit > maxLatestLimit {
+		return maxLatestLimit
+	}
+	return limit
+}

@@ -133,6 +133,27 @@ type ThreadView struct {
 	NextCursor      *string
 }
 
+// LatestCommentView 是站点公开最新评论视图。
+type LatestCommentView struct {
+	ID              int64
+	SiteID          int64
+	ThreadID        int64
+	PageKey         string
+	PageURL         *string
+	PageTitle       *string
+	UserID          int64
+	BodyMarkdown    string
+	Status          domain.CommentStatus
+	AuthorNickname  string
+	AuthorWebsite   *string
+	AuthorRole      domain.Role
+	AuthorAvatarURL string
+	ReplyToUserID   *int64
+	ReplyToNickname *string
+	CreatedAt       time.Time
+	PublishedAt     *time.Time
+}
+
 // AdminThreadView 是管理端线程列表/详情视图。
 type AdminThreadView struct {
 	ID              int64

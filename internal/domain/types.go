@@ -293,6 +293,22 @@ type PublicComment struct {
 	ReplyToNickname       *string
 }
 
+// LatestPublicComment 是站点公开最新评论与所属线程元数据及作者当前公开资料的连接结果。
+// 公开读取时不会加载邮箱；AuthorEmailNormalized 只存在于 domain/service 边界，
+// 供服务层派生头像 URL，绝不进入 HTTP DTO。
+// ReplyToNickname 是回复目标作者的当前昵称；目标缺失或已注销时为 nil。
+type LatestPublicComment struct {
+	Comment
+	AuthorNickname        string
+	AuthorWebsite         *string
+	AuthorRole            Role
+	AuthorEmailNormalized string
+	ReplyToNickname       *string
+	PageKey               string
+	PageURL               *string
+	PageTitle             *string
+}
+
 // AdminComment 是评论与作者邮箱及当前公开资料的连接结果。
 // 保留捕获到的隐私字段，只提供给管理员。
 // AuthorEmailNormalized 只用于派生头像 URL，不进入 HTTP DTO。

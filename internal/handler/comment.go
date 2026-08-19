@@ -20,6 +20,8 @@ func RegisterWidget(api *gin.RouterGroup, service *comment.Service, verifier com
 	widget.OPTIONS("/sites/:site_id/runtime-config", httpx.CORSForSiteParam("site_id", origins))
 	widget.GET("/sites/:site_id/comments", httpx.CORSForSiteParam("site_id", origins), widgetListComments(service))
 	widget.OPTIONS("/sites/:site_id/comments", httpx.CORSForSiteParam("site_id", origins))
+	widget.GET("/sites/:site_id/latest-comments", httpx.CORSForSiteParam("site_id", origins), widgetListLatestComments(service))
+	widget.OPTIONS("/sites/:site_id/latest-comments", httpx.CORSForSiteParam("site_id", origins))
 
 	widgetCredential := middleware.WidgetPrincipalResolution(verifier, settings, authz)
 	widgetOptionalCredential := middleware.WidgetOptionalResolution(verifier, settings, authz)
@@ -391,6 +393,33 @@ func widgetListComments(service *comment.Service) gin.HandlerFunc {
 			return
 		}
 		c.JSON(http.StatusOK, toThreadCommentsResponse(view))
+	}
+}
+
+// @Summary 列出站点最新公开评论
+// @Tags widget
+// @Produce json
+// @Param site_id path integer true "站点 ID（十进制字符串）"
+// @Param limit query integer false "返回数量（默认 25，最大 25）"
+// @Success 200 {object} LatestCommentListResponse "最新评论列表"
+// @Failure 400 {object} httpx.ErrorResponse "请求参数无效"
+// @Failure 403 {object} httpx.ErrorResponse "站点已停用"
+// @Failure 404 {object} httpx.ErrorResponse "站点不存在"
+// @Router /api/v1/widget/sites/{site_id}/latest-comments [get]
+func widgetListLatestComments(service *comment.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		siteID, err := httpx.ParseIDParam(c, "site_id")
+		if err != nil {
+			writeError(c, err)
+			return
+		}
+		limit, _ := strconv.Atoi(c.DefaultQuery("limit", "25"))
+		views, err := service.ListLatestPublic(c.Request.Context(), siteID, limit)
+		if err != nil {
+			writeError(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, toLatestCommentListResponse(views))
 	}
 }
 

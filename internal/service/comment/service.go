@@ -18,6 +18,8 @@ const (
 	maxPageTitleLength = 512
 	defaultLimit       = 50
 	maxLimit           = 100
+	defaultLatestLimit = 25
+	maxLatestLimit     = 25
 	authCodeTTL        = 60 * time.Second
 	authCodeBytes      = 16
 	maxNicknameLength  = 100

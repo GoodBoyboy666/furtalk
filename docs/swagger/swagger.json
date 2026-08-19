@@ -3922,6 +3922,58 @@
                 }
             }
         },
+        "/api/v1/widget/sites/{site_id}/latest-comments": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "widget"
+                ],
+                "summary": "列出站点最新公开评论",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "站点 ID（十进制字符串）",
+                        "name": "site_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "返回数量（默认 25，最大 25）",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "最新评论列表",
+                        "schema": {
+                            "$ref": "#/definitions/handler.LatestCommentListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数无效",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "站点已停用",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "站点不存在",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/widget/sites/{site_id}/runtime-config": {
             "get": {
                 "produces": [
@@ -4588,6 +4640,73 @@
                     "type": "string"
                 },
                 "provider": {
+                    "type": "string"
+                }
+            }
+        },
+        "handler.LatestCommentListResponse": {
+            "type": "object",
+            "properties": {
+                "comments": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/handler.LatestCommentResponse"
+                    }
+                }
+            }
+        },
+        "handler.LatestCommentResponse": {
+            "type": "object",
+            "properties": {
+                "author_nickname": {
+                    "type": "string"
+                },
+                "author_role": {
+                    "type": "string"
+                },
+                "author_website": {
+                    "type": "string"
+                },
+                "avatar_url": {
+                    "type": "string"
+                },
+                "body": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "page_key": {
+                    "type": "string"
+                },
+                "page_title": {
+                    "type": "string"
+                },
+                "page_url": {
+                    "type": "string"
+                },
+                "published_at": {
+                    "type": "string"
+                },
+                "reply_to_nickname": {
+                    "type": "string"
+                },
+                "reply_to_user_id": {
+                    "type": "string"
+                },
+                "site_id": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "thread_id": {
+                    "type": "string"
+                },
+                "user_id": {
                     "type": "string"
                 }
             }
