@@ -6,6 +6,7 @@ widget/dist/
 web/dist/
 bin/*
 .env
+configs/config.yaml
 atlas/
 .opencode/
 .trellis/

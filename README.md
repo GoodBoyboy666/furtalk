@@ -107,13 +107,15 @@ CGO_ENABLED=0 go build -tags embed -o furtalk ./cmd/app
 
 ### Docker Compose（SQLite）
 
-根目录 `docker-compose.yml` 提供一个使用 GHCR 官方镜像的 SQLite 单服务部署，数据保存在命名卷中的 `/app/data/furtalk.db`。先复制配置模板到未跟踪的 `.env` 并替换必需值，再启动：
+根目录 `docker-compose.yml` 提供一个使用 GHCR 官方镜像的 SQLite 单服务部署。数据保存在命名卷中的 `/app/data/furtalk.db`；宿主机的 `./configs` 会只读挂载到容器内 `/app/configs`，用于提供可选的 `config.yaml` 和邮件模板。先复制配置模板到未跟踪的 `.env` 并替换必需值，再启动：
 
 ```bash
 cp configs/.env.example .env
 # 编辑 .env，替换 JWT、Provider 加密和 WebAuthn 等占位值
 docker compose up -d
 ```
+
+如需使用 YAML 配置，可将 `configs/config.example.yaml` 复制为 `configs/config.yaml`。邮件模板位于 `configs/email`，应用只在启动时加载模板，修改后需重启容器。
 
 默认使用稳定镜像 `latest`；可通过 `FURTALK_IMAGE_TAG=1.2.3` 固定已发布版本，也可用 `FURTALK_IMAGE` 指定完整镜像引用。
 
