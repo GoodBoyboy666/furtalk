@@ -159,12 +159,13 @@ docker compose up -d
 评论组件是独立的浏览器 ES module，通过 Shadow DOM 隔离样式，可嵌入任意静态站点：
 
 ```html
-<script type="module" src="https://cdn.example.com/widget/furtalk.js"></script>
+<script type="module" src="https://cdn.example.com/widget/furtalk.min.js"></script>
 <furtalk-comments site-id="123" page-key="article-2026-08"></furtalk-comments>
 ```
 
-- 构建：`pnpm --dir widget build`（`task widget:build`），产物为
-  `widget/dist/furtalk.js` 及 source map。
+- 构建：`pnpm --dir widget build`（`task widget:build`），产物包含
+  未压缩的 `widget/dist/furtalk.js` 和 npm/CDN 使用的压缩版
+  `widget/dist/furtalk.min.js`，两者均带 source map。
 - 部署：将 `widget/dist/` 产物托管到独立 CDN / 静态托管，通过 `<script>` 加载；
   组件自动从 `import.meta.url` 推导 Furtalk 服务源（可用 `service-origin` 属性覆盖）。
 - 部署要求：授权流程依赖 `window.opener`，禁止使用 `noopener`，也禁止对该流程设置
