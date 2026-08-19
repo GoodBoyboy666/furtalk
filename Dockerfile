@@ -24,13 +24,16 @@ ARG TARGETOS
 ARG TARGETARCH
 COPY cmd ./cmd
 COPY internal ./internal
+COPY tools/migrate-artalk ./tools/migrate-artalk
 COPY scripts/stage-web.sh ./scripts/stage-web.sh
 COPY --from=web-builder /src/web/dist ./web/dist
 
 RUN mkdir -p /out \
     && ./scripts/stage-web.sh \
     && CGO_ENABLED=0 GOOS="$TARGETOS" GOARCH="$TARGETARCH" \
-       go build -tags embed -trimpath -ldflags "-s -w" -o /out/furtalk ./cmd/app
+       go build -tags embed -trimpath -ldflags "-s -w" -o /out/furtalk ./cmd/app \
+    && CGO_ENABLED=0 GOOS="$TARGETOS" GOARCH="$TARGETARCH" \
+       go build -trimpath -ldflags "-s -w" -o /out/migrate-artalk ./tools/migrate-artalk
 
 FROM alpine:3.22 AS runtime
 
@@ -42,6 +45,7 @@ RUN apk add --no-cache ca-certificates tzdata \
 
 WORKDIR /app
 COPY --from=go-builder /out/furtalk ./furtalk
+COPY --from=go-builder /out/migrate-artalk ./migrate-artalk
 COPY configs ./configs
 COPY migrations ./migrations
 COPY atlas.runtime.hcl ./atlas.runtime.hcl

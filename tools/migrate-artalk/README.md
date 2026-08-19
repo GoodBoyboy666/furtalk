@@ -1,7 +1,8 @@
 # Artalk 评论迁移工具
 
-本工具把 Artalk 官方导出的 Artrans 数据导入 Furtalk。工具自身及其测试全部位于
-`tools/migrate-artalk/`，不属于 Furtalk 运行时。
+本工具把 Artalk 官方导出的 Artrans 数据导入 Furtalk。官方容器镜像在
+`/app/migrate-artalk` 提供独立二进制；源码和测试位于 `tools/migrate-artalk/`，也可继续通过
+Go 直接运行。
 
 支持 SQLite 和 PostgreSQL 目标库。源数据统一读取 Artrans，因此 Artalk 原来使用
 SQLite、MySQL 或 PostgreSQL 都不影响迁移。
@@ -14,11 +15,63 @@ SQLite、MySQL 或 PostgreSQL 都不影响迁移。
    artalk export ./artalk.artrans
    ```
 
-2. 确保 Furtalk 已完成 Atlas 数据库迁移，并停止 Furtalk 服务，避免迁移期间并发写入。
+2. 确保 Furtalk 已完成 Atlas 数据库迁移，并在迁移期间阻止外部写入。源码运行时可停止
+   Furtalk 服务；容器内运行时需保持容器启动，同时可通过反向代理维护模式等方式阻止写请求。
 3. 备份目标数据库。SQLite 需要备份数据库文件及可能存在的 `-wal`、`-shm` 文件；
    PostgreSQL 使用常规数据库备份工具。
 
-## SQLite 用法
+## 官方容器镜像用法
+
+`docker exec` 和 `docker compose exec` 启动的工具会复用运行中 Furtalk 容器已有的数据库环境
+变量、网络和 `/app/data` 数据卷，无需再次传入 SQLite 路径或 PostgreSQL 连接字段。迁移工具
+是独立进程，不经过镜像 entrypoint；可先确认它已经包含在镜像中：
+
+```bash
+docker exec <container> /app/migrate-artalk --help
+```
+
+通过标准输入提供 Artrans 时，先省略 `--execute` 完成 SQLite dry-run：
+
+```bash
+docker exec -i <container> /app/migrate-artalk --input - < ./artalk.artrans
+```
+
+确认报告并再次核对数据库备份后，追加 `--execute` 正式提交：
+
+```bash
+docker exec -i <container> /app/migrate-artalk --input - --execute < ./artalk.artrans
+```
+
+使用仓库中的 Compose 服务时，`-T` 会关闭伪终端，以便把宿主机文件原样传给标准输入：
+
+```bash
+# dry-run
+docker compose exec -T furtalk /app/migrate-artalk --input - < ./artalk.artrans
+
+# 正式导入
+docker compose exec -T furtalk /app/migrate-artalk --input - --execute < ./artalk.artrans
+```
+
+也可以先把文件复制到容器，再按容器内路径读取：
+
+```bash
+docker cp ./artalk.artrans <container>:/tmp/artalk.artrans
+
+# dry-run
+docker exec <container> /app/migrate-artalk --input /tmp/artalk.artrans
+
+# 正式导入
+docker exec <container> /app/migrate-artalk --input /tmp/artalk.artrans --execute
+```
+
+`--input -` 和容器内文件都支持 gzip 压缩的 Artrans。默认始终是 dry-run，只有显式传入
+`--execute` 才会提交事务。正式导入前必须备份数据库，并在整个迁移期间阻止所有外部写入。
+
+## 从源码运行
+
+以下命令适合在已安装 Go 的宿主机上运行，容器镜像用法不受影响。
+
+### SQLite 用法
 
 先执行默认的 dry-run。它会执行完整解析和数据库约束检查，但最终回滚所有写入：
 
@@ -38,7 +91,7 @@ go run ./tools/migrate-artalk --input ./artalk.artrans --execute
 
 也可以用 `--target-dialect sqlite --target-path /path/to/furtalk.db` 代替环境变量。
 
-## PostgreSQL 用法
+### PostgreSQL 用法
 
 目标连接字段与 Furtalk 使用相同的环境变量：
 
