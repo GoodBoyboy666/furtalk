@@ -40,19 +40,20 @@ FROM alpine:3.22 AS runtime
 RUN apk add --no-cache ca-certificates tzdata \
     && addgroup -S furtalk \
     && adduser -S -D -H -G furtalk furtalk \
-    && mkdir -p /app/data \
+    && mkdir -p /app/data /app/configs \
     && chown -R furtalk:furtalk /app
 
 WORKDIR /app
 COPY --from=go-builder /out/furtalk ./furtalk
 COPY --from=go-builder /out/migrate-artalk ./migrate-artalk
-COPY configs ./configs
+COPY configs ./default-configs
 COPY migrations ./migrations
 COPY atlas.runtime.hcl ./atlas.runtime.hcl
 COPY scripts/docker-entrypoint.sh ./docker-entrypoint.sh
 COPY --from=atlas /atlas /usr/local/bin/atlas
 
-RUN chmod 0755 /app/docker-entrypoint.sh
+RUN chown -R furtalk:furtalk /app/configs \
+    && chmod 0755 /app/docker-entrypoint.sh
 
 USER furtalk
 EXPOSE 8080

@@ -16,6 +16,23 @@ require_nonblank() {
     esac
 }
 
+default_configs_dir=/app/default-configs
+configs_dir=/app/configs
+
+if [ ! -d "$default_configs_dir" ]; then
+    fail "default config directory is missing"
+fi
+if ! mkdir -p "$configs_dir"; then
+    fail "cannot create config directory"
+fi
+
+config_entry=$(find "$configs_dir" -mindepth 1 -maxdepth 1 -print -quit)
+if [ -z "$config_entry" ]; then
+    if ! cp -R "$default_configs_dir"/. "$configs_dir"/; then
+        fail "cannot populate config directory"
+    fi
+fi
+
 dialect=${FURTALK_DATABASE_DIALECT:-}
 if [ -z "$dialect" ]; then
     fail "FURTALK_DATABASE_DIALECT is required"

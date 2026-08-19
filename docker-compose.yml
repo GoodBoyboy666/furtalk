@@ -16,7 +16,7 @@ services:
       FURTALK_DATABASE_DIALECT: sqlite
       FURTALK_DATABASE_PATH: /app/data/furtalk.db
     volumes:
-      - ./configs:/app/configs:ro
+      - ./configs:/app/configs
       - furtalk-data:/app/data
 
 volumes:
