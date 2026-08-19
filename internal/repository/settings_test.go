@@ -12,6 +12,7 @@ import (
 	"furtalk/internal/platform/gormtx"
 	"furtalk/internal/repository/model"
 
+	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
@@ -290,7 +291,7 @@ func TestSettingsCaptchaRowStoredWithoutEnabled(t *testing.T) {
 		t.Fatalf("stored type = %q, want json", stored.Type)
 	}
 	var raw map[string]any
-	if err := json.Unmarshal(stored.Value, &raw); err != nil {
+	if err := json.Unmarshal([]byte(stored.Value), &raw); err != nil {
 		t.Fatalf("value is not a JSON object: %v", err)
 	}
 	if raw["kind"] != "captcha" {
@@ -326,7 +327,7 @@ func TestSettingsAuthRowStoredWithEnabled(t *testing.T) {
 		t.Fatalf("query stored row: %v", err)
 	}
 	var raw map[string]any
-	if err := json.Unmarshal(stored.Value, &raw); err != nil {
+	if err := json.Unmarshal([]byte(stored.Value), &raw); err != nil {
 		t.Fatalf("value is not a JSON object: %v", err)
 	}
 	if raw["kind"] != "oauth" || raw["enabled"] != false {
@@ -482,5 +483,130 @@ func TestSettingsLockRows(t *testing.T) {
 		if row.Key != "comment_mode" && row.Key != "internal.widget_credential_epoch" {
 			t.Fatalf("unexpected locked key %q", row.Key)
 		}
+	}
+}
+
+// TestSettingsPostgresSimpleProtocolBindsJSONAsString 验证仓储模型边界将 JSON 值作为 string 绑定，
+// 防止 PostgreSQL 在 PreferSimpleProtocol 模式下将 []byte 推断为 bytea (\x...) 导致 SQLSTATE 22P02。
+func TestSettingsPostgresSimpleProtocolBindsJSONAsString(t *testing.T) {
+	row := DynamicSettingRow{
+		Key:       "comment_mode",
+		Type:      "string",
+		Value:     []byte(`"anonymous"`),
+		UpdatedBy: 0,
+	}
+
+	m := toDynamicSettingModel(row)
+	if _, ok := any(m.Value).(string); !ok {
+		t.Fatalf("toDynamicSettingModel must convert Value to Go string, got %T", m.Value)
+	}
+	if m.Value != `"anonymous"` {
+		t.Fatalf("converted Value = %q, want %q", m.Value, `"anonymous"`)
+	}
+
+	// 验证 GORM Postgres PreferSimpleProtocol 下生成的变量绑定为 string 文本，绝非 []byte
+	sqliteDB := newSettingsTestDB(t)
+	sqlDB, err := sqliteDB.DB()
+	if err != nil {
+		t.Fatalf("get sql.DB: %v", err)
+	}
+	pgDB, err := gorm.Open(postgres.New(postgres.Config{
+		Conn:                 sqlDB,
+		PreferSimpleProtocol: true,
+		WithoutReturning:     false,
+	}), &gorm.Config{
+		DryRun: true,
+	})
+	if err != nil {
+		t.Fatalf("init postgres dry run db: %v", err)
+	}
+
+	stmt := pgDB.Create(&m).Statement
+	foundValueVar := false
+	for _, v := range stmt.Vars {
+		if s, ok := v.(string); ok && s == `"anonymous"` {
+			foundValueVar = true
+		}
+		if b, ok := v.([]byte); ok && string(b) == `"anonymous"` {
+			t.Fatalf("GORM postgres statement bound JSON value as []byte (%v); PostgreSQL simple protocol encodes this as bytea (\\x...) causing 22P02", b)
+		}
+	}
+	if !foundValueVar {
+		t.Fatalf("expected string value \"anonymous\" in statement vars, got %v", stmt.Vars)
+	}
+
+	// 验证逆向转换 toDynamicSettingRow 把 string 正确转回 []byte
+	back := toDynamicSettingRow(m)
+	if string(back.Value) != `"anonymous"` {
+		t.Fatalf("toDynamicSettingRow Value = %s, want %q", back.Value, `"anonymous"`)
+	}
+}
+
+// TestSettingsAllJSONTypesRoundTrip 验证 string/integer/boolean/object/array 等合法 JSON 语义在
+// 仓储播种、更新与读取往返后保持原始值不变。
+func TestSettingsAllJSONTypesRoundTrip(t *testing.T) {
+	db := newSettingsTestDB(t)
+	repo := NewSettingsRepo(db)
+	ctx := context.Background()
+
+	testCases := []DynamicSettingRow{
+		{Key: "str_setting", Type: "string", Value: []byte(`"hello world"`), UpdatedBy: 1},
+		{Key: "int_setting", Type: "integer", Value: []byte(`42`), UpdatedBy: 1},
+		{Key: "bool_setting", Type: "boolean", Value: []byte(`true`), UpdatedBy: 1},
+		{Key: "bool_setting_false", Type: "boolean", Value: []byte(`false`), UpdatedBy: 1},
+		{Key: "obj_setting", Type: "json", Value: []byte(`{"a":1,"b":"text","c":[true,false]}`), UpdatedBy: 1},
+		{Key: "arr_setting", Type: "json", Value: []byte(`["item1",2,{"nested":true}]`), UpdatedBy: 1},
+	}
+
+	// 1. 播种
+	if err := repo.SeedMissing(ctx, testCases); err != nil {
+		t.Fatalf("seed all json types: %v", err)
+	}
+
+	// 2. 单个读取并校验
+	for _, tc := range testCases {
+		got, err := repo.Get(ctx, tc.Key)
+		if err != nil {
+			t.Fatalf("get %q: %v", tc.Key, err)
+		}
+		if string(got.Value) != string(tc.Value) {
+			t.Fatalf("key %q value = %s, want %s", tc.Key, got.Value, tc.Value)
+		}
+		if got.Type != tc.Type {
+			t.Fatalf("key %q type = %s, want %s", tc.Key, got.Type, tc.Type)
+		}
+	}
+
+	// 3. 批量更新
+	updatedCases := []DynamicSettingRow{
+		{Key: "str_setting", Type: "string", Value: []byte(`"updated string"`), UpdatedBy: 2},
+		{Key: "int_setting", Type: "integer", Value: []byte(`100`), UpdatedBy: 2},
+		{Key: "bool_setting", Type: "boolean", Value: []byte(`false`), UpdatedBy: 2},
+		{Key: "obj_setting", Type: "json", Value: []byte(`{"updated":true,"count":10}`), UpdatedBy: 2},
+	}
+	if err := repo.Upsert(ctx, updatedCases); err != nil {
+		t.Fatalf("upsert all json types: %v", err)
+	}
+
+	for _, tc := range updatedCases {
+		got, err := repo.Get(ctx, tc.Key)
+		if err != nil {
+			t.Fatalf("get updated %q: %v", tc.Key, err)
+		}
+		if string(got.Value) != string(tc.Value) {
+			t.Fatalf("updated key %q value = %s, want %s", tc.Key, got.Value, tc.Value)
+		}
+		if got.UpdatedBy != 2 {
+			t.Fatalf("updated key %q updated_by = %d, want 2", tc.Key, got.UpdatedBy)
+		}
+	}
+
+	// 4. List 校验
+	list, err := repo.List(ctx)
+	if err != nil {
+		t.Fatalf("list settings: %v", err)
+	}
+	if len(list) != len(testCases) {
+		t.Fatalf("list count = %d, want %d", len(list), len(testCases))
 	}
 }

@@ -280,7 +280,7 @@ type DynamicSetting struct {
 	ID        int64     `gorm:"primaryKey;autoIncrement;generated:identity"`
 	Key       string    `gorm:"column:key;type:text;not null;uniqueIndex:uq_dynamic_settings_key"`
 	Type      string    `gorm:"column:type;type:text;not null;check:ck_dynamic_settings_type,type IN ('string','integer','boolean','json')"`
-	Value     []byte    `gorm:"column:value;type:json;not null"`
+	Value     string    `gorm:"column:value;type:json;not null"`
 	UpdatedBy int64     `gorm:"column:updated_by;not null"`
 	UpdatedAt time.Time `gorm:"column:updated_at;precision:6;autoUpdateTime"`
 }

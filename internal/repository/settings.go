@@ -121,7 +121,7 @@ func toDynamicSettingRow(row model.DynamicSetting) DynamicSettingRow {
 	return DynamicSettingRow{
 		Key:       row.Key,
 		Type:      row.Type,
-		Value:     row.Value,
+		Value:     []byte(row.Value),
 		UpdatedBy: row.UpdatedBy,
 	}
 }
@@ -131,7 +131,7 @@ func toDynamicSettingModel(s DynamicSettingRow) model.DynamicSetting {
 	return model.DynamicSetting{
 		Key:       s.Key,
 		Type:      s.Type,
-		Value:     s.Value,
+		Value:     string(s.Value),
 		UpdatedBy: s.UpdatedBy,
 	}
 }
@@ -383,7 +383,7 @@ func decodeProviderRow(row model.DynamicSetting) (decodedProviderRow, error) {
 	var discriminator struct {
 		Kind domain.ProviderKind `json:"kind"`
 	}
-	if err := json.Unmarshal(row.Value, &discriminator); err != nil {
+	if err := json.Unmarshal([]byte(row.Value), &discriminator); err != nil {
 		return decodedProviderRow{}, fmt.Errorf("decode provider setting %q: %w", row.Key, err)
 	}
 	out := decodedProviderRow{
@@ -393,7 +393,7 @@ func decodeProviderRow(row model.DynamicSetting) (decodedProviderRow, error) {
 	switch discriminator.Kind {
 	case domain.ProviderKindCaptcha:
 		var env captchaProviderEnvelope
-		if err := json.Unmarshal(row.Value, &env); err != nil {
+		if err := json.Unmarshal([]byte(row.Value), &env); err != nil {
 			return decodedProviderRow{}, fmt.Errorf("decode provider setting %q: %w", row.Key, err)
 		}
 		out.publicConfig = normalizePublicConfig(env.PublicConfig)
@@ -402,7 +402,7 @@ func decodeProviderRow(row model.DynamicSetting) (decodedProviderRow, error) {
 		out.secretCiphertext = env.SecretCiphertext
 	case domain.ProviderKindOAuth, domain.ProviderKindOIDC:
 		var env authProviderEnvelope
-		if err := json.Unmarshal(row.Value, &env); err != nil {
+		if err := json.Unmarshal([]byte(row.Value), &env); err != nil {
 			return decodedProviderRow{}, fmt.Errorf("decode provider setting %q: %w", row.Key, err)
 		}
 		out.enabled = env.Enabled
@@ -433,7 +433,7 @@ func (r *SettingsRepo) upsertProviderValue(ctx context.Context, providerKey stri
 	row := model.DynamicSetting{
 		Key:       providerSettingKey(providerKey),
 		Type:      "json",
-		Value:     payload,
+		Value:     string(payload),
 		UpdatedBy: 0,
 	}
 	err = gormtx.DB(ctx, r.db).Clauses(clause.OnConflict{
