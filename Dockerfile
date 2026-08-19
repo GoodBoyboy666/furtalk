@@ -2,23 +2,29 @@
 
 FROM arigaio/atlas:1.3.0-alpine AS atlas
 
-FROM node:24-alpine AS web-builder
+FROM --platform=$BUILDPLATFORM node:24-alpine AS web-builder
 WORKDIR /src/web
 
-COPY web/package.json web/pnpm-lock.yaml web/pnpm-workspace.yaml ./
-COPY web/ ./
-
 RUN corepack enable \
-    && corepack prepare pnpm@10.15.0 --activate \
-    && pnpm install --frozen-lockfile \
-    && pnpm build
+    && corepack prepare pnpm@10.15.0 --activate
 
-FROM golang:1.25.13-alpine AS go-builder
-ARG TARGETOS
-ARG TARGETARCH
+COPY web/package.json web/pnpm-lock.yaml web/pnpm-workspace.yaml ./
+RUN pnpm install --frozen-lockfile
+
+COPY web/ ./
+RUN pnpm build
+
+FROM --platform=$BUILDPLATFORM golang:1.25.13-alpine AS go-builder
 WORKDIR /src
 
-COPY . .
+COPY go.mod go.sum ./
+RUN go mod download
+
+ARG TARGETOS
+ARG TARGETARCH
+COPY cmd ./cmd
+COPY internal ./internal
+COPY scripts/stage-web.sh ./scripts/stage-web.sh
 COPY --from=web-builder /src/web/dist ./web/dist
 
 RUN mkdir -p /out \
@@ -36,10 +42,10 @@ RUN apk add --no-cache ca-certificates tzdata \
 
 WORKDIR /app
 COPY --from=go-builder /out/furtalk ./furtalk
-COPY --from=go-builder /src/configs ./configs
-COPY --from=go-builder /src/migrations ./migrations
-COPY --from=go-builder /src/atlas.runtime.hcl ./atlas.runtime.hcl
-COPY --from=go-builder /src/scripts/docker-entrypoint.sh ./docker-entrypoint.sh
+COPY configs ./configs
+COPY migrations ./migrations
+COPY atlas.runtime.hcl ./atlas.runtime.hcl
+COPY scripts/docker-entrypoint.sh ./docker-entrypoint.sh
 COPY --from=atlas /atlas /usr/local/bin/atlas
 
 RUN chmod 0755 /app/docker-entrypoint.sh
