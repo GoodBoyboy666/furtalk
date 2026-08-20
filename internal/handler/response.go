@@ -313,6 +313,7 @@ type WidgetSessionResponse struct {
 	CredentialMode string     `json:"credential_mode,omitempty"`
 	UserID         string     `json:"user_id,omitempty"`
 	SiteID         string     `json:"site_id,omitempty"`
+	Role           string     `json:"role,omitempty"`
 	ExpiresAt      *time.Time `json:"expires_at,omitempty"`
 }
 
@@ -522,6 +523,7 @@ func toWidgetSessionResponse(result comment.ProbeResult) WidgetSessionResponse {
 		CredentialMode: result.CredentialMode,
 		UserID:         strconv.FormatInt(result.UserID, 10),
 		SiteID:         strconv.FormatInt(result.SiteID, 10),
+		Role:           string(result.Role),
 		ExpiresAt:      &expiresAt,
 	}
 }

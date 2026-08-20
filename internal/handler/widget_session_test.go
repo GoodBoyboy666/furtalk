@@ -128,6 +128,9 @@ func TestWidgetSessionAdminAuthenticated(t *testing.T) {
 	if resp.UserID != "2" || resp.SiteID != "1" {
 		t.Fatalf("user_id/site_id = %q/%q, want 2/1", resp.UserID, resp.SiteID)
 	}
+	if resp.Role != "admin" {
+		t.Fatalf("role = %q, want admin", resp.Role)
+	}
 }
 
 // TestWidgetSessionAdminAnonymous 回归匿名模式下管理员的 widget_authenticated 会话：
@@ -157,6 +160,9 @@ func TestWidgetSessionAdminAnonymous(t *testing.T) {
 	}
 	if resp.CredentialMode != domain.CommentModeAuthenticated {
 		t.Fatalf("credential_mode = %q, want authenticated", resp.CredentialMode)
+	}
+	if resp.Role != "admin" {
+		t.Fatalf("role = %q, want admin", resp.Role)
 	}
 }
 

@@ -74,6 +74,9 @@ func TestProbeWidgetRoleAndStatusMatrix(t *testing.T) {
 			if tt.want && result.CredentialMode != domain.CommentModeAuthenticated {
 				t.Fatalf("CredentialMode = %q, want %q", result.CredentialMode, domain.CommentModeAuthenticated)
 			}
+			if tt.want && result.Role != tt.role {
+				t.Fatalf("Role = %q, want %q", result.Role, tt.role)
+			}
 		})
 	}
 }

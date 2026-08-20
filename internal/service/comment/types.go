@@ -275,6 +275,7 @@ type ProbeResult struct {
 	CredentialMode string
 	UserID         int64
 	SiteID         int64
+	Role           domain.Role
 	ExpiresAt      time.Time
 }
 

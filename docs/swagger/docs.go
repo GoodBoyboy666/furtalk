@@ -5360,6 +5360,9 @@ const docTemplate = `{
                 "expires_at": {
                     "type": "string"
                 },
+                "role": {
+                    "type": "string"
+                },
                 "site_id": {
                     "type": "string"
                 },

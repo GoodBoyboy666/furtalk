@@ -141,6 +141,7 @@ func (s *Service) Probe(ctx context.Context, raw, requestOrigin string) *ProbeRe
 		CredentialMode: domain.CommentModeAuthenticated,
 		UserID:         cred.UserID(),
 		SiteID:         cred.SiteID(),
+		Role:           principal.Role,
 		ExpiresAt:      cred.ExpiresAt(),
 	}
 }
