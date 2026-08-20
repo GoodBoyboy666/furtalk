@@ -69,13 +69,22 @@ func (p *githubProvider) BuildAuthURL(ctx context.Context, req AuthorizationRequ
 	return p.oauthConfig(req.RedirectURI).AuthCodeURL(req.State, opts...), nil
 }
 
+// httpContext 返回注入共享 HTTP client 的上下文，使 oauth2 库在统一有界超时的
+// 基础 transport 上叠加 Bearer 注入，而不覆盖其认证 transport。
+func (p *githubProvider) httpContext(ctx context.Context) context.Context {
+	if p.httpClient == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, oauth2.HTTPClient, p.httpClient)
+}
+
 // Exchange 用授权码换取 token，拉取用户与已验证邮箱，返回标准化后的 Identity。
 func (p *githubProvider) Exchange(ctx context.Context, req ExchangeRequest) (*Identity, error) {
 	opts := make([]oauth2.AuthCodeOption, 0, 1)
 	if req.Verifier != "" {
 		opts = append(opts, oauth2.VerifierOption(req.Verifier))
 	}
-	token, err := p.oauthConfig(req.RedirectURI).Exchange(ctx, req.Code, opts...)
+	token, err := p.oauthConfig(req.RedirectURI).Exchange(p.httpContext(ctx), req.Code, opts...)
 	if err != nil {
 		return nil, ErrIdentity
 	}
@@ -108,10 +117,7 @@ type githubEmail struct {
 }
 
 func (p *githubProvider) fetchUser(ctx context.Context, token *oauth2.Token) (*githubUser, error) {
-	client := p.oauthConfig("").Client(ctx, token)
-	if p.httpClient != nil {
-		client.Transport = p.httpClient.Transport
-	}
+	client := p.oauthConfig("").Client(p.httpContext(ctx), token)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.apiURL+"/user", nil)
 	if err != nil {
 		return nil, err
@@ -133,10 +139,7 @@ func (p *githubProvider) fetchUser(ctx context.Context, token *oauth2.Token) (*g
 }
 
 func (p *githubProvider) fetchVerifiedEmail(ctx context.Context, token *oauth2.Token) (string, error) {
-	client := p.oauthConfig("").Client(ctx, token)
-	if p.httpClient != nil {
-		client.Transport = p.httpClient.Transport
-	}
+	client := p.oauthConfig("").Client(p.httpContext(ctx), token)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.apiURL+"/user/emails", nil)
 	if err != nil {
 		return "", err
