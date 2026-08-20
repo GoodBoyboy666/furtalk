@@ -316,12 +316,13 @@ func (r *CommentRepo) FindGlobalByID(ctx context.Context, id int64) (*domain.Com
 // 占位符 ? 按顺序绑定 site_id/thread_id、site_id/thread_id、published 状态。
 
 // publicListCteAnchor 遍历线程内全部状态的评论（不做状态过滤），从根评论出发，
-// 初始携带 vis_parent_id/vis_root_id 均为 NULL。
+// 初始携带 vis_parent_id/vis_root_id 均为 BIGINT 类型的 NULL，以便与递归步进中
+// 的评论 id 保持一致（PostgreSQL 要求递归 CTE 的同一列类型一致）。
 const publicListCteAnchor = `
 	SELECT id, site_id, thread_id, user_id, reply_to_user_id, depth, body_markdown, status,
 	       status_before_delete, ip_mode, ip_value, ua_mode, ua_raw, ua_browser, ua_os, ua_device,
 	       created_at, updated_at, published_at, deleted_at,
-	       NULL AS vis_parent_id, NULL AS vis_root_id
+	       CAST(NULL AS BIGINT) AS vis_parent_id, CAST(NULL AS BIGINT) AS vis_root_id
 	  FROM comments
 	 WHERE site_id = ? AND thread_id = ? AND parent_id IS NULL`
 
