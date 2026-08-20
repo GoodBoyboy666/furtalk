@@ -228,6 +228,123 @@ func TestHandleCreatedSendsModerationMailToAdmins(t *testing.T) {
 	}
 }
 
+// TestHandleCreatedSkipsAdminAuthorButKeepsOtherAdmins 证明管理员作者不会收到
+// 自己触发的新评论通知，但其他活跃管理员与被回复者仍会收到各自通知。
+func TestHandleCreatedSkipsAdminAuthorButKeepsOtherAdmins(t *testing.T) {
+	db, svc, mailer, _, _ := newNotificationHarness(t)
+	fx := seedNotificationData(t, db)
+	ctx := context.Background()
+	users := repository.NewUserRepo(db)
+	if err := users.UpdateRoleStatus(ctx, fx.AuthorID, domain.RoleAdmin, domain.UserStatusActive); err != nil {
+		t.Fatalf("promote author to admin: %v", err)
+	}
+	otherAdmin := &domain.User{
+		Email:           "other-admin@example.com",
+		EmailNormalized: "other-admin@example.com",
+		Nickname:        "other admin",
+		Role:            domain.RoleAdmin,
+		Status:          domain.UserStatusActive,
+	}
+	if err := users.Create(ctx, otherAdmin); err != nil {
+		t.Fatalf("create other admin: %v", err)
+	}
+
+	svc.handle(ctx, domain.CommentEvent{
+		Type:      domain.TypeCommentCreated,
+		SiteID:    fx.SiteID,
+		ThreadID:  fx.ThreadID,
+		CommentID: fx.CommentID,
+		UserID:    fx.AuthorID,
+	})
+
+	moderationRecipients := make(map[string]bool)
+	for _, msg := range mailer.messages {
+		if msg.Subject == "新评论" {
+			moderationRecipients[msg.To] = true
+		}
+	}
+	if len(moderationRecipients) != 2 || !moderationRecipients["admin@example.com"] || !moderationRecipients[otherAdmin.Email] {
+		t.Fatalf("moderation recipients = %#v, want the two non-author admins", moderationRecipients)
+	}
+	if moderationRecipients["author@example.com"] {
+		t.Fatal("comment author must not receive their own moderation mail")
+	}
+	if len(mailer.messages) != 3 {
+		t.Fatalf("messages = %d, want 3 (two moderation + reply)", len(mailer.messages))
+	}
+	if mailer.messages[2].To != "parent@example.com" || mailer.messages[2].Subject != "您有一条新回复" {
+		t.Fatalf("reply mail = %+v, want parent reply notification", mailer.messages[2])
+	}
+}
+
+// TestHandleCreatedSkipsAdminAuthorInReviewMode 证明审核模式下管理员作者的
+// 待审核根评论不会通知作者本人，但仍会通知其他活跃管理员。
+func TestHandleCreatedSkipsAdminAuthorInReviewMode(t *testing.T) {
+	db, svc, mailer, _, settingsSvc := newNotificationHarness(t)
+	fx := seedNotificationData(t, db)
+	ctx := context.Background()
+	users := repository.NewUserRepo(db)
+	if err := users.UpdateRoleStatus(ctx, fx.AuthorID, domain.RoleAdmin, domain.UserStatusActive); err != nil {
+		t.Fatalf("promote author to admin: %v", err)
+	}
+	otherAdmin := &domain.User{
+		Email:           "other-admin@example.com",
+		EmailNormalized: "other-admin@example.com",
+		Nickname:        "other admin",
+		Role:            domain.RoleAdmin,
+		Status:          domain.UserStatusActive,
+	}
+	if err := users.Create(ctx, otherAdmin); err != nil {
+		t.Fatalf("create other admin: %v", err)
+	}
+	if _, err := settingsSvc.Patch(ctx, []setting.SettingItem{
+		{Key: setting.SettingKeyModeration, Type: setting.SettingTypeString, Value: domain.ModerationReview},
+	}, 1); err != nil {
+		t.Fatalf("patch moderation: %v", err)
+	}
+
+	now := time.Date(2026, time.August, 7, 12, 0, 0, 0, time.UTC)
+	root := &domain.Comment{
+		SiteID:       fx.SiteID,
+		ThreadID:     fx.ThreadID,
+		UserID:       fx.AuthorID,
+		Depth:        0,
+		BodyMarkdown: "pending root",
+		Status:       domain.CommentStatusPending,
+		IPMode:       domain.PrivacyModeNone,
+		UAMode:       domain.PrivacyModeNone,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+	if err := repository.NewCommentRepo(db).Create(ctx, root); err != nil {
+		t.Fatalf("create pending root: %v", err)
+	}
+
+	svc.handle(ctx, domain.CommentEvent{
+		Type:      domain.TypeCommentCreated,
+		SiteID:    fx.SiteID,
+		ThreadID:  fx.ThreadID,
+		CommentID: root.ID,
+		UserID:    fx.AuthorID,
+	})
+
+	if len(mailer.messages) != 2 {
+		t.Fatalf("messages = %d, want 2 (other admins only)", len(mailer.messages))
+	}
+	for _, msg := range mailer.messages {
+		if msg.Subject != "评论待审核" {
+			t.Fatalf("message = %+v, want pending moderation mail", msg)
+		}
+		if msg.To == "author@example.com" {
+			t.Fatal("comment author must not receive their own pending moderation mail")
+		}
+	}
+	got := map[string]bool{mailer.messages[0].To: true, mailer.messages[1].To: true}
+	if !got["admin@example.com"] || !got[otherAdmin.Email] {
+		t.Fatalf("moderation recipients = %#v, want both non-author admins", got)
+	}
+}
+
 // TestHandleCreatedAwaitingModeration 证明审核模式为 review 时主题与模板数据
 // 切换为待审核；待审核评论不产生回复通知。
 func TestHandleCreatedAwaitingModeration(t *testing.T) {

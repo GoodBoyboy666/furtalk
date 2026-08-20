@@ -107,6 +107,9 @@ func (s *Service) sendModerationMails(ctx context.Context, current domain.Settin
 		return
 	}
 	for _, admin := range admins {
+		if admin.ID == comment.UserID {
+			continue
+		}
 		if strings.TrimSpace(admin.Email) == "" {
 			continue
 		}
