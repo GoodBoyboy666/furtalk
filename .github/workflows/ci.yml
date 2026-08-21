@@ -1,0 +1,71 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.13"
+          cache-dependency-path: go.sum
+      - name: Format check
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "gofmt needed on:"; echo "$unformatted"; exit 1
+          fi
+      - name: Build
+        run: go build ./...
+      - name: Vet
+        run: go vet ./...
+      - name: Test
+        run: go test ./...
+      - name: Architecture rules
+        run: python scripts/check_architecture.py
+      - name: CGO-free build
+        run: CGO_ENABLED=0 go build ./...
+
+  web:
+    name: Web quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+      - name: Initialize web submodule
+        run: |
+          git submodule update --init --depth 1 web
+      - uses: pnpm/action-setup@v4
+        with:
+          version: "10.15.0"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - name: Install dependencies
+        run: pnpm --dir web install --frozen-lockfile
+      - name: Generate routes
+        run: pnpm --dir web generate-routes
+      - name: Lint
+        run: pnpm --dir web lint
+      - name: Check formatting
+        run: pnpm --dir web check
+      - name: Typecheck
+        run: pnpm --dir web exec tsc --noEmit
+      - name: Test
+        run: pnpm --dir web test
+      - name: Check API contract
+        run: pnpm --dir web check:api-contract
+      - name: Build
+        run: pnpm --dir web build
