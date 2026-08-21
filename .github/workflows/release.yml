@@ -15,6 +15,7 @@ jobs:
       - name: Check out repository without submodules
         uses: actions/checkout@v4
         with:
+          fetch-depth: 0
           submodules: false
 
       # GitHub tag globs are intentionally broad; reject every non-contract tag
@@ -100,14 +101,40 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          release_notes_file="$RUNNER_TEMP/release-notes.md"
+          previous_tag="$(git describe --tags --match 'v[0-9]*.[0-9]*.[0-9]*' \
+            --abbrev=0 "${RELEASE_TAG}^" 2>/dev/null || true)"
+
+          if [ -n "$previous_tag" ]; then
+            commit_range="${previous_tag}..${RELEASE_TAG}"
+            changelog_url="https://github.com/${GITHUB_REPOSITORY}/compare/${previous_tag}...${RELEASE_TAG}"
+          else
+            commit_range="$RELEASE_TAG"
+            changelog_url="https://github.com/${GITHUB_REPOSITORY}/commits/${RELEASE_TAG}"
+          fi
+
+          {
+            echo "## What's Changed"
+            echo
+            git log --no-merges \
+              --format="- %s ([\`%h\`](https://github.com/${GITHUB_REPOSITORY}/commit/%H))" \
+              "$commit_range"
+            echo
+            echo "**Full Changelog**: $changelog_url"
+          } > "$release_notes_file"
+
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            edit_args=(--draft=true --prerelease="$RELEASE_PRERELEASE")
+            edit_args=(
+              --draft=true
+              --prerelease="$RELEASE_PRERELEASE"
+              --notes-file "$release_notes_file"
+            )
             if [ "$RELEASE_PRERELEASE" = true ]; then
               edit_args+=(--latest=false)
             fi
             gh release edit "$RELEASE_TAG" "${edit_args[@]}"
           else
-            release_args=(--verify-tag --draft --generate-notes)
+            release_args=(--verify-tag --draft --notes-file "$release_notes_file")
             if [ "$RELEASE_PRERELEASE" = true ]; then
               release_args+=(--prerelease --latest=false)
             fi
