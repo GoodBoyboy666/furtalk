@@ -490,8 +490,19 @@ func applyAdminCommentFilters(query *gorm.DB, filter domain.AdminFilter) *gorm.D
 	return query
 }
 
+// ownerVisibleStatus 是普通用户侧可见的评论审核状态集合。
+// 软删除（deleted）评论对普通用户一律不可见；管理端使用完整四状态，不复用此集合。
+func ownerVisibleStatus() []domain.CommentStatus {
+	return []domain.CommentStatus{
+		domain.CommentStatusPublished,
+		domain.CommentStatusPending,
+		domain.CommentStatusSpam,
+	}
+}
+
 // ListByOwner 返回当前用户本人的评论，关联作者、站点与线程公开元数据。
-// 所有行都必须命中 ownerID；site/status 过滤在 offset 之前应用。
+// 所有行都必须命中 ownerID；仅返回 owner-visible 状态的评论；
+// site/status 过滤在 offset 之前应用。
 // 规范化邮箱只在仓储/服务边界读取，用于派生头像 URL，绝不进入 HTTP DTO。
 func (r *CommentRepo) ListByOwner(ctx context.Context, ownerID int64, filter domain.OwnerFilter) ([]domain.OwnerComment, error) {
 	query := gormtx.DB(ctx, r.db).
@@ -501,7 +512,8 @@ func (r *CommentRepo) ListByOwner(ctx context.Context, ownerID int64, filter dom
 		Joins("JOIN sites ON sites.id = comments.site_id").
 		Joins("JOIN threads ON threads.id = comments.thread_id").
 		Select("comments.*, users.email_normalized AS author_email_normalized, users.nickname AS author_nickname, users.website_url AS author_website, users.role AS author_role, reply_users.nickname AS reply_to_nickname, sites.name AS site_name, threads.page_key AS page_key, threads.page_url AS page_url, threads.page_title AS page_title").
-		Where("comments.user_id = ?", ownerID)
+		Where("comments.user_id = ?", ownerID).
+		Where("comments.status IN ?", ownerVisibleStatus())
 	if filter.SiteID != nil {
 		query = query.Where("comments.site_id = ?", *filter.SiteID)
 	}
@@ -527,7 +539,8 @@ func (r *CommentRepo) ListByOwner(ctx context.Context, ownerID int64, filter dom
 func (r *CommentRepo) CountByOwner(ctx context.Context, ownerID int64, filter domain.OwnerFilter) (int64, error) {
 	query := gormtx.DB(ctx, r.db).
 		Table("comments").
-		Where("comments.user_id = ?", ownerID)
+		Where("comments.user_id = ?", ownerID).
+		Where("comments.status IN ?", ownerVisibleStatus())
 	if filter.SiteID != nil {
 		query = query.Where("comments.site_id = ?", *filter.SiteID)
 	}
@@ -553,6 +566,7 @@ func (r *CommentRepo) GetByOwnerAndID(ctx context.Context, ownerID, id int64) (*
 		Joins("JOIN threads ON threads.id = comments.thread_id").
 		Select("comments.*, users.email_normalized AS author_email_normalized, users.nickname AS author_nickname, users.website_url AS author_website, users.role AS author_role, reply_users.nickname AS reply_to_nickname, sites.name AS site_name, threads.page_key AS page_key, threads.page_url AS page_url, threads.page_title AS page_title").
 		Where("comments.user_id = ? AND comments.id = ?", ownerID, id).
+		Where("comments.status IN ?", ownerVisibleStatus()).
 		First(&row).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, domain.ErrNotFound
@@ -570,6 +584,7 @@ func (r *CommentRepo) ListOwnerSites(ctx context.Context, ownerID int64) ([]doma
 		Table("sites").
 		Joins("JOIN comments ON comments.site_id = sites.id").
 		Where("comments.user_id = ?", ownerID).
+		Where("comments.status IN ?", ownerVisibleStatus()).
 		Distinct("sites.id, sites.name").
 		Order("sites.id").
 		Find(&rows).Error

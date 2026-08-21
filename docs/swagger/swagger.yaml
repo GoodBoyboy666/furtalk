@@ -2905,7 +2905,7 @@ paths:
         in: query
         name: site_id
         type: integer
-      - description: pending | published | spam | deleted
+      - description: pending | published | spam
         in: query
         name: status
         type: string

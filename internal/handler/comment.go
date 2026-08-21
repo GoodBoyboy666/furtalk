@@ -71,7 +71,7 @@ func RegisterMeComments(api *gin.RouterGroup, service *comment.Service, userGate
 // @Tags me
 // @Produce json
 // @Param site_id query integer false "站点 ID（十进制字符串）"
-// @Param status query string false "pending | published | spam | deleted"
+// @Param status query string false "pending | published | spam"
 // @Param page query integer false "页码（从 1 开始，默认 1）"
 // @Param limit query integer false "每页数量（默认 25）"
 // @Success 200 {object} MeCommentListResponse "本人评论一页与匹配总数"
@@ -94,7 +94,7 @@ func meCommentsList(service *comment.Service) gin.HandlerFunc {
 		var status *domain.CommentStatus
 		if raw := c.Query("status"); raw != "" {
 			s := domain.CommentStatus(raw)
-			if !validCommentStatus(s) {
+			if !validOwnerCommentStatus(s) {
 				writeError(c, httpx.ErrInvalidID)
 				return
 			}
@@ -1041,6 +1041,17 @@ func parseAdminCommentFilter(c *gin.Context) (domain.AdminFilter, error) {
 func validCommentStatus(status domain.CommentStatus) bool {
 	switch status {
 	case domain.CommentStatusPending, domain.CommentStatusPublished, domain.CommentStatusSpam, domain.CommentStatusDeleted:
+		return true
+	default:
+		return false
+	}
+}
+
+// validOwnerCommentStatus 报告状态字符串是否为普通用户侧可见的审核状态。
+// 软删除（deleted）对普通用户不可见，视为无效筛选参数。
+func validOwnerCommentStatus(status domain.CommentStatus) bool {
+	switch status {
+	case domain.CommentStatusPending, domain.CommentStatusPublished, domain.CommentStatusSpam:
 		return true
 	default:
 		return false

@@ -3049,7 +3049,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "pending | published | spam | deleted",
+                        "description": "pending | published | spam",
                         "name": "status",
                         "in": "query"
                     },

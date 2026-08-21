@@ -396,6 +396,32 @@ func (r *UserRepo) ResetPasswordByEmail(ctx context.Context, normalizedEmail, pa
 	return row.ID, next, nil
 }
 
+// MarkEmailVerified 幂等地把用户标记为邮箱已验证：只在邮箱尚未验证时写入
+// verifiedAt，已验证用户保留原验证时间，不覆盖。返回是否实际写入了验证时间。
+// 更新前先确认用户行存在，因为 SQLite 只统计实际变更行，缺失行会造出假
+// not-found。
+func (r *UserRepo) MarkEmailVerified(ctx context.Context, userID int64, verifiedAt time.Time) (bool, error) {
+	var row model.User
+	err := gormtx.DB(ctx, r.db).Where("id = ?", userID).First(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return false, domain.ErrNotFound
+	}
+	if err != nil {
+		return false, fmt.Errorf("find user for email verification: %w", err)
+	}
+	if row.EmailVerifiedAt != nil {
+		return false, nil
+	}
+	result := gormtx.DB(ctx, r.db).
+		Model(&model.User{}).
+		Where("id = ?", userID).
+		Update("email_verified_at", verifiedAt)
+	if result.Error != nil {
+		return false, fmt.Errorf("mark email verified: %w", result.Error)
+	}
+	return true, nil
+}
+
 // HasPassword 报告用户是否配置了密码登录，不返回哈希本身。
 func (r *UserRepo) HasPassword(ctx context.Context, userID int64) (bool, error) {
 	var row model.User

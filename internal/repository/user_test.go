@@ -619,3 +619,55 @@ func TestUserRepoCountMatchesSearch(t *testing.T) {
 		t.Fatalf("search total = %d, want 1", matched)
 	}
 }
+
+// TestUserRepoMarkEmailVerified 验证 MarkEmailVerified 幂等写入验证时间：
+// 首次写入、已验证用户保留原时间，缺失用户返回 ErrNotFound。
+func TestUserRepoMarkEmailVerified(t *testing.T) {
+	db := newUserTestDB(t)
+	repo := NewUserRepo(db)
+	ctx := context.Background()
+
+	u := &domain.User{
+		Email: "mark@example.com", EmailNormalized: "mark@example.com",
+		Nickname: "mark", Role: domain.RoleUser, Status: domain.UserStatusActive,
+	}
+	if err := repo.Create(ctx, u); err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	first := time.Date(2026, time.August, 8, 12, 0, 0, 0, time.UTC)
+	written, err := repo.MarkEmailVerified(ctx, u.ID, first)
+	if err != nil {
+		t.Fatalf("mark verified first: %v", err)
+	}
+	if !written {
+		t.Fatal("first mark should report written=true")
+	}
+	got, err := repo.FindByID(ctx, u.ID)
+	if err != nil {
+		t.Fatalf("find user: %v", err)
+	}
+	if got.EmailVerifiedAt == nil || !got.EmailVerifiedAt.Equal(first) {
+		t.Fatalf("email_verified_at = %v, want %v", got.EmailVerifiedAt, first)
+	}
+
+	later := first.Add(24 * time.Hour)
+	written, err = repo.MarkEmailVerified(ctx, u.ID, later)
+	if err != nil {
+		t.Fatalf("mark verified second: %v", err)
+	}
+	if written {
+		t.Fatal("second mark should report written=false (already verified)")
+	}
+	got, err = repo.FindByID(ctx, u.ID)
+	if err != nil {
+		t.Fatalf("find user after second: %v", err)
+	}
+	if got.EmailVerifiedAt == nil || !got.EmailVerifiedAt.Equal(first) {
+		t.Fatalf("email_verified_at overwritten to %v, want preserved %v", got.EmailVerifiedAt, first)
+	}
+
+	if _, err := repo.MarkEmailVerified(ctx, u.ID+99999, first); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("missing user err = %v, want domain.ErrNotFound", err)
+	}
+}

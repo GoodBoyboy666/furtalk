@@ -228,6 +228,101 @@ func TestLoginWithEmailCodeCaptchaFailureDoesNotConsumeCode(t *testing.T) {
 	}
 }
 
+// emailCodeVerifiedAt 读取某用户当前 email_verified_at 值。
+func emailCodeVerifiedAt(t *testing.T, db *gorm.DB, userID int64) *time.Time {
+	t.Helper()
+	user, err := repository.NewUserRepo(db).FindByID(context.Background(), userID)
+	if err != nil {
+		t.Fatalf("find user: %v", err)
+	}
+	return user.EmailVerifiedAt
+}
+
+// TestLoginWithEmailCodeMarksExistingUnverifiedUserVerified 验证既存未验证用户在
+// 邮箱验证码登录成功后写入 email_verified_at。
+func TestLoginWithEmailCodeMarksExistingUnverifiedUserVerified(t *testing.T) {
+	db := newCaptchaLoginDB(t)
+	svc := captchaLoginService(t, db, map[string]bool{}, &recordingCaptchaVerifier{})
+	user := &domain.User{
+		Email: "unverified@example.com", EmailNormalized: "unverified@example.com",
+		Nickname: "unverified", Role: domain.RoleUser, Status: domain.UserStatusActive,
+	}
+	if err := repository.NewUserRepo(db).Create(context.Background(), user); err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	if got := emailCodeVerifiedAt(t, db, user.ID); got != nil {
+		t.Fatalf("precondition: email_verified_at = %v, want nil", got)
+	}
+	seedEmailCode(t, svc, "unverified@example.com", "123456")
+
+	if _, err := svc.LoginWithEmailCode(context.Background(), EmailCodeLoginInput{Email: "unverified@example.com", Code: "123456"}); err != nil {
+		t.Fatalf("login: %v", err)
+	}
+	if got := emailCodeVerifiedAt(t, db, user.ID); got == nil {
+		t.Fatal("email_verified_at must be set after successful code login")
+	}
+}
+
+// TestLoginWithEmailCodePreservesExistingVerification 验证已验证用户再次验证码登录
+// 不覆盖原验证时间。
+func TestLoginWithEmailCodePreservesExistingVerification(t *testing.T) {
+	db := newCaptchaLoginDB(t)
+	svc := captchaLoginService(t, db, map[string]bool{}, &recordingCaptchaVerifier{})
+	user := insertVerifiedUser(t, db, "verified@example.com")
+	original := user.EmailVerifiedAt
+	seedEmailCode(t, svc, "verified@example.com", "123456")
+
+	if _, err := svc.LoginWithEmailCode(context.Background(), EmailCodeLoginInput{Email: "verified@example.com", Code: "123456"}); err != nil {
+		t.Fatalf("login: %v", err)
+	}
+	got := emailCodeVerifiedAt(t, db, user.ID)
+	if got == nil || !got.Equal(*original) {
+		t.Fatalf("email_verified_at = %v, want preserved %v", got, original)
+	}
+}
+
+// TestLoginWithEmailCodeInvalidCodeZeroWrite 验证无效验证码登录失败且不写入验证时间。
+func TestLoginWithEmailCodeInvalidCodeZeroWrite(t *testing.T) {
+	db := newCaptchaLoginDB(t)
+	svc := captchaLoginService(t, db, map[string]bool{}, &recordingCaptchaVerifier{})
+	user := &domain.User{
+		Email: "invalid@example.com", EmailNormalized: "invalid@example.com",
+		Nickname: "invalid", Role: domain.RoleUser, Status: domain.UserStatusActive,
+	}
+	if err := repository.NewUserRepo(db).Create(context.Background(), user); err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	seedEmailCode(t, svc, "invalid@example.com", "123456")
+
+	if _, err := svc.LoginWithEmailCode(context.Background(), EmailCodeLoginInput{Email: "invalid@example.com", Code: "999999"}); !errors.Is(err, domain.ErrInvalidCredentials) {
+		t.Fatalf("err = %v, want ErrInvalidCredentials", err)
+	}
+	if got := emailCodeVerifiedAt(t, db, user.ID); got != nil {
+		t.Fatalf("email_verified_at = %v, want nil after invalid code", got)
+	}
+}
+
+// TestLoginWithEmailCodeDisabledAccountZeroWrite 验证停用账号登录失败且不写入验证时间。
+func TestLoginWithEmailCodeDisabledAccountZeroWrite(t *testing.T) {
+	db := newCaptchaLoginDB(t)
+	svc := captchaLoginService(t, db, map[string]bool{}, &recordingCaptchaVerifier{})
+	user := &domain.User{
+		Email: "disabled@example.com", EmailNormalized: "disabled@example.com",
+		Nickname: "disabled", Role: domain.RoleUser, Status: domain.UserStatusDisabled,
+	}
+	if err := repository.NewUserRepo(db).Create(context.Background(), user); err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	seedEmailCode(t, svc, "disabled@example.com", "123456")
+
+	if _, err := svc.LoginWithEmailCode(context.Background(), EmailCodeLoginInput{Email: "disabled@example.com", Code: "123456"}); !errors.Is(err, domain.ErrDisabled) {
+		t.Fatalf("err = %v, want ErrDisabled", err)
+	}
+	if got := emailCodeVerifiedAt(t, db, user.ID); got != nil {
+		t.Fatalf("email_verified_at = %v, want nil after disabled login", got)
+	}
+}
+
 func TestLoginWithPasswordCaptchaMatrix(t *testing.T) {
 	tests := []struct {
 		name       string

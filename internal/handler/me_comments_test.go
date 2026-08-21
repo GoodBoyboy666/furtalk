@@ -108,3 +108,23 @@ func TestMeCommentsRejectsInvalidStatus(t *testing.T) {
 		t.Fatalf("status = %d, want 400; body=%s", rec.Code, rec.Body.String())
 	}
 }
+
+// TestMeCommentsRejectsDeletedStatus 验证普通用户侧 status=deleted 被拒绝。
+func TestMeCommentsRejectsDeletedStatus(t *testing.T) {
+	router := meCommentsRouter(t)
+	rec := meCommentsRequest(t, router, "/api/v1/me/comments?status=deleted", firstPartyCookie(t))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestMeCommentsAcceptsOwnerVisibleStatuses 验证普通用户侧三个可见状态都通过。
+func TestMeCommentsAcceptsOwnerVisibleStatuses(t *testing.T) {
+	router := meCommentsRouter(t)
+	for _, status := range []string{"pending", "published", "spam"} {
+		rec := meCommentsRequest(t, router, "/api/v1/me/comments?status="+status, firstPartyCookie(t))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status=%s code = %d, want 200; body=%s", status, rec.Code, rec.Body.String())
+		}
+	}
+}

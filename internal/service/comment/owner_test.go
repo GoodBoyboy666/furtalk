@@ -143,8 +143,8 @@ func TestListByOwnerScopesOwnerAndFilters(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list by owner: %v", err)
 	}
-	if len(all.Comments) != 4 {
-		t.Fatalf("owner comments = %d, want 4 (other excluded)", len(all.Comments))
+	if len(all.Comments) != 3 {
+		t.Fatalf("owner comments = %d, want 3 (deleted and other excluded)", len(all.Comments))
 	}
 	for _, c := range all.Comments {
 		if c.UserID != fx.OwnerID {
@@ -179,22 +179,22 @@ func TestListByOwnerPagePagination(t *testing.T) {
 	if err != nil {
 		t.Fatalf("page 1: %v", err)
 	}
-	if len(page1.Comments) != 2 || page1.Total != 4 {
-		t.Fatalf("page1 = %d rows total=%d, want 2 rows + total 4", len(page1.Comments), page1.Total)
+	if len(page1.Comments) != 2 || page1.Total != 3 {
+		t.Fatalf("page1 = %d rows total=%d, want 2 rows + total 3", len(page1.Comments), page1.Total)
 	}
 	page2, err := svc.ListByOwner(context.Background(), fx.OwnerID, nil, nil, 2, 2)
 	if err != nil {
 		t.Fatalf("page 2: %v", err)
 	}
-	if len(page2.Comments) != 2 || page2.Total != 4 {
-		t.Fatalf("page2 = %d rows total=%d, want 2 rows + total 4", len(page2.Comments), page2.Total)
+	if len(page2.Comments) != 1 || page2.Total != 3 {
+		t.Fatalf("page2 = %d rows total=%d, want 1 rows + total 3", len(page2.Comments), page2.Total)
 	}
 	outOfRange, err := svc.ListByOwner(context.Background(), fx.OwnerID, nil, nil, 9, 2)
 	if err != nil {
 		t.Fatalf("out-of-range page: %v", err)
 	}
-	if len(outOfRange.Comments) != 0 || outOfRange.Total != 4 {
-		t.Fatalf("out-of-range = %d rows total=%d, want 0 rows + total 4", len(outOfRange.Comments), outOfRange.Total)
+	if len(outOfRange.Comments) != 0 || outOfRange.Total != 3 {
+		t.Fatalf("out-of-range = %d rows total=%d, want 0 rows + total 3", len(outOfRange.Comments), outOfRange.Total)
 	}
 
 	seen := map[int64]bool{}
@@ -206,8 +206,8 @@ func TestListByOwnerPagePagination(t *testing.T) {
 			seen[c.ID] = true
 		}
 	}
-	if len(seen) != 4 {
-		t.Fatalf("unique ids = %d, want 4 (no gaps)", len(seen))
+	if len(seen) != 3 {
+		t.Fatalf("unique ids = %d, want 3 (no gaps)", len(seen))
 	}
 }
 
@@ -231,6 +231,9 @@ func TestGetByOwnerScopesOwner(t *testing.T) {
 
 	if _, err := svc.GetByOwner(ctx, fx.OwnerID, fx.Published+99999); !errors.Is(err, domain.ErrNotFound) {
 		t.Fatalf("missing err = %v, want ErrNotFound", err)
+	}
+	if _, err := svc.GetByOwner(ctx, fx.OwnerID, fx.Deleted); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("soft-deleted own comment err = %v, want ErrNotFound", err)
 	}
 }
 

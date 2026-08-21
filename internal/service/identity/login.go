@@ -197,7 +197,19 @@ func (s *Service) LoginWithEmailCode(ctx context.Context, input EmailCodeLoginIn
 	if err != nil {
 		return nil, err
 	}
-	return s.completeLogin(ctx, user)
+	// 先完成登录门禁（账户状态、评论模式、签发与 CSRF），只有门禁成功后
+	// 才把既存未验证邮箱标记为已验证，避免仅凭验证码消费就写入验证状态。
+	session, err := s.completeLogin(ctx, user)
+	if err != nil {
+		return nil, err
+	}
+	if user.EmailVerifiedAt == nil {
+		now := s.now().UTC().Truncate(time.Microsecond)
+		if _, err := s.users.MarkEmailVerified(ctx, user.ID, now); err != nil {
+			return nil, err
+		}
+	}
+	return session, nil
 }
 
 // registerOnCodeLogin 在验证码登录命中未知邮箱且允许公开注册时创建用户。

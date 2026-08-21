@@ -221,6 +221,82 @@ func TestCommentRepoListOwnerSitesDedupes(t *testing.T) {
 	}
 }
 
+// TestCommentRepoOwnerHidesSoftDeleted 验证普通用户侧对软删除评论统一不可见：
+// 列表、总数、详情与站点选项都不得暴露 deleted 行。
+func TestCommentRepoOwnerHidesSoftDeleted(t *testing.T) {
+	db := newCommentOwnerTestDB(t)
+	owner1, _ := seedOwnerFixture(t, db)
+	repo := NewCommentRepo(db)
+	ctx := context.Background()
+
+	sitesBefore, err := repo.ListOwnerSites(ctx, owner1)
+	if err != nil {
+		t.Fatalf("list owner sites before: %v", err)
+	}
+	if len(sitesBefore) != 2 {
+		t.Fatalf("owner sites before = %d, want 2", len(sitesBefore))
+	}
+
+	userRepo := NewUserRepo(db)
+	u := &domain.User{Email: "three@example.com", EmailNormalized: "three@example.com", Nickname: "three", Role: domain.RoleUser, Status: domain.UserStatusActive}
+	if err := userRepo.Create(ctx, u); err != nil {
+		t.Fatalf("create user three: %v", err)
+	}
+	siteRepo := NewSiteRepo(db)
+	s3 := &domain.Site{Name: "Site C", CanonicalURL: "https://c.example.com", Status: domain.SiteStatusActive}
+	if err := siteRepo.Create(ctx, s3); err != nil {
+		t.Fatalf("create site C: %v", err)
+	}
+	threadRepo := NewThreadRepo(db)
+	t3, err := threadRepo.ResolveOrCreate(ctx, s3.ID, "page-three", nil, nil)
+	if err != nil {
+		t.Fatalf("resolve thread three: %v", err)
+	}
+	now := time.Date(2026, time.August, 8, 13, 0, 0, 0, time.UTC)
+
+	deleted := &domain.Comment{
+		SiteID: s3.ID, ThreadID: t3.ID, UserID: owner1, Depth: 0,
+		BodyMarkdown: "owner1-deleted-only-site", Status: domain.CommentStatusDeleted,
+		IPMode: domain.PrivacyModeNone, UAMode: domain.PrivacyModeNone,
+		CreatedAt: now, UpdatedAt: now,
+	}
+	if err := repo.Create(ctx, deleted); err != nil {
+		t.Fatalf("create deleted comment: %v", err)
+	}
+
+	rows, err := repo.ListByOwner(ctx, owner1, domain.OwnerFilter{Limit: 50})
+	if err != nil {
+		t.Fatalf("list by owner: %v", err)
+	}
+	for _, r := range rows {
+		if r.Status == domain.CommentStatusDeleted {
+			t.Fatalf("ListByOwner leaked deleted comment %d", r.ID)
+		}
+	}
+
+	total, err := repo.CountByOwner(ctx, owner1, domain.OwnerFilter{})
+	if err != nil {
+		t.Fatalf("count by owner: %v", err)
+	}
+	if total != int64(len(rows)) {
+		t.Fatalf("count total = %d, want list len %d", total, len(rows))
+	}
+
+	if _, err := repo.GetByOwnerAndID(ctx, owner1, deleted.ID); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("get soft-deleted owner comment err = %v, want domain.ErrNotFound", err)
+	}
+
+	sitesAfter, err := repo.ListOwnerSites(ctx, owner1)
+	if err != nil {
+		t.Fatalf("list owner sites after: %v", err)
+	}
+	for _, s := range sitesAfter {
+		if s.Name == "Site C" {
+			t.Fatalf("ListOwnerSites leaked site backed only by deleted comment")
+		}
+	}
+}
+
 // TestUserHardDeleteCascadesComments 验证硬删除用户会级联移除其全部评论及后代。
 // users.comments 外键从 RESTRICT 改为 CASCADE，硬删用户时评论随之删除。
 func TestUserHardDeleteCascadesComments(t *testing.T) {
