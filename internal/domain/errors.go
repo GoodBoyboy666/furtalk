@@ -15,6 +15,12 @@ var (
 	ErrForbidden = errors.New("domain: forbidden")
 	// ErrInvalidCredentials 在登录凭证或 widget 凭证无效时返回，保持通用以抑制枚举攻击。
 	ErrInvalidCredentials = errors.New("domain: invalid credentials")
+	// ErrOAuthAccessDenied 在用户取消第三方授权时返回。
+	ErrOAuthAccessDenied = errors.New("domain: oauth access denied")
+	// ErrOAuthCallbackInvalid 在 OAuth 回调的 state/handoff 缺失、过期、重放或与提供商不匹配时返回。
+	ErrOAuthCallbackInvalid = errors.New("domain: oauth callback invalid")
+	// ErrOAuthVerificationFailed 在授权码交换或第三方令牌校验失败时返回。
+	ErrOAuthVerificationFailed = errors.New("domain: oauth verification failed")
 	// ErrConfirmationRequired 在破坏性删除缺少显式确认时返回。
 	ErrConfirmationRequired = errors.New("domain: confirmation required")
 

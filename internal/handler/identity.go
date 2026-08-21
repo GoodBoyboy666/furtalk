@@ -3,7 +3,6 @@ package handler
 import (
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	"furtalk/internal/domain"
@@ -26,8 +25,7 @@ func RegisterAuth(api *gin.RouterGroup, service *identity.Service, csrf ...gin.H
 	auth.POST("/passkeys/login/verify", passkeyLoginVerify(service))
 	auth.GET("/providers", listProviders(service))
 	auth.GET("/oauth/:provider/start", oauthStart(service))
-	auth.GET("/oauth/:provider/callback", oauthCallback(service))
-	auth.POST("/oauth/:provider/callback", oauthCallback(service))
+	auth.POST("/oauth/:provider/complete", oauthComplete(service))
 }
 
 // RegisterMe 挂载 /me 子路由，并挂载用户门禁。
@@ -321,59 +319,92 @@ func oauthStart(service *identity.Service) gin.HandlerFunc {
 	}
 }
 
-// @Summary OAuth 回调
+// @Summary 完成 OAuth 登录
 // @Tags auth
-// @Accept application/x-www-form-urlencoded
+// @Accept json
+// @Produce json
 // @Param provider path string true "提供商 key"
-// @Param state query string true "状态参数（POST 时也可在表单中提交）"
-// @Param code query string true "授权码（POST 时也可在表单中提交）"
-// @Param error formData string false "提供方错误标记（如 Apple access_denied）"
-// @Success 302 "重定向到业务回跳地址，失败时附加 error=1"
-// @Failure 400 {object} httpx.ErrorResponse "缺失 state 或 code，或回调失败"
-// @Router /api/v1/auth/oauth/{provider}/callback [get]
-// @Router /api/v1/auth/oauth/{provider}/callback [post]
-func oauthCallback(service *identity.Service) gin.HandlerFunc {
+// @Param body body OAuthCompleteRequest true "直接回调参数或 Apple handoff token"
+// @Success 200 {object} OAuthCompleteResponse "已写入会话 Cookie，返回站内回跳地址"
+// @Failure 400 {object} httpx.ErrorResponse "回调参数无效、state/handoff 无效或授权码校验失败"
+// @Router /api/v1/auth/oauth/{provider}/complete [post]
+func oauthComplete(service *identity.Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Header("Cache-Control", "no-store")
 		providerKey := c.Param("provider")
-		state := oauthParam(c, "state")
-		code := oauthParam(c, "code")
-		// 提供方以 error 参数拒绝授权（如 Apple access_denied）时，只消费
-		// 一次性 state 恢复净化后的回跳地址，附加 error=1 标记；不签发会话。
-		if oauthParam(c, "error") != "" {
-			redirect, err := service.OAuthErrorRedirect(c.Request.Context(), providerKey, state)
-			if err != nil || redirect == "" {
-				c.JSON(http.StatusBadRequest, errorResponse(c, "invalid_request", "the oauth callback failed"))
-				return
-			}
-			c.Redirect(http.StatusFound, appendErrorMarker(redirect))
+		var req OAuthCompleteRequest
+		if err := httpx.DecodeBody(c, &req); err != nil {
+			writeError(c, err)
 			return
 		}
-		if state == "" || code == "" {
+		if req.Handoff != "" {
+			// handoff 与直接回调参数互斥；Apple 授权码绝不在 URL 中出现。
+			if req.State != "" || req.Code != "" || req.Error != "" {
+				c.JSON(http.StatusBadRequest, errorResponse(c, "invalid_request", "cannot mix handoff with direct callback parameters"))
+				return
+			}
+			handoff, err := service.ConsumeOAuthHandoff(c.Request.Context(), req.Handoff)
+			if err != nil {
+				writeOAuthError(c, err, "")
+				return
+			}
+			if handoff.Provider != providerKey {
+				writeOAuthError(c, domain.ErrOAuthCallbackInvalid, "")
+				return
+			}
+			if handoff.Error != "" {
+				completeOAuthError(c, service, providerKey, handoff.State)
+				return
+			}
+			if handoff.State == "" || handoff.Code == "" {
+				c.JSON(http.StatusBadRequest, errorResponse(c, "invalid_request", "missing state or code"))
+				return
+			}
+			completeOAuth(c, service, providerKey, handoff.State, handoff.Code)
+			return
+		}
+		// 直接回调参数：提供方以 error 拒绝授权时只消费 state 并返回取消错误。
+		if req.Error != "" {
+			if req.State == "" {
+				c.JSON(http.StatusBadRequest, errorResponse(c, "invalid_request", "missing state"))
+				return
+			}
+			completeOAuthError(c, service, providerKey, req.State)
+			return
+		}
+		if req.State == "" || req.Code == "" {
 			c.JSON(http.StatusBadRequest, errorResponse(c, "invalid_request", "missing state or code"))
 			return
 		}
-		session, redirect, err := service.FinishOAuth(c.Request.Context(), providerKey, state, code)
-		if err != nil {
-			if redirect == "" {
-				c.JSON(http.StatusBadRequest, errorResponse(c, "invalid_request", "the oauth callback failed"))
-				return
-			}
-			c.Redirect(http.StatusFound, appendErrorMarker(redirect))
-			return
-		}
-		setSessionCookie(c, session)
-		c.Redirect(http.StatusFound, redirect)
+		completeOAuth(c, service, providerKey, req.State, req.Code)
 	}
 }
 
-// oauthParam 读取回调参数，优先查询串，其次表单。
-// 兼容 GET 回调与 Apple form_post（application/x-www-form-urlencoded）。
-func oauthParam(c *gin.Context, key string) string {
-	if value := c.Query(key); value != "" {
-		return value
+// completeOAuth 消费 state 完成登录，成功时写入会话 Cookie 并返回回跳地址。
+func completeOAuth(c *gin.Context, service *identity.Service, providerKey, state, code string) {
+	session, redirect, err := service.FinishOAuth(c.Request.Context(), providerKey, state, code)
+	if err != nil {
+		writeOAuthError(c, err, redirect)
+		return
 	}
-	return c.PostForm(key)
+	setSessionCookie(c, session)
+	c.JSON(http.StatusOK, OAuthCompleteResponse{Redirect: redirect})
+}
+
+// completeOAuthError 处理用户取消授权：消费 state 并返回 access-denied 错误。
+func completeOAuthError(c *gin.Context, service *identity.Service, providerKey, state string) {
+	redirect, err := service.OAuthAccessDenied(c.Request.Context(), providerKey, state)
+	writeOAuthError(c, err, redirect)
+}
+
+// writeOAuthError 以标准错误信封写出 OAuth 回调错误，并在 state 有效时
+// 于 details.redirect 携带已净化的站内回跳地址，供前端提供返回操作。
+func writeOAuthError(c *gin.Context, err error, redirect string) {
+	details := map[string]any{}
+	if redirect != "" {
+		details["redirect"] = redirect
+	}
+	httpx.WriteErrorWithDetails(c, err, details)
 }
 
 // @Summary 获取当前用户资料
@@ -967,13 +998,4 @@ func setSessionCookie(c *gin.Context, session *identity.Session) {
 	}
 	middleware.SetFirstPartyCookie(c, session.Token, lifetime)
 	middleware.SetCSRFCookie(c, session.CSRFToken, lifetime)
-}
-
-// appendErrorMarker 向重定向路径追加不敏感的失败标记。
-func appendErrorMarker(redirect string) string {
-	separator := "?"
-	if strings.Contains(redirect, "?") {
-		separator = "&"
-	}
-	return redirect + separator + "error=1"
 }

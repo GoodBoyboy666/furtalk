@@ -24,9 +24,9 @@ func seedOAuthState(t *testing.T, store *cache.Memory, state string, record OAut
 	}
 }
 
-// TestOAuthErrorRedirectSuccess 验证成功路径：原子消费 state、返回净化后的回跳地址，
-// 且不创建任何用户、绑定或会话；同 state 不可重放。
-func TestOAuthErrorRedirectSuccess(t *testing.T) {
+// TestOAuthAccessDeniedSuccess 验证成功路径：原子消费 state、恢复净化后的回跳地址、
+// 返回 ErrOAuthAccessDenied，且不创建任何用户、绑定或会话；同 state 不可重放。
+func TestOAuthAccessDeniedSuccess(t *testing.T) {
 	ctx := context.Background()
 	db := newCaptchaLoginDB(t)
 	store := cache.NewMemory(10000)
@@ -43,9 +43,9 @@ func TestOAuthErrorRedirectSuccess(t *testing.T) {
 		Redirect: "/account/security",
 	})
 
-	redirect, err := svc.OAuthErrorRedirect(ctx, "apple", state)
-	if err != nil {
-		t.Fatalf("OAuthErrorRedirect: %v", err)
+	redirect, err := svc.OAuthAccessDenied(ctx, "apple", state)
+	if !errors.Is(err, domain.ErrOAuthAccessDenied) {
+		t.Fatalf("err = %v, want ErrOAuthAccessDenied", err)
 	}
 	if redirect != "/account/security" {
 		t.Fatalf("redirect = %q, want /account/security", redirect)
@@ -60,23 +60,23 @@ func TestOAuthErrorRedirectSuccess(t *testing.T) {
 	if userCount != 0 || identityCount != 0 {
 		t.Fatalf("side-effect writes users=%d identities=%d, want 0/0", userCount, identityCount)
 	}
-	// state 必须被一次性消费，重放返回通用失败。
-	if _, err := svc.OAuthErrorRedirect(ctx, "apple", state); !errors.Is(err, domain.ErrInvalidCredentials) {
-		t.Fatalf("replay err = %v, want ErrInvalidCredentials", err)
+	// state 必须被一次性消费，重放返回回调无效。
+	if _, err := svc.OAuthAccessDenied(ctx, "apple", state); !errors.Is(err, domain.ErrOAuthCallbackInvalid) {
+		t.Fatalf("replay err = %v, want ErrOAuthCallbackInvalid", err)
 	}
 }
 
-// TestOAuthErrorRedirectUnknownState 验证未知 state 返回 ErrInvalidCredentials。
-func TestOAuthErrorRedirectUnknownState(t *testing.T) {
+// TestOAuthAccessDeniedUnknownState 验证未知 state 返回 ErrOAuthCallbackInvalid。
+func TestOAuthAccessDeniedUnknownState(t *testing.T) {
 	svc := NewService(Dependencies{Cache: cache.NewMemory(10000)})
-	if _, err := svc.OAuthErrorRedirect(context.Background(), "apple", "missing-state"); !errors.Is(err, domain.ErrInvalidCredentials) {
-		t.Fatalf("unknown state err = %v, want ErrInvalidCredentials", err)
+	if _, err := svc.OAuthAccessDenied(context.Background(), "apple", "missing-state"); !errors.Is(err, domain.ErrOAuthCallbackInvalid) {
+		t.Fatalf("unknown state err = %v, want ErrOAuthCallbackInvalid", err)
 	}
 }
 
-// TestOAuthErrorRedirectMismatchedProvider 验证 state 的 provider 与回调不一致时
-// 返回 ErrInvalidCredentials，不返回任何回跳地址。
-func TestOAuthErrorRedirectMismatchedProvider(t *testing.T) {
+// TestOAuthAccessDeniedMismatchedProvider 验证 state 的 provider 与回调不一致时
+// 返回 ErrOAuthCallbackInvalid，不返回任何回跳地址。
+func TestOAuthAccessDeniedMismatchedProvider(t *testing.T) {
 	ctx := context.Background()
 	store := cache.NewMemory(10000)
 	svc := NewService(Dependencies{Cache: store})
@@ -85,7 +85,52 @@ func TestOAuthErrorRedirectMismatchedProvider(t *testing.T) {
 		Purpose:  oauthPurposeLogin,
 		Redirect: "/account/security",
 	})
-	if _, err := svc.OAuthErrorRedirect(ctx, "github", "state-apple"); !errors.Is(err, domain.ErrInvalidCredentials) {
-		t.Fatalf("mismatched provider err = %v, want ErrInvalidCredentials", err)
+	if _, err := svc.OAuthAccessDenied(ctx, "github", "state-apple"); !errors.Is(err, domain.ErrOAuthCallbackInvalid) {
+		t.Fatalf("mismatched provider err = %v, want ErrOAuthCallbackInvalid", err)
+	}
+}
+
+// TestCreateAndConsumeOAuthHandoff 验证 Apple handoff 创建与一次性消费，
+// 载荷往返正确且不可重放。
+func TestCreateAndConsumeOAuthHandoff(t *testing.T) {
+	ctx := context.Background()
+	store := cache.NewMemory(10000)
+	svc := NewService(Dependencies{Cache: store})
+
+	token, err := svc.CreateOAuthHandoff(ctx, "apple", "state-1", "code-1", "")
+	if err != nil {
+		t.Fatalf("CreateOAuthHandoff: %v", err)
+	}
+	if token == "" {
+		t.Fatal("handoff token is empty")
+	}
+
+	handoff, err := svc.ConsumeOAuthHandoff(ctx, token)
+	if err != nil {
+		t.Fatalf("ConsumeOAuthHandoff: %v", err)
+	}
+	if handoff.Provider != "apple" || handoff.State != "state-1" || handoff.Code != "code-1" || handoff.Error != "" {
+		t.Fatalf("handoff = %+v, want apple/state-1/code-1", handoff)
+	}
+
+	// handoff 只能消费一次；重放返回回调无效。
+	if _, err := svc.ConsumeOAuthHandoff(ctx, token); !errors.Is(err, domain.ErrOAuthCallbackInvalid) {
+		t.Fatalf("replay err = %v, want ErrOAuthCallbackInvalid", err)
+	}
+}
+
+// TestCreateOAuthHandoffMissingState 验证缺少 state 的 handoff 创建被拒绝。
+func TestCreateOAuthHandoffMissingState(t *testing.T) {
+	svc := NewService(Dependencies{Cache: cache.NewMemory(10000)})
+	if _, err := svc.CreateOAuthHandoff(context.Background(), "apple", "", "code-1", ""); !errors.Is(err, domain.ErrValidation) {
+		t.Fatalf("missing state err = %v, want ErrValidation", err)
+	}
+}
+
+// TestConsumeOAuthHandoffUnknown 验证未知/过期 handoff 返回 ErrOAuthCallbackInvalid。
+func TestConsumeOAuthHandoffUnknown(t *testing.T) {
+	svc := NewService(Dependencies{Cache: cache.NewMemory(10000)})
+	if _, err := svc.ConsumeOAuthHandoff(context.Background(), "missing-handoff"); !errors.Is(err, domain.ErrOAuthCallbackInvalid) {
+		t.Fatalf("unknown handoff err = %v, want ErrOAuthCallbackInvalid", err)
 	}
 }

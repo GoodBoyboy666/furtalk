@@ -13,6 +13,7 @@ import (
 	"furtalk/internal/platform/ratelimit"
 	"furtalk/internal/platform/webui"
 	"furtalk/internal/router"
+	"furtalk/internal/service/identity"
 	"github.com/gin-gonic/gin"
 )
 
@@ -29,6 +30,7 @@ func TestProvideRouterRejectsWebWithoutEmbedResources(t *testing.T) {
 		translator,
 		[]gin.HandlerFunc{func(c *gin.Context) { c.Next() }},
 		[]router.Register{func(*gin.RouterGroup) {}},
+		(*identity.Service)(nil),
 		webRuntimeOptions{Enabled: true},
 	)
 	if !errors.Is(err, webui.ErrUnavailable) {

@@ -27,6 +27,7 @@ func featureModule() fx.Option {
 		comment.NewWidgetSigner,
 		comment.NewWidgetJWTVerifierFromSigner,
 		newServices,
+		provideIdentityService,
 		provideWidgetSettings,
 		provideNotificationJob,
 		provideCacheMonitorJob,
@@ -158,6 +159,11 @@ func newServices(
 // provideWidgetSettings 把 setting 策略映射为 widget 凭据中间件所需的配置读取器。
 func provideWidgetSettings(s *services) comment.WidgetSettingsReader {
 	return comment.NewSettingsReader(commentPolicyReader{svc: s.settings})
+}
+
+// provideIdentityService 从聚合服务中暴露 *identity.Service，供路由层注入。
+func provideIdentityService(s *services) *identity.Service {
+	return s.identity
 }
 
 // jobContribution 是后台任务的可选分组贡献。

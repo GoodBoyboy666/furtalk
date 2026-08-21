@@ -83,6 +83,21 @@ type OAuthStartResponse struct {
 	AuthURL string `json:"auth_url"`
 }
 
+// OAuthCompleteRequest 是 OAuth 登录完成端点的请求。
+// handoff 与 (state, code, error) 互斥，二者只能提交其一。
+type OAuthCompleteRequest struct {
+	State   string `json:"state"`
+	Code    string `json:"code"`
+	Error   string `json:"error"`
+	Handoff string `json:"handoff"`
+}
+
+// OAuthCompleteResponse 是 OAuth 登录完成端点的成功响应，
+// redirect 是已净化的站内回跳地址。
+type OAuthCompleteResponse struct {
+	Redirect string `json:"redirect"`
+}
+
 // IdentityMetadata 是登录方式的元数据。
 type IdentityMetadata struct {
 	Kind       string     `json:"kind"`

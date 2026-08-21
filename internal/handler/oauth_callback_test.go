@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -75,7 +76,7 @@ type oauthCallbackFixture struct {
 }
 
 // newOAuthCallbackRouter 装配带真实 SQLite 仓储、内存缓存、脚本化 OAuth provider
-// 与固定 signer 的认证路由；POST 回调不挂 CSRF 中间件（一次性 state 即 CSRF 边界）。
+// 与固定 signer 的认证路由；complete 端点不挂 CSRF 中间件（一次性 state 即 CSRF 边界）。
 func newOAuthCallbackRouter(t *testing.T, scripted *oauth.Identity) *oauthCallbackFixture {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
@@ -157,24 +158,12 @@ func (f *oauthCallbackFixture) startOAuthState(t *testing.T, purpose string, use
 	return state
 }
 
-// getOAuthCallback 以 GET 方式调用回调。
-func (f *oauthCallbackFixture) getOAuthCallback(t *testing.T, state, code string) *httptest.ResponseRecorder {
-	t.Helper()
-	path := "/api/v1/auth/oauth/apple/callback?state=" + url.QueryEscape(state)
-	if code != "" {
-		path += "&code=" + url.QueryEscape(code)
-	}
-	rec := httptest.NewRecorder()
-	f.router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
-	return rec
-}
-
-// postOAuthForm 以 application/x-www-form-urlencoded 方式调用回调（Apple form_post）。
-func (f *oauthCallbackFixture) postOAuthForm(t *testing.T, values url.Values) *httptest.ResponseRecorder {
+// postOAuthComplete 以 JSON body 调用 complete 端点。
+func (f *oauthCallbackFixture) postOAuthComplete(t *testing.T, body string) *httptest.ResponseRecorder {
 	t.Helper()
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/oauth/apple/callback", strings.NewReader(values.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/oauth/apple/complete", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
 	f.router.ServeHTTP(rec, req)
 	return rec
 }
@@ -208,76 +197,115 @@ func assertNoSessionCookie(t *testing.T, rec *httptest.ResponseRecorder) {
 	}
 }
 
-// TestOAuthCallbackGETSuccess 验证 GET 回调成功：302 到净化后的回跳地址，
+// TestOAuthCompleteDirectSuccess 验证直接 JSON 回调成功：200 返回净化后的回跳地址，
 // 写入会话 Cookie 且 no-store。
-func TestOAuthCallbackGETSuccess(t *testing.T) {
+func TestOAuthCompleteDirectSuccess(t *testing.T) {
 	fx := newOAuthCallbackRouter(t, &oauth.Identity{Subject: "apple-sub-1"})
 	fx.seedBoundOAuthUser(t, "user@example.com", "apple-sub-1")
 	state := fx.startOAuthState(t, "login", 0, "/account/security")
 
-	rec := fx.getOAuthCallback(t, state, "code-1")
-	if rec.Code != http.StatusFound {
-		t.Fatalf("status = %d, want 302; body=%s", rec.Code, rec.Body.String())
+	rec := fx.postOAuthComplete(t, `{"state":"`+state+`","code":"code-1"}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
 	}
-	if loc := rec.Header().Get("Location"); loc != "/account/security" {
-		t.Fatalf("Location = %q, want /account/security", loc)
+	var body OAuthCompleteResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if body.Redirect != "/account/security" {
+		t.Fatalf("redirect = %q, want /account/security", body.Redirect)
 	}
 	assertNoStore(t, rec)
 	assertSessionCookie(t, rec)
 }
 
-// TestOAuthCallbackPOSTFormSuccess 验证 POST 表单回调成功（Apple form_post）：
-// 从表单读取 state/code，302 到回跳地址并写入会话 Cookie，无需 CSRF。
-func TestOAuthCallbackPOSTFormSuccess(t *testing.T) {
+// TestOAuthCompleteHandoffSuccess 验证 Apple handoff 路径：创建 handoff 后
+// 提交 opaque token，成功返回回跳地址并写入会话 Cookie。
+func TestOAuthCompleteHandoffSuccess(t *testing.T) {
 	fx := newOAuthCallbackRouter(t, &oauth.Identity{Subject: "apple-sub-2"})
 	fx.seedBoundOAuthUser(t, "user@example.com", "apple-sub-2")
 	state := fx.startOAuthState(t, "login", 0, "/account/security")
-
-	rec := fx.postOAuthForm(t, url.Values{"state": {state}, "code": {"code-2"}})
-	if rec.Code != http.StatusFound {
-		t.Fatalf("status = %d, want 302; body=%s", rec.Code, rec.Body.String())
+	token, err := fx.svc.CreateOAuthHandoff(context.Background(), "apple", state, "code-2", "")
+	if err != nil {
+		t.Fatalf("CreateOAuthHandoff: %v", err)
 	}
-	if loc := rec.Header().Get("Location"); loc != "/account/security" {
-		t.Fatalf("Location = %q, want /account/security", loc)
+
+	rec := fx.postOAuthComplete(t, `{"handoff":"`+token+`"}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	var body OAuthCompleteResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if body.Redirect != "/account/security" {
+		t.Fatalf("redirect = %q, want /account/security", body.Redirect)
 	}
 	assertNoStore(t, rec)
 	assertSessionCookie(t, rec)
 }
 
-// TestOAuthCallbackPOSTErrorMarker 验证提供方 error 参数（Apple access_denied）：
-// 消费 state 恢复回跳地址并附加 error=1，绝不签发会话 Cookie。
-func TestOAuthCallbackPOSTErrorMarker(t *testing.T) {
+// TestOAuthCompleteAccessDenied 验证提供方 error（Apple access_denied）：
+// 消费 state，返回 400 oauth_access_denied 且 details.redirect 指向回跳地址，
+// 绝不签发会话 Cookie。
+func TestOAuthCompleteAccessDenied(t *testing.T) {
 	fx := newOAuthCallbackRouter(t, &oauth.Identity{Subject: "apple-sub-3"})
 	state := fx.startOAuthState(t, "login", 0, "/account/security")
 
-	rec := fx.postOAuthForm(t, url.Values{"state": {state}, "error": {"access_denied"}})
-	if rec.Code != http.StatusFound {
-		t.Fatalf("status = %d, want 302; body=%s", rec.Code, rec.Body.String())
+	rec := fx.postOAuthComplete(t, `{"state":"`+state+`","error":"access_denied"}`)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body=%s", rec.Code, rec.Body.String())
 	}
-	if loc := rec.Header().Get("Location"); loc != "/account/security?error=1" {
-		t.Fatalf("Location = %q, want /account/security?error=1", loc)
+	if !strings.Contains(rec.Body.String(), "oauth_access_denied") {
+		t.Fatalf("body = %s, want oauth_access_denied code", rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"redirect":"/account/security"`) {
+		t.Fatalf("body = %s, want details.redirect", rec.Body.String())
 	}
 	assertNoStore(t, rec)
 	assertNoSessionCookie(t, rec)
 }
 
-// TestOAuthCallbackMissingParams 验证缺失 state/code 一律 400 invalid_request，
-// 不写会话、不跳转；提供方 error 但 state 未知同样 400。
-func TestOAuthCallbackMissingParams(t *testing.T) {
+// TestOAuthCompleteHandoffAccessDenied 验证 Apple handoff 携带 error 时同样
+// 返回 oauth_access_denied 且不签发会话。
+func TestOAuthCompleteHandoffAccessDenied(t *testing.T) {
 	fx := newOAuthCallbackRouter(t, &oauth.Identity{Subject: "apple-sub-4"})
+	state := fx.startOAuthState(t, "login", 0, "/account/security")
+	token, err := fx.svc.CreateOAuthHandoff(context.Background(), "apple", state, "", "access_denied")
+	if err != nil {
+		t.Fatalf("CreateOAuthHandoff: %v", err)
+	}
+
+	rec := fx.postOAuthComplete(t, `{"handoff":"`+token+`"}`)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body=%s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "oauth_access_denied") {
+		t.Fatalf("body = %s, want oauth_access_denied code", rec.Body.String())
+	}
+	assertNoStore(t, rec)
+	assertNoSessionCookie(t, rec)
+}
+
+// TestOAuthCompleteInvalidInput 验证缺失/混杂参数一律 400 invalid_request。
+func TestOAuthCompleteInvalidInput(t *testing.T) {
+	fx := newOAuthCallbackRouter(t, &oauth.Identity{Subject: "apple-sub-5"})
 
 	tests := []struct {
-		name  string
-		value url.Values
+		name string
+		body string
 	}{
-		{name: "empty form", value: url.Values{}},
-		{name: "state only no code", value: url.Values{"state": {"unknown-state"}}},
-		{name: "error with unknown state", value: url.Values{"error": {"access_denied"}}},
-		{name: "error with unknown state value", value: url.Values{"state": {"unknown-state"}, "error": {"access_denied"}}},
+		{name: "empty body", body: `{}`},
+		{name: "state only no code", body: `{"state":"unknown-state"}`},
+		{name: "code only no state", body: `{"code":"code-x"}`},
+		{name: "handoff mixed with state", body: `{"handoff":"h","state":"s"}`},
+		{name: "handoff mixed with code", body: `{"handoff":"h","code":"c"}`},
+		{name: "handoff mixed with error", body: `{"handoff":"h","error":"access_denied"}`},
+		{name: "error without state", body: `{"error":"access_denied"}`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rec := fx.postOAuthForm(t, tt.value)
+			rec := fx.postOAuthComplete(t, tt.body)
 			if rec.Code != http.StatusBadRequest {
 				t.Fatalf("status = %d, want 400; body=%s", rec.Code, rec.Body.String())
 			}
@@ -288,4 +316,25 @@ func TestOAuthCallbackMissingParams(t *testing.T) {
 			assertNoSessionCookie(t, rec)
 		})
 	}
+}
+
+// TestOAuthCompleteStateReplay 验证已消费/未知 state 返回 oauth_callback_invalid，
+// 且不签发会话。
+func TestOAuthCompleteStateReplay(t *testing.T) {
+	fx := newOAuthCallbackRouter(t, &oauth.Identity{Subject: "apple-sub-6"})
+	fx.seedBoundOAuthUser(t, "user@example.com", "apple-sub-6")
+	state := fx.startOAuthState(t, "login", 0, "/account/security")
+
+	first := fx.postOAuthComplete(t, `{"state":"`+state+`","code":"code-1"}`)
+	if first.Code != http.StatusOK {
+		t.Fatalf("first status = %d, want 200; body=%s", first.Code, first.Body.String())
+	}
+	replay := fx.postOAuthComplete(t, `{"state":"`+state+`","code":"code-1"}`)
+	if replay.Code != http.StatusBadRequest {
+		t.Fatalf("replay status = %d, want 400; body=%s", replay.Code, replay.Body.String())
+	}
+	if !strings.Contains(replay.Body.String(), "oauth_callback_invalid") {
+		t.Fatalf("body = %s, want oauth_callback_invalid code", replay.Body.String())
+	}
+	assertNoSessionCookie(t, replay)
 }

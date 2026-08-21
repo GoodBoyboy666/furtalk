@@ -194,7 +194,7 @@ func TestBeginOAuthCapabilitiesByCatalog(t *testing.T) {
 			if fake.gotAuth.State == "" {
 				t.Fatal("state must be non-empty")
 			}
-			if fake.gotAuth.RedirectURI != "https://example.com/api/v1/auth/oauth/"+tt.providerKey+"/callback" {
+			if fake.gotAuth.RedirectURI != "https://example.com/oauth/callback/"+tt.providerKey {
 				t.Fatalf("redirect uri = %q", fake.gotAuth.RedirectURI)
 			}
 		})

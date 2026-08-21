@@ -24,6 +24,10 @@ const (
 	verifierBytes    = 32
 	nonceBytes       = 16
 
+	oauthHandoffTTL    = 2 * time.Minute
+	oauthHandoffPrefix = "oauth-handoff:"
+	handoffBytes       = 32
+
 	oauthPurposeLogin    = "login"
 	oauthPurposeRegister = "register"
 	oauthPurposeBind     = "bind"
@@ -31,14 +35,26 @@ const (
 
 // OAuthState 是存储在 oauth-state:<state> 下的一次性临时记录。
 // Verifier/Nonce 按 provider 能力可空：非 PKCE provider 无 Verifier，
-// 非 ID-token provider 无 Nonce。
+// 非 ID-token provider 无 Nonce。RedirectURI 是授权 URL 中登记的回调地址，
+// 令牌交换复用该精确值，不跨部署重算。
 type OAuthState struct {
+	Provider    string `json:"provider"`
+	Purpose     string `json:"purpose"`
+	Verifier    string `json:"verifier"`
+	Nonce       string `json:"nonce,omitempty"`
+	UserID      int64  `json:"user_id,omitempty"`
+	Redirect    string `json:"redirect,omitempty"`
+	RedirectURI string `json:"redirect_uri,omitempty"`
+}
+
+// OAuthHandoff 是 Apple form_post 桥接在 oauth-handoff:<token> 下保存的
+// 短时一次性回调载荷。它只做传输适配，不交换授权码、不创建/绑定用户、
+// 不签发 Cookie。
+type OAuthHandoff struct {
 	Provider string `json:"provider"`
-	Purpose  string `json:"purpose"`
-	Verifier string `json:"verifier"`
-	Nonce    string `json:"nonce,omitempty"`
-	UserID   int64  `json:"user_id,omitempty"`
-	Redirect string `json:"redirect,omitempty"`
+	State    string `json:"state"`
+	Code     string `json:"code"`
+	Error    string `json:"error,omitempty"`
 }
 
 // ProviderMeta 是 GET /auth/providers 返回的公共元数据。
@@ -163,11 +179,13 @@ func (s *Service) BeginOAuth(ctx context.Context, providerKey, purpose string, u
 	if err != nil {
 		return nil, err
 	}
+	redirectURI := s.oauthRedirectURI(providerConfig.ProviderKey)
 	record := OAuthState{
-		Provider: providerConfig.ProviderKey,
-		Purpose:  purpose,
-		UserID:   userID,
-		Redirect: sanitizeRedirect(redirect),
+		Provider:    providerConfig.ProviderKey,
+		Purpose:     purpose,
+		UserID:      userID,
+		Redirect:    sanitizeRedirect(redirect),
+		RedirectURI: redirectURI,
 	}
 	// 按 catalog 能力生成 verifier 与 nonce：未知 key 保持自定义 OIDC 语义
 	// （始终使用 S256 PKCE 与 nonce），适配器不得自行启用或关闭任一能力。
@@ -200,7 +218,7 @@ func (s *Service) BeginOAuth(ctx context.Context, providerKey, purpose string, u
 		State:       state,
 		Verifier:    record.Verifier,
 		Nonce:       record.Nonce,
-		RedirectURI: s.oauthRedirectURI(providerConfig.ProviderKey),
+		RedirectURI: redirectURI,
 	})
 	if err != nil {
 		logging.FromContext(ctx, s.log).WarnContext(ctx, "oauth build auth url failed", "provider", providerKey, logging.Error(err))
@@ -210,35 +228,39 @@ func (s *Service) BeginOAuth(ctx context.Context, providerKey, purpose string, u
 }
 
 // FinishOAuth 消费 state，用 PKCE 交换 code，并按登录/注册/绑定规则签发会话。
+// 返回的 redirect 在 state 有效时始终是已净化的站内回跳地址；state 无效时为空。
+// 错误分类不泄露账号存在性：state 缺失/过期/重放/不匹配返回
+// ErrOAuthCallbackInvalid，授权码交换或令牌校验失败返回
+// ErrOAuthVerificationFailed，其余身份解析错误原样透传。
 func (s *Service) FinishOAuth(ctx context.Context, providerKey, state, code string) (*Session, string, error) {
 	if s.oauth == nil {
-		return nil, "", domain.ErrInvalidCredentials
+		return nil, "", domain.ErrOAuthVerificationFailed
 	}
 	raw, err := s.ephemeral.AtomicConsume(ctx, oauthStatePrefix+state)
 	if err != nil {
-		return nil, "", domain.ErrInvalidCredentials
+		return nil, "", domain.ErrOAuthCallbackInvalid
 	}
 	var record OAuthState
 	if err := json.Unmarshal([]byte(raw), &record); err != nil || record.Provider != providerKey {
-		return nil, "", domain.ErrInvalidCredentials
+		return nil, "", domain.ErrOAuthCallbackInvalid
 	}
 	providerConfig, err := s.providers.OAuthProvider(ctx, providerKey)
 	if err != nil {
-		return nil, record.Redirect, domain.ErrInvalidCredentials
+		return nil, record.Redirect, domain.ErrOAuthVerificationFailed
 	}
 	provider, err := s.buildProvider(providerConfig)
 	if err != nil {
-		return nil, record.Redirect, domain.ErrInvalidCredentials
+		return nil, record.Redirect, domain.ErrOAuthVerificationFailed
 	}
 	oauthIdentity, err := provider.Exchange(ctx, oauth.ExchangeRequest{
 		Code:        code,
 		Verifier:    record.Verifier,
 		Nonce:       record.Nonce,
-		RedirectURI: s.oauthRedirectURI(providerConfig.ProviderKey),
+		RedirectURI: record.RedirectURI,
 	})
 	if err != nil {
 		logging.FromContext(ctx, s.log).WarnContext(ctx, "oauth exchange/verify failed", "provider", providerKey, logging.Error(err))
-		return nil, record.Redirect, domain.ErrInvalidCredentials
+		return nil, record.Redirect, domain.ErrOAuthVerificationFailed
 	}
 	session, err := s.resolveOAuthIdentity(ctx, providerConfig, oauthIdentity, record)
 	if err != nil {
@@ -247,20 +269,56 @@ func (s *Service) FinishOAuth(ctx context.Context, providerKey, state, code stri
 	return session, record.Redirect, nil
 }
 
-// OAuthErrorRedirect 原子消费一次性 state，仅恢复净化后的回跳地址。
-// 用于 provider 以 error 参数拒绝授权（如 Apple access_denied）时安全回跳；
+// OAuthAccessDenied 原子消费一次性 state，恢复净化后的回跳地址，
+// 并返回 ErrOAuthAccessDenied 表示用户取消了授权。
 // 不创建绑定、不签发会话、不创建用户。未知或 provider 不匹配的 state
-// 一律返回 ErrInvalidCredentials，且不泄露回调细节。
-func (s *Service) OAuthErrorRedirect(ctx context.Context, providerKey, state string) (string, error) {
+// 返回 ErrOAuthCallbackInvalid，不泄露回调细节。
+func (s *Service) OAuthAccessDenied(ctx context.Context, providerKey, state string) (string, error) {
 	raw, err := s.ephemeral.AtomicConsume(ctx, oauthStatePrefix+state)
 	if err != nil {
-		return "", domain.ErrInvalidCredentials
+		return "", domain.ErrOAuthCallbackInvalid
 	}
 	var record OAuthState
 	if err := json.Unmarshal([]byte(raw), &record); err != nil || record.Provider != providerKey {
-		return "", domain.ErrInvalidCredentials
+		return "", domain.ErrOAuthCallbackInvalid
 	}
-	return record.Redirect, nil
+	return record.Redirect, domain.ErrOAuthAccessDenied
+}
+
+// CreateOAuthHandoff 为 Apple form_post 回调创建短时一次性 handoff 记录，
+// 返回不透明 token。state 必填；code/error 按实际载荷可有可无。
+// 授权码绝不进入任何 URL。
+func (s *Service) CreateOAuthHandoff(ctx context.Context, providerKey, state, code, errMsg string) (string, error) {
+	if providerKey == "" || state == "" {
+		return "", domain.ErrValidation
+	}
+	token, err := cryptox.RandomToken(handoffBytes)
+	if err != nil {
+		return "", err
+	}
+	record := OAuthHandoff{Provider: providerKey, State: state, Code: code, Error: errMsg}
+	recordJSON, err := json.Marshal(record)
+	if err != nil {
+		return "", err
+	}
+	if err := s.ephemeral.Set(ctx, oauthHandoffPrefix+token, string(recordJSON), oauthHandoffTTL); err != nil {
+		return "", err
+	}
+	return token, nil
+}
+
+// ConsumeOAuthHandoff 原子消费一次性 handoff 记录。
+// 缺失、过期、重放或损坏的 token 返回 ErrOAuthCallbackInvalid。
+func (s *Service) ConsumeOAuthHandoff(ctx context.Context, handoff string) (OAuthHandoff, error) {
+	raw, err := s.ephemeral.AtomicConsume(ctx, oauthHandoffPrefix+handoff)
+	if err != nil {
+		return OAuthHandoff{}, domain.ErrOAuthCallbackInvalid
+	}
+	var record OAuthHandoff
+	if err := json.Unmarshal([]byte(raw), &record); err != nil {
+		return OAuthHandoff{}, domain.ErrOAuthCallbackInvalid
+	}
+	return record, nil
 }
 
 // resolveOAuthIdentity 按注册模式与绑定状态解析身份。
@@ -428,7 +486,7 @@ func (s *Service) buildProvider(providerConfig *AuthProvider) (OAuthProvider, er
 }
 
 func (s *Service) oauthRedirectURI(providerKey string) string {
-	return strings.TrimRight(s.baseURL, "/") + "/api/v1/auth/oauth/" + url.PathEscape(providerKey) + "/callback"
+	return strings.TrimRight(s.baseURL, "/") + "/oauth/callback/" + url.PathEscape(providerKey)
 }
 
 // providerDisplayName 从固定 provider catalog 投影展示名；

@@ -11,6 +11,7 @@ import (
 	"furtalk/internal/platform/ratelimit"
 	"furtalk/internal/platform/webui"
 	"furtalk/internal/router"
+	"furtalk/internal/service/identity"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/fx"
 )
@@ -85,6 +86,7 @@ func provideRouter(
 	translator *httpx.Translator,
 	authentication []gin.HandlerFunc,
 	registers []router.Register,
+	identityService *identity.Service,
 	runtimeOptions webRuntimeOptions,
 ) (*gin.Engine, error) {
 	gin.SetMode(gin.ReleaseMode)
@@ -92,6 +94,8 @@ func provideRouter(
 	if err != nil {
 		return nil, err
 	}
+	// Apple form_post 桥必须注册在 SPA NoRoute 回退之前。
+	router.RegisterOAuthCallbackBridge(engine, identityService.CreateOAuthHandoff)
 	if !runtimeOptions.Enabled {
 		return engine, nil
 	}

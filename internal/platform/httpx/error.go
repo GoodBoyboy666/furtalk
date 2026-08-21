@@ -91,15 +91,21 @@ const translatorContextKey = "httpx.error_translator"
 // WriteError 使用上下文中的翻译器把 err 转为响应。
 // 未匹配到映射或未挂载翻译器时，回退为 500 内部错误。
 func WriteError(c *gin.Context, err error) {
+	WriteErrorWithDetails(c, err, nil)
+}
+
+// WriteErrorWithDetails 使用上下文中的翻译器把 err 转为携带脱敏 details 的响应。
+// 未匹配到映射或未挂载翻译器时，回退为 500 内部错误。
+func WriteErrorWithDetails(c *gin.Context, err error, details map[string]any) {
 	translator, _ := c.Get(translatorContextKey)
 	if typed, ok := translator.(*Translator); ok {
 		if mapping, found := typed.Translate(err); found {
-			c.JSON(mapping.Status, Response(c, mapping.Code, mapping.Message))
+			c.JSON(mapping.Status, ResponseWithDetails(c, mapping.Code, mapping.Message, details))
 			return
 		}
 	}
 	_ = c.Error(err)
-	c.JSON(http.StatusInternalServerError, Response(c, "internal_error", "服务器内部错误"))
+	c.JSON(http.StatusInternalServerError, ResponseWithDetails(c, "internal_error", "服务器内部错误", details))
 }
 
 // Abort 以给定状态码与错误信息中止请求并写入响应。
@@ -109,7 +115,15 @@ func Abort(c *gin.Context, status int, code, message string) {
 
 // Response 构造携带当前请求 ID 的错误响应体。
 func Response(c *gin.Context, code, message string) ErrorResponse {
+	return ResponseWithDetails(c, code, message, nil)
+}
+
+// ResponseWithDetails 构造携带当前请求 ID 与脱敏 details 的错误响应体。
+func ResponseWithDetails(c *gin.Context, code, message string, details map[string]any) ErrorResponse {
+	if details == nil {
+		details = map[string]any{}
+	}
 	return ErrorResponse{Error: ErrorBody{
-		Code: code, Message: message, RequestID: c.GetString(RequestIDKey), Details: map[string]any{},
+		Code: code, Message: message, RequestID: c.GetString(RequestIDKey), Details: details,
 	}}
 }

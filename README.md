@@ -156,6 +156,12 @@ docker compose up -d
 | `FURTALK_SMTP_USERNAME/PASSWORD`     | 可选           | 空                     | SMTP 凭据                                    |
 | `FURTALK_LOGGING_FORMAT`             | 默认           | `text`                 | 后端日志输出格式：`json` 或 `text`           |
 
+### 第三方登录回调部署
+
+第三方 OAuth/OIDC 登录的回调入口是前端专用回调页 `https://<public-origin>/oauth/callback/{provider}`
+
+后端与前端需要同源部署，共用同一 `FURTALK_HTTP_PUBLIC_BASE_URL`。
+
 ## 评论组件（Widget）
 
 评论组件是独立的浏览器 ES module，通过 Shadow DOM 隔离样式，可嵌入任意静态站点：

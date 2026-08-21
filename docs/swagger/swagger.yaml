@@ -592,6 +592,22 @@ definitions:
       reply_enabled:
         type: boolean
     type: object
+  handler.OAuthCompleteRequest:
+    properties:
+      code:
+        type: string
+      error:
+        type: string
+      handoff:
+        type: string
+      state:
+        type: string
+    type: object
+  handler.OAuthCompleteResponse:
+    properties:
+      redirect:
+        type: string
+    type: object
   handler.OAuthStartResponse:
     properties:
       auth_url:
@@ -2358,71 +2374,34 @@ paths:
       summary: 退出登录
       tags:
       - auth
-  /api/v1/auth/oauth/{provider}/callback:
-    get:
-      consumes:
-      - application/x-www-form-urlencoded
-      parameters:
-      - description: 提供商 key
-        in: path
-        name: provider
-        required: true
-        type: string
-      - description: 状态参数（POST 时也可在表单中提交）
-        in: query
-        name: state
-        required: true
-        type: string
-      - description: 授权码（POST 时也可在表单中提交）
-        in: query
-        name: code
-        required: true
-        type: string
-      - description: 提供方错误标记（如 Apple access_denied）
-        in: formData
-        name: error
-        type: string
-      responses:
-        "302":
-          description: 重定向到业务回跳地址，失败时附加 error=1
-        "400":
-          description: 缺失 state 或 code，或回调失败
-          schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
-      summary: OAuth 回调
-      tags:
-      - auth
+  /api/v1/auth/oauth/{provider}/complete:
     post:
       consumes:
-      - application/x-www-form-urlencoded
+      - application/json
       parameters:
       - description: 提供商 key
         in: path
         name: provider
         required: true
         type: string
-      - description: 状态参数（POST 时也可在表单中提交）
-        in: query
-        name: state
+      - description: 直接回调参数或 Apple handoff token
+        in: body
+        name: body
         required: true
-        type: string
-      - description: 授权码（POST 时也可在表单中提交）
-        in: query
-        name: code
-        required: true
-        type: string
-      - description: 提供方错误标记（如 Apple access_denied）
-        in: formData
-        name: error
-        type: string
+        schema:
+          $ref: '#/definitions/handler.OAuthCompleteRequest'
+      produces:
+      - application/json
       responses:
-        "302":
-          description: 重定向到业务回跳地址，失败时附加 error=1
+        "200":
+          description: 已写入会话 Cookie，返回站内回跳地址
+          schema:
+            $ref: '#/definitions/handler.OAuthCompleteResponse'
         "400":
-          description: 缺失 state 或 code，或回调失败
+          description: 回调参数无效、state/handoff 无效或授权码校验失败
           schema:
             $ref: '#/definitions/httpx.ErrorResponse'
-      summary: OAuth 回调
+      summary: 完成 OAuth 登录
       tags:
       - auth
   /api/v1/auth/oauth/{provider}/start:

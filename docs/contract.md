@@ -82,8 +82,8 @@
 | POST | /api/v1/auth/passkeys/login/options | Passkey 登录 challenge |
 | POST | /api/v1/auth/passkeys/login/verify | Passkey 登录校验 |
 | GET | /api/v1/auth/providers | 可用 OAuth provider 列表 |
-| GET | /api/v1/auth/oauth/{provider}/start | OAuth 启动 |
-| GET/POST | /api/v1/auth/oauth/{provider}/callback | OAuth 回调（POST 为 Apple `form_post`；一次性 state 即 CSRF 边界，无需第一方 CSRF） |
+| GET | /api/v1/auth/oauth/{provider}/start | OAuth 启动（返回授权 URL） |
+| POST | /api/v1/auth/oauth/{provider}/complete | OAuth 登录完成（JSON：`{state, code, error}` 或 `{handoff}`；成功返回 `{redirect}` 并写入会话/CSRF Cookie；一次性 state/handoff 即 CSRF 边界，无需第一方 CSRF） |
 
 ### 当前用户（/api/v1/me，RequireUser）
 
@@ -271,12 +271,19 @@
   envelope；新建必须提供对应机密，编辑缺省/空白原样复用现有 envelope（字节不变），
   非空才加密替换；Apple 的 `key_id` 与 `private_key` 作为一对原子轮换。删除是唯一
   清除机密的方式。机密不出现在任何读取接口、管理响应、公开列表与日志中。
-- **回调方式**：默认回调为 `GET /auth/oauth/{provider}/callback`；Apple 使用
-  `POST /api/v1/auth/oauth/{provider}/callback`
-   （`application/x-www-form-urlencoded`，`form_post`），由同一 handler 处理，
-   state/code/提供方错误可从 query 或表单解析。POST 回调**无需第一方 CSRF**——
-   一次性 state 即该流程的 CSRF 边界；两种回调方式均使用 `Cache-Control: no-store`、
-   安全回跳与 `error=1` 失败标记，会话 Cookie 签发语义一致。
+- **回调方式**：第三方平台登记的 callback URL 指向**前端专用回调页**
+  `https://<public-origin>/oauth/callback/{provider}`（同源部署：API 与 Web SPA
+  共用同一公开 Origin）。provider 授权后浏览器先进入该前端页，再由前端调用
+  `POST /api/v1/auth/oauth/{provider}/complete` 完成登录。普通 provider 由回调页
+  直接提交 `{state, code, error}`；Apple 使用 `form_post` 把载荷 POST 到同一前端
+  路径，由后端根路径桥创建短时一次性 `handoff` 后 303 到
+  `/oauth/callback/apple?handoff=<opaque>`，前端再提交 `{handoff}`——授权码绝不
+  进入任何 URL。`complete` 成功返回 `{redirect}`（已净化的站内回跳地址）并写入
+  会话/CSRF Cookie；失败返回标准错误信封，state 有效时在 `details.redirect`
+  携带回跳地址。一次性 state/handoff 即该流程的 CSRF 边界，**无需第一方 CSRF**；
+  回调与桥均使用 `Cache-Control: no-store`。**部署时必须把每个启用 provider
+  的 callback 白名单更新为新前端路由，与代码同步发布；旧
+  `/api/v1/auth/oauth/{provider}/callback` 路由已完全移除。**
 
 ### 邮箱域名名单与 Gravatar 头像（/api/v1/admin/settings）
 

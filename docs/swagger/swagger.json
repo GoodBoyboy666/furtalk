@@ -2219,64 +2219,18 @@
                 }
             }
         },
-        "/api/v1/auth/oauth/{provider}/callback": {
-            "get": {
-                "consumes": [
-                    "application/x-www-form-urlencoded"
-                ],
-                "tags": [
-                    "auth"
-                ],
-                "summary": "OAuth 回调",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "提供商 key",
-                        "name": "provider",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "状态参数（POST 时也可在表单中提交）",
-                        "name": "state",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "授权码（POST 时也可在表单中提交）",
-                        "name": "code",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "提供方错误标记（如 Apple access_denied）",
-                        "name": "error",
-                        "in": "formData"
-                    }
-                ],
-                "responses": {
-                    "302": {
-                        "description": "重定向到业务回跳地址，失败时附加 error=1"
-                    },
-                    "400": {
-                        "description": "缺失 state 或 code，或回调失败",
-                        "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
-                        }
-                    }
-                }
-            },
+        "/api/v1/auth/oauth/{provider}/complete": {
             "post": {
                 "consumes": [
-                    "application/x-www-form-urlencoded"
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
                 ],
                 "tags": [
                     "auth"
                 ],
-                "summary": "OAuth 回调",
+                "summary": "完成 OAuth 登录",
                 "parameters": [
                     {
                         "type": "string",
@@ -2286,32 +2240,24 @@
                         "required": true
                     },
                     {
-                        "type": "string",
-                        "description": "状态参数（POST 时也可在表单中提交）",
-                        "name": "state",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "授权码（POST 时也可在表单中提交）",
-                        "name": "code",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "提供方错误标记（如 Apple access_denied）",
-                        "name": "error",
-                        "in": "formData"
+                        "description": "直接回调参数或 Apple handoff token",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.OAuthCompleteRequest"
+                        }
                     }
                 ],
                 "responses": {
-                    "302": {
-                        "description": "重定向到业务回跳地址，失败时附加 error=1"
+                    "200": {
+                        "description": "已写入会话 Cookie，返回站内回跳地址",
+                        "schema": {
+                            "$ref": "#/definitions/handler.OAuthCompleteResponse"
+                        }
                     },
                     "400": {
-                        "description": "缺失 state 或 code，或回调失败",
+                        "description": "回调参数无效、state/handoff 无效或授权码校验失败",
                         "schema": {
                             "$ref": "#/definitions/httpx.ErrorResponse"
                         }
@@ -4975,6 +4921,31 @@
                 },
                 "reply_enabled": {
                     "type": "boolean"
+                }
+            }
+        },
+        "handler.OAuthCompleteRequest": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "error": {
+                    "type": "string"
+                },
+                "handoff": {
+                    "type": "string"
+                },
+                "state": {
+                    "type": "string"
+                }
+            }
+        },
+        "handler.OAuthCompleteResponse": {
+            "type": "object",
+            "properties": {
+                "redirect": {
+                    "type": "string"
                 }
             }
         },
