@@ -412,6 +412,40 @@ func TestAdminThreadsPatchEditsMetadata(t *testing.T) {
 	if combo.PageKey != "combo" || combo.PageTitle == nil || *combo.PageTitle != "Combo Title" || combo.CommentsEnabled {
 		t.Fatalf("combo update = %+v", combo)
 	}
+
+	urlOnly := do(`{"page_url":"  https://site.example/renamed  "}`)
+	if urlOnly.PageURL == nil || *urlOnly.PageURL != "https://site.example/renamed" {
+		t.Fatalf("page_url = %v, want trimmed absolute url", urlOnly.PageURL)
+	}
+
+	clearURL := do(`{"page_url":null}`)
+	if clearURL.PageURL != nil {
+		t.Fatalf("page_url must be cleared, got %v", *clearURL.PageURL)
+	}
+}
+
+// TestAdminThreadsPatchPageURLRejectsInvalid 验证非法 page_url 返回 422 且不落库。
+func TestAdminThreadsPatchPageURLRejectsInvalid(t *testing.T) {
+	env := newThreadHandlerEnv(t)
+	siteID, threadID := seedAdminThreadFixture(t, env)
+	router := threadAdminRouter(t, env.svc)
+
+	for _, body := range []string{
+		`{"page_url":"not-a-url"}`,
+		`{"page_url":"ftp://example.com/x"}`,
+		`{"page_url":"https://"}`,
+		`{"page_url":"//example.com/x"}`,
+	} {
+		rec := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodPatch, "/api/v1/admin/sites/"+itoa(siteID)+"/threads/"+itoa(threadID), strings.NewReader(body))
+		request.Header.Set("Content-Type", "application/json")
+		request.AddCookie(&http.Cookie{Name: middleware.CSRFCookieName, Value: csrf})
+		request.Header.Set(middleware.CSRFHeaderName, csrf)
+		router.ServeHTTP(rec, request)
+		if rec.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("body %s status = %d, want 422; body=%s", body, rec.Code, rec.Body.String())
+		}
+	}
 }
 
 // TestAdminThreadsPatchDuplicateKeyConflict 验证 page_key 站点内重复返回 409。

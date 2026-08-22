@@ -286,13 +286,14 @@ func adminThreadsPatch(service *comment.Service) gin.HandlerFunc {
 			writeError(c, err)
 			return
 		}
-		if req.PageKey == nil && !req.PageTitle.Set && req.CommentsEnabled == nil {
+		if req.PageKey == nil && !req.PageTitle.Set && !req.PageURL.Set && req.CommentsEnabled == nil {
 			c.JSON(http.StatusUnprocessableEntity, errorResponse(c, "invalid_input", "至少提供一个更新字段"))
 			return
 		}
 		view, err := service.AdminUpdateThread(c.Request.Context(), siteID, threadID, comment.AdminThreadUpdateInput{
 			PageKey:         req.PageKey,
 			PageTitle:       comment.OptionalNullableString{Set: req.PageTitle.Set, Value: req.PageTitle.Value},
+			PageURL:         comment.OptionalNullableString{Set: req.PageURL.Set, Value: req.PageURL.Value},
 			CommentsEnabled: req.CommentsEnabled,
 		})
 		if err != nil {

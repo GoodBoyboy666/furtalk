@@ -38,18 +38,19 @@ func (s *Service) AdminListThreads(ctx context.Context, siteID int64, commentsEn
 }
 
 // AdminThreadUpdateInput 携带线程 PATCH 的独立可选操作；至少一个字段非空。
-// PageTitle 使用三态：Set=false 保持现状，Set=true 且 Value=nil 或空白清空，
+// PageTitle / PageURL 使用三态：Set=false 保持现状，Set=true 且 Value=nil 或空白清空，
 // Set=true 且非空值覆盖。
 type AdminThreadUpdateInput struct {
 	PageKey         *string
 	PageTitle       OptionalNullableString
+	PageURL         OptionalNullableString
 	CommentsEnabled *bool
 }
 
 // AdminUpdateThread 按站点作用域更新线程元数据并返回更新后的完整管理视图。
 // 至少一个字段必须提供；跨站点的 thread_id 视为不存在。
 func (s *Service) AdminUpdateThread(ctx context.Context, siteID, threadID int64, input AdminThreadUpdateInput) (*AdminThreadView, error) {
-	if input.PageKey == nil && !input.PageTitle.Set && input.CommentsEnabled == nil {
+	if input.PageKey == nil && !input.PageTitle.Set && !input.PageURL.Set && input.CommentsEnabled == nil {
 		return nil, fmt.Errorf("%w: at least one thread field is required", domain.ErrValidation)
 	}
 	patch := domain.ThreadPatch{CommentsEnabled: input.CommentsEnabled}
@@ -75,6 +76,20 @@ func (s *Service) AdminUpdateThread(ctx context.Context, siteID, threadID int64,
 				return nil, fmt.Errorf("%w: page_title must not exceed %d characters", domain.ErrValidation, maxPageTitleLength)
 			}
 			patch.PageTitle = &title
+		}
+	}
+	if input.PageURL.Set {
+		pageURL := ""
+		if input.PageURL.Value != nil {
+			pageURL = strings.TrimSpace(*input.PageURL.Value)
+		}
+		if pageURL == "" {
+			patch.ClearPageURL = true
+		} else {
+			if err := validatePageURL(&pageURL); err != nil {
+				return nil, fmt.Errorf("%w: %v", domain.ErrValidation, err)
+			}
+			patch.PageURL = &pageURL
 		}
 	}
 	thread, err := s.threads.UpdateThread(ctx, siteID, threadID, patch)

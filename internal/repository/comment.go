@@ -209,6 +209,12 @@ func (r *ThreadRepo) UpdateThread(ctx context.Context, siteID, threadID int64, p
 	if patch.ClearPageTitle {
 		updates["page_title"] = nil
 	}
+	if patch.PageURL != nil {
+		updates["page_url"] = *patch.PageURL
+	}
+	if patch.ClearPageURL {
+		updates["page_url"] = nil
+	}
 	if patch.CommentsEnabled != nil {
 		updates["comments_enabled"] = *patch.CommentsEnabled
 	}

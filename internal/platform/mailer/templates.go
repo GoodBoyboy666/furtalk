@@ -44,10 +44,13 @@ type PasswordResetCodeData struct {
 }
 
 // ModerationData 是审核通知模板的变量契约。
+// PageTitle 与 PageURL 是评论所属页面的元数据；PageURL 为空时不渲染链接。
 type ModerationData struct {
 	AuthorNickname     string
 	CommentBody        string
 	AwaitingModeration bool
+	PageTitle          string
+	PageURL            string
 }
 
 // PublishedData 是评论发布通知模板的变量契约。
@@ -60,12 +63,15 @@ type PublishedData struct {
 
 // ReplyData 是评论回复通知模板的变量契约。
 // UnsubscribeURL 必须是渲染前生成的完整签名退订链接，只用于 href 上下文。
+// PageTitle 与 PageURL 是回复所属页面的元数据；PageURL 为空时不渲染链接。
 type ReplyData struct {
 	ReplyAuthorNickname  string
 	ParentAuthorNickname string
 	ReplyBody            string
 	ParentCommentBody    string
 	UnsubscribeURL       string
+	PageTitle            string
+	PageURL              string
 }
 
 // TemplateRenderer 渲染各场景的 HTML 邮件正文。

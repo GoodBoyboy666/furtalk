@@ -227,6 +227,103 @@ func TestAdminUpdateThreadValidation(t *testing.T) {
 	}
 }
 
+// TestAdminUpdateThreadPageURL 验证 page_url 三态更新：覆盖、清空与缺省保持。
+func TestAdminUpdateThreadPageURL(t *testing.T) {
+	db := newThreadAdminTestDB(t)
+	siteID, threadA, _ := seedThreadAdminFixture(t, db)
+	svc := threadAdminService(db)
+	ctx := context.Background()
+	read := func() *string {
+		got, err := repository.NewThreadRepo(db).GetBySiteAndID(ctx, siteID, threadA)
+		if err != nil {
+			t.Fatalf("read thread: %v", err)
+		}
+		return got.PageURL
+	}
+
+	// 初始值来自 fixture。
+	if got := read(); got == nil || *got != "https://example.com/alpha" {
+		t.Fatalf("initial page_url = %v", got)
+	}
+
+	// 覆盖为新的绝对 HTTPS URL（带空白修剪）。
+	newURL := "  https://site.example/new-page  "
+	updated, err := svc.AdminUpdateThread(ctx, siteID, threadA, AdminThreadUpdateInput{
+		PageURL: OptionalNullableString{Set: true, Value: &newURL},
+	})
+	if err != nil {
+		t.Fatalf("replace page_url: %v", err)
+	}
+	if updated.PageURL == nil || *updated.PageURL != "https://site.example/new-page" {
+		t.Fatalf("updated page_url = %v, want trimmed absolute url", updated.PageURL)
+	}
+	if got := read(); got == nil || *got != "https://site.example/new-page" {
+		t.Fatalf("persisted page_url = %v", got)
+	}
+
+	// 显式 null：清空为 NULL。
+	if _, err := svc.AdminUpdateThread(ctx, siteID, threadA, AdminThreadUpdateInput{
+		PageURL: OptionalNullableString{Set: true, Value: nil},
+	}); err != nil {
+		t.Fatalf("clear page_url via null: %v", err)
+	}
+	if got := read(); got != nil {
+		t.Fatalf("page_url must be cleared, got %v", *got)
+	}
+
+	// 显式空白字符串：清空为 NULL。
+	if _, err := svc.AdminUpdateThread(ctx, siteID, threadA, AdminThreadUpdateInput{
+		PageURL: OptionalNullableString{Set: true, Value: strPtr("   ")},
+	}); err != nil {
+		t.Fatalf("clear page_url via blank: %v", err)
+	}
+	if got := read(); got != nil {
+		t.Fatalf("page_url must stay cleared, got %v", *got)
+	}
+
+	// 缺省（Set=false）：保持不变（当前为 NULL）。
+	if _, err := svc.AdminUpdateThread(ctx, siteID, threadA, AdminThreadUpdateInput{
+		PageKey: strPtr("key-only"),
+	}); err != nil {
+		t.Fatalf("key-only update: %v", err)
+	}
+	if got := read(); got != nil {
+		t.Fatalf("page_url must stay cleared on omitted field, got %v", *got)
+	}
+}
+
+// TestAdminUpdateThreadPageURLValidation 验证非法 page_url 被拒绝且不落库。
+func TestAdminUpdateThreadPageURLValidation(t *testing.T) {
+	db := newThreadAdminTestDB(t)
+	siteID, threadA, _ := seedThreadAdminFixture(t, db)
+	svc := threadAdminService(db)
+	ctx := context.Background()
+
+	for _, bad := range []string{
+		"not-a-url",
+		"ftp://example.com/x",
+		"javascript:alert(1)",
+		"https://",
+		"//example.com/x",
+		strings.Repeat("u", maxPageURLLength+1),
+	} {
+		if _, err := svc.AdminUpdateThread(ctx, siteID, threadA, AdminThreadUpdateInput{
+			PageURL: OptionalNullableString{Set: true, Value: &bad},
+		}); !errors.Is(err, domain.ErrValidation) {
+			t.Fatalf("bad page_url %q err = %v, want ErrValidation", bad, err)
+		}
+	}
+
+	// 被拒后原值保持不变。
+	got, err := repository.NewThreadRepo(db).GetBySiteAndID(ctx, siteID, threadA)
+	if err != nil {
+		t.Fatalf("read thread: %v", err)
+	}
+	if got.PageURL == nil || *got.PageURL != "https://example.com/alpha" {
+		t.Fatalf("page_url must stay unchanged after rejections, got %v", got.PageURL)
+	}
+}
+
 // strPtr 返回字符串指针。
 func strPtr(s string) *string {
 	return &s

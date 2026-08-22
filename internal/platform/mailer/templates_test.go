@@ -108,7 +108,7 @@ func TestLoadTemplatesUnknownField(t *testing.T) {
 // TestTemplateRenderersEscapeHTML 证明渲染自动转义正文中的 HTML 敏感字符。
 func TestTemplateRenderersEscapeHTML(t *testing.T) {
 	dir := t.TempDir()
-	writeTemplate(t, dir, "moderation.html", "<div>{{.CommentBody}}</div>")
+	writeTemplate(t, dir, "moderation.html", "<a href=\"{{.PageURL}}\">{{.PageTitle}}</a><div>{{.CommentBody}}</div>")
 	writeTemplate(t, dir, "published.html", "<div>{{.CommentBody}}</div>")
 	writeTemplate(t, dir, "reply.html", "<a href=\"{{.UnsubscribeURL}}\">{{.ReplyBody}}</a>")
 	writeTemplate(t, dir, "login_code.html", "{{.Code}}")
@@ -119,12 +119,22 @@ func TestTemplateRenderersEscapeHTML(t *testing.T) {
 		t.Fatalf("LoadTemplates: %v", err)
 	}
 
-	out, err := set.Moderation(ModerationData{CommentBody: "<script>alert(1)</script>"})
+	out, err := set.Moderation(ModerationData{
+		CommentBody: "<script>alert(1)</script>",
+		PageTitle:   `<img src=x onerror=alert(1)>`,
+		PageURL:     "https://example.com/post?utm=1&ref=2",
+	})
 	if err != nil {
 		t.Fatalf("Moderation: %v", err)
 	}
 	if strings.Contains(out, "<script>") {
 		t.Fatalf("body must be escaped, got: %s", out)
+	}
+	if strings.Contains(out, "<img") {
+		t.Fatalf("page title must be escaped, got: %s", out)
+	}
+	if !strings.Contains(out, "&amp;ref=2") || strings.Contains(out, "&ref=2") {
+		t.Fatalf("page url query separator must be escaped as &amp;, got: %s", out)
 	}
 
 	reply, err := set.Reply(ReplyData{
@@ -220,5 +230,61 @@ func TestDefaultTemplatesAreSimplifiedChinese(t *testing.T) {
 				t.Fatalf("template must contain Chinese copy, got: %s", out)
 			}
 		})
+	}
+}
+
+// TestDefaultTemplatesRenderPageButton 证明 moderation/reply 模板在评论下方
+// 渲染指向页面网址的按钮；无 PageURL 时不渲染按钮；待审核邮件显示“查看”，
+// 新评论与回复邮件显示“回复”。
+func TestDefaultTemplatesRenderPageButton(t *testing.T) {
+	root, err := findRepoRoot(t)
+	if err != nil {
+		t.Skipf("repo root not found: %v", err)
+	}
+	set, err := LoadTemplates(filepath.Join(root, "configs", "email"))
+	if err != nil {
+		t.Fatalf("LoadTemplates(configs/email): %v", err)
+	}
+	url := "https://example.com/post?utm=1"
+	button := "padding:10px 22px;border-radius:8px;"
+
+	modAwaiting, err := set.Moderation(ModerationData{AuthorNickname: "a", CommentBody: "b", AwaitingModeration: true, PageURL: url})
+	if err != nil {
+		t.Fatalf("Moderation(awaiting): %v", err)
+	}
+	if !strings.Contains(modAwaiting, "查看") || !strings.Contains(modAwaiting, button) || !strings.Contains(modAwaiting, url) {
+		t.Fatalf("awaiting moderation must show a 查看 button, got: %s", modAwaiting)
+	}
+
+	modNew, err := set.Moderation(ModerationData{AuthorNickname: "a", CommentBody: "b", AwaitingModeration: false, PageURL: url})
+	if err != nil {
+		t.Fatalf("Moderation(new): %v", err)
+	}
+	if !strings.Contains(modNew, "回复") || !strings.Contains(modNew, button) {
+		t.Fatalf("new comment must show a 回复 button, got: %s", modNew)
+	}
+
+	modNoURL, err := set.Moderation(ModerationData{AuthorNickname: "a", CommentBody: "b", AwaitingModeration: false, PageURL: ""})
+	if err != nil {
+		t.Fatalf("Moderation(no url): %v", err)
+	}
+	if strings.Contains(modNoURL, button) {
+		t.Fatalf("moderation without PageURL must not render the button, got: %s", modNoURL)
+	}
+
+	reply, err := set.Reply(ReplyData{ReplyAuthorNickname: "a", ParentAuthorNickname: "p", ReplyBody: "r", PageURL: url})
+	if err != nil {
+		t.Fatalf("Reply: %v", err)
+	}
+	if !strings.Contains(reply, "回复") || !strings.Contains(reply, button) || !strings.Contains(reply, url) {
+		t.Fatalf("reply must show a 回复 button, got: %s", reply)
+	}
+
+	replyNoURL, err := set.Reply(ReplyData{ReplyAuthorNickname: "a", ParentAuthorNickname: "p", ReplyBody: "r", PageURL: ""})
+	if err != nil {
+		t.Fatalf("Reply(no url): %v", err)
+	}
+	if strings.Contains(replyNoURL, button) {
+		t.Fatalf("reply without PageURL must not render the button, got: %s", replyNoURL)
 	}
 }

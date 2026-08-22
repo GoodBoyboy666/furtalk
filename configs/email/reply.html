@@ -39,11 +39,17 @@
 
               {{if .ParentCommentBody}}
               <p style="margin:0 0 8px;font-size:13px;font-weight:600;color:#64748b;">您的评论：</p>
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 24px;background-color:#f8fafc;border:1px solid #e2e8f0;border-left:4px solid #94a3b8;border-radius:10px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 20px;background-color:#f8fafc;border:1px solid #e2e8f0;border-left:4px solid #94a3b8;border-radius:10px;">
                 <tr>
                   <td style="padding:14px 18px;font-size:13px;color:#475569;line-height:1.7;white-space:pre-wrap;word-break:break-word;">{{.ParentCommentBody}}</td>
                 </tr>
               </table>
+              {{end}}
+
+              {{if .PageURL}}
+              <p style="margin:0 0 24px;text-align:right;">
+                <a href="{{.PageURL}}" style="display:inline-block;background-color:#2563eb;color:#ffffff;padding:10px 22px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;">回复</a>
+              </p>
               {{end}}
 
               {{if .UnsubscribeURL}}

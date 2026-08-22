@@ -266,11 +266,13 @@ type AdminThread struct {
 }
 
 // ThreadPatch 是线程元数据 PATCH 的更新项。nil 字段表示不修改；
-// ClearPageTitle 为 true 时显式清空 page_title。
+// ClearPageTitle / ClearPageURL 为 true 时显式清空 page_title / page_url。
 type ThreadPatch struct {
 	PageKey         *string
 	PageTitle       *string
 	ClearPageTitle  bool
+	PageURL         *string
+	ClearPageURL    bool
 	CommentsEnabled *bool
 }
 

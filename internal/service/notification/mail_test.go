@@ -98,12 +98,13 @@ func newNotificationHarness(t *testing.T) (*gorm.DB, *Service, *captureMailer, *
 
 	users := repository.NewUserRepo(db)
 	comments := repository.NewCommentRepo(db)
+	threads := repository.NewThreadRepo(db)
 	prefs := repository.NewPreferenceRepo(db)
 	settingsSvc := setting.NewService(gormtx.NewRunner(db), repository.NewSettingsRepo(db))
 
 	mailer := &captureMailer{}
 	renderer := &recordingRenderer{}
-	svc := NewService(users, comments, prefs, nil, settingsSvc, nil, mailer, renderer, fakeSigner{}, "https://furtalk.example.com", nil)
+	svc := NewService(users, comments, threads, prefs, nil, settingsSvc, nil, mailer, renderer, fakeSigner{}, "https://furtalk.example.com", nil)
 	return db, svc, mailer, renderer, settingsSvc
 }
 
@@ -132,7 +133,9 @@ func seedNotificationData(t *testing.T, db *gorm.DB) notificationFixture {
 	if err := repository.NewSiteRepo(db).Create(ctx, site); err != nil {
 		t.Fatalf("create site: %v", err)
 	}
-	thread, err := repository.NewThreadRepo(db).ResolveOrCreate(ctx, site.ID, "page-key", nil, nil)
+	pageURL := "https://example.com/blog/post?utm=1"
+	pageTitle := "测试页面"
+	thread, err := repository.NewThreadRepo(db).ResolveOrCreate(ctx, site.ID, "page-key", &pageURL, &pageTitle)
 	if err != nil {
 		t.Fatalf("resolve thread: %v", err)
 	}
@@ -184,6 +187,72 @@ func seedNotificationData(t *testing.T, db *gorm.DB) notificationFixture {
 	}
 }
 
+// TestHandleCreatedReadsCommittedThreadMetadata 证明消费者按评论的
+// (site_id, thread_id) 读取线程元数据时，看到的是评论创建事务提交后的值
+// （先 NULL 后提交 page_url），而非事务前预读的旧快照（AC4）。
+func TestHandleCreatedReadsCommittedThreadMetadata(t *testing.T) {
+	db, svc, _, renderer, _ := newNotificationHarness(t)
+	fx := seedNotificationData(t, db)
+	if err := db.Model(&model.Thread{}).Where("id = ?", fx.ThreadID).
+		Updates(map[string]any{"page_url": nil, "page_title": nil}).Error; err != nil {
+		t.Fatalf("clear thread metadata: %v", err)
+	}
+	pageURL := "https://example.com/committed?tab=2"
+	pageTitle := "提交后的页面"
+	if err := db.Model(&model.Thread{}).Where("id = ?", fx.ThreadID).
+		Updates(map[string]any{"page_url": pageURL, "page_title": pageTitle}).Error; err != nil {
+		t.Fatalf("commit thread metadata: %v", err)
+	}
+
+	svc.handle(context.Background(), domain.CommentEvent{
+		Type:      domain.TypeCommentCreated,
+		SiteID:    fx.SiteID,
+		ThreadID:  fx.ThreadID,
+		CommentID: fx.CommentID,
+		UserID:    fx.AuthorID,
+	})
+
+	if renderer.moderation.PageTitle != pageTitle || renderer.moderation.PageURL != pageURL {
+		t.Fatalf("moderation page data = %q/%q, want committed %q/%q",
+			renderer.moderation.PageTitle, renderer.moderation.PageURL, pageTitle, pageURL)
+	}
+	if renderer.reply.PageURL != pageURL {
+		t.Fatalf("reply page url = %q, want committed %q", renderer.reply.PageURL, pageURL)
+	}
+}
+
+// TestHandleCreatedDeliversWithoutPageMetadata 证明线程缺少页面标题/网址时，
+// 审核邮件仍正常生成，页面数据为空且不渲染页面块（R7）。
+func TestHandleCreatedDeliversWithoutPageMetadata(t *testing.T) {
+	db, svc, mailer, renderer, _ := newNotificationHarness(t)
+	fx := seedNotificationData(t, db)
+	if err := db.Model(&model.Thread{}).Where("id = ?", fx.ThreadID).
+		Updates(map[string]any{"page_url": nil, "page_title": nil}).Error; err != nil {
+		t.Fatalf("clear thread metadata: %v", err)
+	}
+
+	svc.handle(context.Background(), domain.CommentEvent{
+		Type:      domain.TypeCommentCreated,
+		SiteID:    fx.SiteID,
+		ThreadID:  fx.ThreadID,
+		CommentID: fx.CommentID,
+		UserID:    fx.AuthorID,
+	})
+
+	if len(mailer.messages) != 2 {
+		t.Fatalf("messages = %d, want 2 (moderation + reply)", len(mailer.messages))
+	}
+	if renderer.moderation.PageTitle != "" || renderer.moderation.PageURL != "" {
+		t.Fatalf("moderation page data = %q/%q, want empty", renderer.moderation.PageTitle, renderer.moderation.PageURL)
+	}
+	if strings.Contains(mailer.messages[0].TextBody, "页面：") {
+		t.Fatalf("moderation text must not contain page block: %q", mailer.messages[0].TextBody)
+	}
+	if renderer.reply.PageTitle != "" || renderer.reply.PageURL != "" {
+		t.Fatalf("reply page data = %q/%q, want empty", renderer.reply.PageTitle, renderer.reply.PageURL)
+	}
+}
+
 // TestHandleCreatedSendsModerationMailToAdmins 证明新评论事件在 direct 策略下
 // 向管理员发送新评论通知，模板数据携带作者昵称与评论正文；同时发布的回复
 // 经创建路径向父评论作者发送回复通知。
@@ -214,6 +283,15 @@ func TestHandleCreatedSendsModerationMailToAdmins(t *testing.T) {
 	if renderer.moderation.CommentBody != "new comment body" {
 		t.Fatalf("comment body = %q, want new comment body", renderer.moderation.CommentBody)
 	}
+	if renderer.moderation.PageTitle != "测试页面" {
+		t.Fatalf("moderation page title = %q, want 测试页面", renderer.moderation.PageTitle)
+	}
+	if renderer.moderation.PageURL != "https://example.com/blog/post?utm=1" {
+		t.Fatalf("moderation page url = %q, want page url", renderer.moderation.PageURL)
+	}
+	if !strings.Contains(mailer.messages[0].TextBody, "https://example.com/blog/post?utm=1") {
+		t.Fatalf("moderation text must contain the page url: %q", mailer.messages[0].TextBody)
+	}
 	if renderer.moderation.AwaitingModeration {
 		t.Fatal("direct moderation must set AwaitingModeration = false")
 	}
@@ -225,6 +303,18 @@ func TestHandleCreatedSendsModerationMailToAdmins(t *testing.T) {
 	}
 	if mailer.messages[1].Subject != "您有一条新回复" {
 		t.Fatalf("reply subject = %q, want 您有一条新回复", mailer.messages[1].Subject)
+	}
+	if renderer.reply == nil {
+		t.Fatal("reply template was not rendered")
+	}
+	if renderer.reply.PageTitle != "测试页面" {
+		t.Fatalf("reply page title = %q, want 测试页面", renderer.reply.PageTitle)
+	}
+	if renderer.reply.PageURL != "https://example.com/blog/post?utm=1" {
+		t.Fatalf("reply page url = %q, want page url", renderer.reply.PageURL)
+	}
+	if !strings.Contains(mailer.messages[1].TextBody, "https://example.com/blog/post?utm=1") {
+		t.Fatalf("reply text must contain the page url: %q", mailer.messages[1].TextBody)
 	}
 }
 

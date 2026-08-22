@@ -33,7 +33,7 @@
               </table>
 
               <h1 style="margin:0 0 12px;font-size:22px;line-height:1.35;font-weight:700;letter-spacing:-0.3px;color:#0f172a;">{{if .AwaitingModeration}}评论待审核通知{{else}}收到新评论{{end}}</h1>
-              <p style="margin:0 0 20px;font-size:15px;color:#475569;line-height:1.65;">{{if .AwaitingModeration}}站点收到一条新的待审核评论，审核通过后将在前台展示。{{else}}您的站点收到了一条新评论。{{end}}</p>
+              <p style="margin:0 0 20px;font-size:15px;color:#475569;line-height:1.65;">{{if .AwaitingModeration}}收到一条新的待审核评论。{{else}}收到一条新的评论。{{end}}</p>
 
               <p style="margin:0 0 10px;font-size:13px;font-weight:600;color:#64748b;">
                 <span style="color:#0f172a;">{{.AuthorNickname}}</span> 评论说：
@@ -44,6 +44,12 @@
                   <td style="padding:18px 20px;font-size:15px;color:#1e293b;line-height:1.7;white-space:pre-wrap;word-break:break-word;">{{.CommentBody}}</td>
                 </tr>
               </table>
+
+              {{if .PageURL}}
+              <p style="margin:0 0 28px;text-align:right;">
+                <a href="{{.PageURL}}" style="display:inline-block;background-color:#2563eb;color:#ffffff;padding:10px 22px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;">{{if .AwaitingModeration}}查看{{else}}回复{{end}}</a>
+              </p>
+              {{end}}
 
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;margin:0 0 28px;">
                 <tr>

@@ -143,10 +143,11 @@ type AdminCommentUpdateRequest struct {
 }
 
 // AdminThreadUpdateRequest 更新线程元数据（PATCH，字段可选，至少一个必填）。
-// page_title 使用 OptionalNullableString：缺省保持、显式 null/空白清空、非空值覆盖。
+// page_title / page_url 使用 OptionalNullableString：缺省保持、显式 null/空白清空、非空值覆盖。
 type AdminThreadUpdateRequest struct {
 	PageKey         *string                        `json:"page_key"`
 	PageTitle       comment.OptionalNullableString `json:"page_title"`
+	PageURL         comment.OptionalNullableString `json:"page_url"`
 	CommentsEnabled *bool                          `json:"comments_enabled"`
 }
 

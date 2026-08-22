@@ -135,7 +135,7 @@ func newServices(
 		Logger:    logger,
 	})
 
-	notificationsService := notification.NewService(repos.users, repos.comments, repos.prefs, identityService, settingsService, bus, smtp.Mailer, templates, signer, cfg.PublicBaseURL, logger)
+	notificationsService := notification.NewService(repos.users, repos.comments, repos.threads, repos.prefs, identityService, settingsService, bus, smtp.Mailer, templates, signer, cfg.PublicBaseURL, logger)
 
 	// identity 与 comment 相互引用，清理接线通过 setter 在两侧装配完成后进行。
 	identityService.SetCommentDeleter(commentService)

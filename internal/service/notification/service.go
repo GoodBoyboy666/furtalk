@@ -37,6 +37,7 @@ type Service struct {
 	templates mailer.TemplateRenderer
 	users     *repository.UserRepo
 	comments  *repository.CommentRepo
+	threads   *repository.ThreadRepo
 	prefs     *repository.PreferenceRepo
 	prefW     domain.PreferenceWriter
 	settings  *setting.Service
@@ -46,9 +47,9 @@ type Service struct {
 }
 
 // NewService 构建通知服务。
-func NewService(users *repository.UserRepo, comments *repository.CommentRepo, prefs *repository.PreferenceRepo, prefW domain.PreferenceWriter, settings *setting.Service, bus *eventbus.Bus[domain.CommentEvent], mailer mailer.Mailer, templates mailer.TemplateRenderer, signer UnsubscribeSigner, baseURL string, log *slog.Logger) *Service {
+func NewService(users *repository.UserRepo, comments *repository.CommentRepo, threads *repository.ThreadRepo, prefs *repository.PreferenceRepo, prefW domain.PreferenceWriter, settings *setting.Service, bus *eventbus.Bus[domain.CommentEvent], mailer mailer.Mailer, templates mailer.TemplateRenderer, signer UnsubscribeSigner, baseURL string, log *slog.Logger) *Service {
 	log = logging.Normalize(log)
-	return &Service{bus: bus, mailer: mailer, templates: templates, users: users, comments: comments, prefs: prefs, prefW: prefW, settings: settings, signer: signer, baseURL: baseURL, log: log}
+	return &Service{bus: bus, mailer: mailer, templates: templates, users: users, comments: comments, threads: threads, prefs: prefs, prefW: prefW, settings: settings, signer: signer, baseURL: baseURL, log: log}
 }
 
 // Run 阻塞并消费评论事件，直到 ctx 取消或事件总线关闭。
@@ -106,6 +107,7 @@ func (s *Service) sendModerationMails(ctx context.Context, current domain.Settin
 		s.log.Warn("notifications: list admins", logging.ID("site_id", ev.SiteID), logging.Error(err))
 		return
 	}
+	pageTitle, pageURL := s.threadPage(ctx, comment)
 	for _, admin := range admins {
 		if admin.ID == comment.UserID {
 			continue
@@ -113,7 +115,7 @@ func (s *Service) sendModerationMails(ctx context.Context, current domain.Settin
 		if strings.TrimSpace(admin.Email) == "" {
 			continue
 		}
-		msg, err := s.moderationMail(s.templates, current, admin.Email, comment, author.Nickname)
+		msg, err := s.moderationMail(s.templates, current, admin.Email, comment, author.Nickname, pageTitle, pageURL)
 		if err != nil {
 			s.log.Warn("notifications: render moderation mail", logging.ID("site_id", ev.SiteID), logging.ID("comment_id", ev.CommentID), logging.Error(err))
 			continue
@@ -196,6 +198,7 @@ func (s *Service) sendReplyNotification(ctx context.Context, comment *domain.Com
 	if trimmed := strings.TrimSpace(parentBody); trimmed == "" {
 		parentBody = "（无内容）"
 	}
+	pageTitle, pageURL := s.threadPage(ctx, comment)
 	unsub := s.unsubscribeURL(parentAuthor.ID, KindReply)
 	html, err := s.templates.Reply(mailer.ReplyData{
 		ReplyAuthorNickname:  author.Nickname,
@@ -203,23 +206,53 @@ func (s *Service) sendReplyNotification(ctx context.Context, comment *domain.Com
 		ReplyBody:            body,
 		ParentCommentBody:    parentBody,
 		UnsubscribeURL:       unsub,
+		PageTitle:            pageTitle,
+		PageURL:              pageURL,
 	})
 	if err != nil {
 		s.log.Warn("notifications: render reply mail", logging.ID("user_id", comment.UserID), logging.ID("comment_id", comment.ID), logging.Error(err))
 		return
 	}
+	text := "有人回复了您的评论。"
+	if pageTitle != "" || pageURL != "" {
+		text += "\n\n页面：" + pageTitle
+		if pageURL != "" {
+			if pageTitle != "" {
+				text += "\n"
+			}
+			text += pageURL
+		}
+	}
 	msg := mailer.Message{
 		To:       parentAuthor.Email,
 		Subject:  "您有一条新回复",
-		TextBody: "有人回复了您的评论。",
+		TextBody: text,
 		HTMLBody: html,
 	}
 	s.send(ctx, parentAuthor.ID, msg, unsub, true)
 }
 
+// threadPage 读取评论所属线程的页面标题与网址。
+// 事件处理阶段按 (site_id, thread_id) 读取，保证看到评论创建事务提交后的
+// 页面元数据；线程缺失或读取失败时返回空串，不阻塞邮件投递。
+func (s *Service) threadPage(ctx context.Context, comment *domain.Comment) (title, url string) {
+	thread, err := s.threads.GetBySiteAndID(ctx, comment.SiteID, comment.ThreadID)
+	if err != nil {
+		s.log.Warn("notifications: load thread", logging.ID("site_id", comment.SiteID), logging.ID("thread_id", comment.ThreadID), logging.Error(err))
+		return "", ""
+	}
+	if thread.PageTitle != nil {
+		title = *thread.PageTitle
+	}
+	if thread.PageURL != nil {
+		url = *thread.PageURL
+	}
+	return title, url
+}
+
 // moderationMail 构建管理员审核通知。
 // HTML 正文由模板渲染器生成；主题按审核状态在代码中设置。
-func (s *Service) moderationMail(templates mailer.TemplateRenderer, current domain.Settings, to string, comment *domain.Comment, authorNickname string) (mailer.Message, error) {
+func (s *Service) moderationMail(templates mailer.TemplateRenderer, current domain.Settings, to string, comment *domain.Comment, authorNickname, pageTitle, pageURL string) (mailer.Message, error) {
 	subject := "新评论"
 	pending := "有新评论发表。"
 	awaiting := false
@@ -232,10 +265,22 @@ func (s *Service) moderationMail(templates mailer.TemplateRenderer, current doma
 	if trimmed := strings.TrimSpace(body); trimmed == "" {
 		body = "（无内容）"
 	}
+	text := pending + "\n\n" + body
+	if pageTitle != "" || pageURL != "" {
+		text += "\n\n页面：" + pageTitle
+		if pageURL != "" {
+			if pageTitle != "" {
+				text += "\n"
+			}
+			text += pageURL
+		}
+	}
 	html, err := templates.Moderation(mailer.ModerationData{
 		AuthorNickname:     authorNickname,
 		CommentBody:        body,
 		AwaitingModeration: awaiting,
+		PageTitle:          pageTitle,
+		PageURL:            pageURL,
 	})
 	if err != nil {
 		return mailer.Message{}, err
@@ -243,7 +288,7 @@ func (s *Service) moderationMail(templates mailer.TemplateRenderer, current doma
 	return mailer.Message{
 		To:       to,
 		Subject:  subject,
-		TextBody: pending + "\n\n" + body,
+		TextBody: text,
 		HTMLBody: html,
 	}, nil
 }
