@@ -186,14 +186,14 @@ func TestAuthorizationContextRejectsInAnonymousMode(t *testing.T) {
 // TestRuntimeConfigResponseShape 验证运行时配置响应 DTO 的 JSON 结构与 omitempty 行为。
 func TestRuntimeConfigResponseShape(t *testing.T) {
 	resp := toRuntimeConfigResponse(&comment.RuntimeConfig{
-		SiteID:         1,
-		Name:           "Site",
-		CommentMode:    domain.CommentModeAuthenticated,
-		Moderation:     domain.ModerationDirect,
-		UserDeleteMode: domain.UserDeleteModeSoft,
-		MaxReplyDepth:  5,
-		CommentSort:    string(domain.CommentSortAsc),
-		OwOCatalogURL:  "https://cdn.example/owo.json?signature=abc",
+		SiteID:          1,
+		Name:            "Site",
+		CommentMode:     domain.CommentModeAuthenticated,
+		Moderation:      domain.ModerationDirect,
+		UserDeleteMode:  domain.UserDeleteModeSoft,
+		MaxReplyDepth:   5,
+		CommentSort:     string(domain.CommentSortAsc),
+		EmojiCatalogURL: "https://cdn.example/emoji.json?signature=abc",
 		Captcha: &comment.RuntimeCaptcha{
 			Comment: &comment.CaptchaProjection{
 				Required:    true,
@@ -215,7 +215,7 @@ func TestRuntimeConfigResponseShape(t *testing.T) {
 		`"api_endpoint":"https://cap.example.com/cap-site/"`,
 		`"comment"`,
 		`"comment_sort":"asc"`,
-		`"owo_catalog_url":"https://cdn.example/owo.json?signature=abc"`,
+		`"emoji_catalog_url":"https://cdn.example/emoji.json?signature=abc"`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("response missing %q: %s", want, body)
@@ -229,7 +229,7 @@ func TestRuntimeConfigResponseShape(t *testing.T) {
 	}
 }
 
-// TestRuntimeConfigResponseOmitsEmptyCatalog 验证未配置 owo_catalog_url 时
+// TestRuntimeConfigResponseOmitsEmptyCatalog 验证未配置 emoji_catalog_url 时
 // 公开响应通过 omitempty 省略该字段，保持与旧后端/旧 Widget 兼容。
 func TestRuntimeConfigResponseOmitsEmptyCatalog(t *testing.T) {
 	resp := toRuntimeConfigResponse(&comment.RuntimeConfig{
@@ -245,7 +245,7 @@ func TestRuntimeConfigResponseOmitsEmptyCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(raw), "owo_catalog_url") {
-		t.Fatalf("response leaked empty owo_catalog_url: %s", raw)
+	if strings.Contains(string(raw), "emoji_catalog_url") {
+		t.Fatalf("response leaked empty emoji_catalog_url: %s", raw)
 	}
 }

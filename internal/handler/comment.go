@@ -360,7 +360,7 @@ func widgetRuntimeConfig(service *comment.Service) gin.HandlerFunc {
 			writeError(c, err)
 			return
 		}
-		// no-store：管理员修改 owo_catalog_url 后，新初始化的 Widget
+		// no-store：管理员修改 emoji_catalog_url 后，新初始化的 Widget
 		// 不能命中浏览器/中间代理的旧缓存。
 		c.Header("Cache-Control", "no-store")
 		c.JSON(http.StatusOK, toRuntimeConfigResponse(rc))

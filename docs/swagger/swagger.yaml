@@ -113,6 +113,8 @@ definitions:
         type: string
       page_title:
         $ref: '#/definitions/comment.OptionalNullableString'
+      page_url:
+        $ref: '#/definitions/comment.OptionalNullableString'
     type: object
   handler.AdminUserCreateRequest:
     properties:
@@ -738,14 +740,14 @@ definitions:
         type: string
       comment_sort:
         type: string
+      emoji_catalog_url:
+        description: EmojiCatalogURL 是可选的 widget 远程表情目录地址；未配置时字段缺省。
+        type: string
       max_reply_depth:
         type: integer
       moderation:
         type: string
       name:
-        type: string
-      owo_catalog_url:
-        description: OwOCatalogURL 是可选的 widget 远程表情目录地址；未配置时字段缺省。
         type: string
       site_id:
         type: string

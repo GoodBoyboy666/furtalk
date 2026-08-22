@@ -100,7 +100,7 @@ func (a commentPolicyReader) CommentPolicy(ctx context.Context) (domain.CommentP
 		EmailDomainBlacklist: slices.Clone(v.Settings.EmailDomainBlacklist),
 		GravatarBaseURL:      v.Settings.GravatarBaseURL,
 		CommentSort:          v.Settings.CommentSort,
-		OwOCatalogURL:        v.Settings.OwOCatalogURL,
+		EmojiCatalogURL:      v.Settings.EmojiCatalogURL,
 		Privacy: domain.PrivacyPolicy{
 			IPMode: v.Settings.Privacy.IPMode,
 			UAMode: v.Settings.Privacy.UAMode,

@@ -45,29 +45,29 @@ func NormalizeWebsite(raw string) (string, error) {
 	return u.String(), nil
 }
 
-// ValidateOwOCatalogURL 校验 widget 远程表情目录 URL：
+// ValidateEmojiCatalogURL 校验 widget 远程表情目录 URL：
 // 空串允许（表示不配置），非空值必须是绝对 HTTPS URL，
 // 且不允许 userinfo 或 fragment；query 允许用于版本化/签名目录。
-func ValidateOwOCatalogURL(raw string) error {
+func ValidateEmojiCatalogURL(raw string) error {
 	value := strings.TrimSpace(raw)
 	if value == "" {
 		return nil
 	}
 	if len(value) > 2048 {
-		return fmt.Errorf("%w: owo catalog url must be at most 2048 characters", ErrInvalid)
+		return fmt.Errorf("%w: emoji catalog url must be at most 2048 characters", ErrInvalid)
 	}
 	u, err := url.Parse(value)
 	if err != nil || u.Host == "" {
-		return fmt.Errorf("%w: owo catalog url must be an absolute https url", ErrInvalid)
+		return fmt.Errorf("%w: emoji catalog url must be an absolute https url", ErrInvalid)
 	}
 	if u.Scheme != "https" {
-		return fmt.Errorf("%w: owo catalog url must use https", ErrInvalid)
+		return fmt.Errorf("%w: emoji catalog url must use https", ErrInvalid)
 	}
 	if u.User != nil {
-		return fmt.Errorf("%w: owo catalog url must not include userinfo", ErrInvalid)
+		return fmt.Errorf("%w: emoji catalog url must not include userinfo", ErrInvalid)
 	}
 	if u.Fragment != "" {
-		return fmt.Errorf("%w: owo catalog url must not include a fragment", ErrInvalid)
+		return fmt.Errorf("%w: emoji catalog url must not include a fragment", ErrInvalid)
 	}
 	return nil
 }

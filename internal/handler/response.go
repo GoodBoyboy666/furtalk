@@ -161,9 +161,9 @@ type RuntimeConfigResponse struct {
 	UserDeleteMode string `json:"user_delete_mode"`
 	MaxReplyDepth  int    `json:"max_reply_depth"`
 	CommentSort    string `json:"comment_sort"`
-	// OwOCatalogURL 是可选的 widget 远程表情目录地址；未配置时字段缺省。
-	OwOCatalogURL string                  `json:"owo_catalog_url,omitempty"`
-	Captcha       *RuntimeCaptchaResponse `json:"captcha"`
+	// EmojiCatalogURL 是可选的 widget 远程表情目录地址；未配置时字段缺省。
+	EmojiCatalogURL string                  `json:"emoji_catalog_url,omitempty"`
+	Captcha         *RuntimeCaptchaResponse `json:"captcha"`
 }
 
 // CaptchaActionResponse 是单个 action 的公共 CAPTCHA 渲染投影。
@@ -390,14 +390,14 @@ type AdminThreadListResponse struct {
 
 func toRuntimeConfigResponse(rc *comment.RuntimeConfig) RuntimeConfigResponse {
 	resp := RuntimeConfigResponse{
-		SiteID:         strconv.FormatInt(rc.SiteID, 10),
-		Name:           rc.Name,
-		CommentMode:    rc.CommentMode,
-		Moderation:     rc.Moderation,
-		UserDeleteMode: rc.UserDeleteMode,
-		MaxReplyDepth:  rc.MaxReplyDepth,
-		CommentSort:    rc.CommentSort,
-		OwOCatalogURL:  rc.OwOCatalogURL,
+		SiteID:          strconv.FormatInt(rc.SiteID, 10),
+		Name:            rc.Name,
+		CommentMode:     rc.CommentMode,
+		Moderation:      rc.Moderation,
+		UserDeleteMode:  rc.UserDeleteMode,
+		MaxReplyDepth:   rc.MaxReplyDepth,
+		CommentSort:     rc.CommentSort,
+		EmojiCatalogURL: rc.EmojiCatalogURL,
 	}
 	if rc.Captcha != nil {
 		resp.Captcha = &RuntimeCaptchaResponse{}

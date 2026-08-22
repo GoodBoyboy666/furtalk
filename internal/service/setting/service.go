@@ -42,9 +42,9 @@ const (
 	SettingKeyGravatarBaseURL = "gravatar_base_url"
 	// SettingKeyCommentSort 是公开 string 设置：widget 默认排序方向，仅允许 asc/desc。
 	SettingKeyCommentSort = "comment_sort"
-	// SettingKeyOwOCatalogURL 是公开 string 设置：widget 远程表情目录的绝对 HTTPS URL。
+	// SettingKeyEmojiCatalogURL 是公开 string 设置：widget 远程表情目录的绝对 HTTPS URL。
 	// 空串表示不配置；query 允许，userinfo 与 fragment 不允许。
-	SettingKeyOwOCatalogURL = "owo_catalog_url"
+	SettingKeyEmojiCatalogURL = "emoji_catalog_url"
 
 	// SettingKeyInternalEpoch 持久化 Widget 凭证代次的保留内部 key。
 	// 它不通过管理 API 暴露，也不能由管理 API 修改。
@@ -97,7 +97,7 @@ var knownSettings = []knownSetting{
 	{key: SettingKeyEmailDomainBlacklist, typ: SettingTypeJSON},
 	{key: SettingKeyGravatarBaseURL, typ: SettingTypeString},
 	{key: SettingKeyCommentSort, typ: SettingTypeString},
-	{key: SettingKeyOwOCatalogURL, typ: SettingTypeString},
+	{key: SettingKeyEmojiCatalogURL, typ: SettingTypeString},
 }
 
 // DefaultSettings 返回首次访问时写入的初始实例配置。
@@ -122,7 +122,7 @@ func DefaultSettings() domain.Settings {
 		EmailDomainBlacklist: []string{},
 		GravatarBaseURL:      value.DefaultGravatarBaseURL,
 		CommentSort:          string(domain.CommentSortAsc),
-		OwOCatalogURL:        "",
+		EmojiCatalogURL:      "",
 	}
 }
 
@@ -163,7 +163,7 @@ func Validate(s domain.Settings) error {
 	if !domain.ValidCommentSort(s.CommentSort) {
 		return fmt.Errorf("%w: comment sort must be asc or desc", domain.ErrValidation)
 	}
-	if err := value.ValidateOwOCatalogURL(s.OwOCatalogURL); err != nil {
+	if err := value.ValidateEmojiCatalogURL(s.EmojiCatalogURL); err != nil {
 		return fmt.Errorf("%w: %v", domain.ErrValidation, err)
 	}
 	return nil
@@ -190,7 +190,7 @@ func defaultItems() []SettingItem {
 		{Key: SettingKeyEmailDomainBlacklist, Type: SettingTypeJSON, Value: s.EmailDomainBlacklist},
 		{Key: SettingKeyGravatarBaseURL, Type: SettingTypeString, Value: s.GravatarBaseURL},
 		{Key: SettingKeyCommentSort, Type: SettingTypeString, Value: s.CommentSort},
-		{Key: SettingKeyOwOCatalogURL, Type: SettingTypeString, Value: s.OwOCatalogURL},
+		{Key: SettingKeyEmojiCatalogURL, Type: SettingTypeString, Value: s.EmojiCatalogURL},
 	}
 }
 
@@ -349,8 +349,8 @@ func applyItems(s *domain.Settings, items []SettingItem) error {
 			s.GravatarBaseURL = strings.TrimSpace(item.Value.(string))
 		case SettingKeyCommentSort:
 			s.CommentSort = item.Value.(string)
-		case SettingKeyOwOCatalogURL:
-			s.OwOCatalogURL = strings.TrimSpace(item.Value.(string))
+		case SettingKeyEmojiCatalogURL:
+			s.EmojiCatalogURL = strings.TrimSpace(item.Value.(string))
 		}
 	}
 	return nil

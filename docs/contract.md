@@ -51,21 +51,25 @@
 
 ### Widget 运行时配置远程表情目录（/api/v1/widget/sites/{site_id}/runtime-config）
 
-- 实例级动态设置 `owo_catalog_url`（公开 string，默认 `""`）。非空值必须是绝对
+- 实例级动态设置 `emoji_catalog_url`（公开 string，默认 `""`）。非空值必须是绝对
   HTTPS URL：允许 query（用于版本化/签名目录），不允许 userinfo 与 fragment，
   长度不超过 2048 字符。设置页 PATCH 时后端整体校验，非法值整批拒绝（422）。
-- 运行时配置暴露可选字段 `owo_catalog_url`（`omitempty`）：未配置时字段缺省，
+  该 key 是破坏性重命名：旧目录 key 不再被读取、接受、别名或返回，无迁移路径；
+  历史数据库可能保留一条惰性旧动态行，正常默认播种路径只创建新设置。
+- 运行时配置暴露可选字段 `emoji_catalog_url`（`omitempty`）：未配置时字段缺省，
   客户端按未启用处理。
 - 该端点返回 `Cache-Control: no-store`，避免浏览器或中间代理以旧缓存掩盖
   管理员的最新设置。
 - Widget 在浏览器端以 `mode: cors`、`credentials: omit`、无 Referer、
   `cache: no-store` 拉取该目录；该远程文档不经后端代理、校验或缓存，因此
-  该设置不会引入 SSRF 面。目录 JSON 采用 OwO Data API 兼容形态（按包名分组的
-  `{type: emoticon|emoji|image, container:[{icon,text}]}`），图片 `icon`
-  可为官方 `<img src="...">` 标记或纯 URL，Widget 只提取并规范化 `src` 为绝对
-  HTTPS 后以安全 Markdown 插入；目录加载或解析失败只影响表情选择器，评论
-  流程不受影响。本服务无内置表情数据：目录内容完全由部署者通过该 URL 提供并
-  承担许可责任；未配置时 Widget 既不请求目录，也不渲染表情触发器。
+  该设置不会引入 SSRF 面。目录 JSON 采用 Furtalk 自有 emoji-pack 协议
+  （根 `{packs:[...]}`，包类型 `unicode | emotion | image`；规范性契约见
+  `docs/emoji-pack-protocol.md`）。
+  选择 Unicode/颜文字项插入其原样 `content`；选择图片项插入 `:<id>:`。已发布评论
+  中的已知图片 token 由 Widget 渲染为经校验的图片；未知 token 保持字面量。目录
+  加载或解析失败只影响表情选择器，评论流程不受影响。本服务无内置表情数据：目录
+  内容完全由部署者通过该 URL 提供并承担许可责任；未配置时 Widget 既不请求目录，
+  也不渲染表情触发器。
 - 自定义目录及其中图片由 Widget 访客的浏览器直接请求，受嵌入页面 CSP 与隐私
   策略约束，且图片宿主可见访客 IP；管理端帮助文案需披露该行为。
 

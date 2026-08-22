@@ -382,8 +382,8 @@ type CommentPolicy struct {
 	EmailDomainBlacklist []string
 	GravatarBaseURL      string
 	CommentSort          string
-	// OwOCatalogURL 是可选的 widget 远程表情目录地址；空串表示使用内置目录。
-	OwOCatalogURL string
+	// EmojiCatalogURL 是可选的 widget 远程表情目录地址；空串表示不配置。
+	EmojiCatalogURL string
 }
 
 // PrivacyPolicy 是评论隐私捕获所需的模式数据。
@@ -429,8 +429,8 @@ type Settings struct {
 	GravatarBaseURL string `json:"gravatar_base_url"`
 	// CommentSort 是 widget 公开评论列表的默认排序方向，仅允许 asc/desc。
 	CommentSort string `json:"comment_sort"`
-	// OwOCatalogURL 是 widget 远程表情目录地址；空串表示不配置自定义目录。
-	OwOCatalogURL string `json:"owo_catalog_url"`
+	// EmojiCatalogURL 是 widget 远程表情目录地址；空串表示不配置自定义目录。
+	EmojiCatalogURL string `json:"emoji_catalog_url"`
 }
 
 // PrivacySettings 是隐私相关的动态设置：IP 与 UA 的存储粒度。

@@ -181,15 +181,15 @@ type DeleteResult struct {
 
 // RuntimeConfig 是 widget 运行时配置数据。
 type RuntimeConfig struct {
-	SiteID         int64
-	Name           string
-	CommentMode    string
-	Moderation     string
-	UserDeleteMode string
-	MaxReplyDepth  int
-	CommentSort    string
-	OwOCatalogURL  string
-	Captcha        *RuntimeCaptcha
+	SiteID          int64
+	Name            string
+	CommentMode     string
+	Moderation      string
+	UserDeleteMode  string
+	MaxReplyDepth   int
+	CommentSort     string
+	EmojiCatalogURL string
+	Captcha         *RuntimeCaptcha
 }
 
 // AuthorizationContextView 是授权页展示所需的只读上下文，不创建授权记录。

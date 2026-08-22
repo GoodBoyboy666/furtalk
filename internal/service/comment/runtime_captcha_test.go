@@ -166,9 +166,9 @@ func TestRuntimeConfigIncludesCommentSort(t *testing.T) {
 	}
 }
 
-// TestRuntimeConfigIncludesOwOCatalogURL 验证运行时配置携带可选的
-// owo_catalog_url 投影，空值保持空串且不依赖 CAPTCHA provider。
-func TestRuntimeConfigIncludesOwOCatalogURL(t *testing.T) {
+// TestRuntimeConfigIncludesEmojiCatalogURL 验证运行时配置携带可选的
+// emoji_catalog_url 投影，空值保持空串且不依赖 CAPTCHA provider。
+func TestRuntimeConfigIncludesEmojiCatalogURL(t *testing.T) {
 	db := newReplyTestDB(t)
 	siteID := seedRuntimeConfigSite(t, db)
 	for _, tt := range []struct {
@@ -176,19 +176,19 @@ func TestRuntimeConfigIncludesOwOCatalogURL(t *testing.T) {
 		url  string
 	}{
 		{name: "unconfigured", url: ""},
-		{name: "configured", url: "https://cdn.example/owo.json"},
+		{name: "configured", url: "https://cdn.example/emoji.json"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			svc := &Service{
 				sites: repository.NewSiteRepo(db),
 				settings: &staticCommentPolicyReader{policy: domain.CommentPolicy{
-					Mode:           domain.CommentModeAnonymous,
-					Moderation:     domain.ModerationDirect,
-					UserDeleteMode: domain.UserDeleteModeSoft,
-					MaxReplyDepth:  5,
-					CaptchaPolicy:  map[string]bool{},
-					CommentSort:    string(domain.CommentSortAsc),
-					OwOCatalogURL:  tt.url,
+					Mode:            domain.CommentModeAnonymous,
+					Moderation:      domain.ModerationDirect,
+					UserDeleteMode:  domain.UserDeleteModeSoft,
+					MaxReplyDepth:   5,
+					CaptchaPolicy:   map[string]bool{},
+					CommentSort:     string(domain.CommentSortAsc),
+					EmojiCatalogURL: tt.url,
 				}},
 				providers: staticCaptchaProviderReader{},
 			}
@@ -196,8 +196,8 @@ func TestRuntimeConfigIncludesOwOCatalogURL(t *testing.T) {
 			if err != nil {
 				t.Fatalf("runtime config: %v", err)
 			}
-			if rc.OwOCatalogURL != tt.url {
-				t.Fatalf("owo_catalog_url = %q, want %q", rc.OwOCatalogURL, tt.url)
+			if rc.EmojiCatalogURL != tt.url {
+				t.Fatalf("emoji_catalog_url = %q, want %q", rc.EmojiCatalogURL, tt.url)
 			}
 		})
 	}

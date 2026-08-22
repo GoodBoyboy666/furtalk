@@ -737,9 +737,9 @@ func TestPatchCommentSortRejectsInvalid(t *testing.T) {
 	}
 }
 
-// TestOwOCatalogURLDefaultAndRoundTrip 验证 owo_catalog_url 默认空串，
+// TestEmojiCatalogURLDefaultAndRoundTrip 验证 emoji_catalog_url 默认空串，
 // 保存 HTTPS 值后持久化，清空后恢复空串。
-func TestOwOCatalogURLDefaultAndRoundTrip(t *testing.T) {
+func TestEmojiCatalogURLDefaultAndRoundTrip(t *testing.T) {
 	db, svc := newTestServiceDB(t)
 	ctx := context.Background()
 
@@ -747,12 +747,12 @@ func TestOwOCatalogURLDefaultAndRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
-	if view.Settings.OwOCatalogURL != "" {
-		t.Fatalf("owo_catalog_url default = %q, want empty", view.Settings.OwOCatalogURL)
+	if view.Settings.EmojiCatalogURL != "" {
+		t.Fatalf("emoji_catalog_url default = %q, want empty", view.Settings.EmojiCatalogURL)
 	}
 
 	if _, err := svc.Patch(ctx, []SettingItem{
-		{Key: SettingKeyOwOCatalogURL, Type: SettingTypeString, Value: "https://cdn.example/owo.json?signature=abc"},
+		{Key: SettingKeyEmojiCatalogURL, Type: SettingTypeString, Value: "https://cdn.example/emoji.json?signature=abc"},
 	}, 1); err != nil {
 		t.Fatalf("patch catalog url: %v", err)
 	}
@@ -760,8 +760,8 @@ func TestOwOCatalogURLDefaultAndRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get after patch: %v", err)
 	}
-	if view.Settings.OwOCatalogURL != "https://cdn.example/owo.json?signature=abc" {
-		t.Fatalf("owo_catalog_url = %q, want configured value", view.Settings.OwOCatalogURL)
+	if view.Settings.EmojiCatalogURL != "https://cdn.example/emoji.json?signature=abc" {
+		t.Fatalf("emoji_catalog_url = %q, want configured value", view.Settings.EmojiCatalogURL)
 	}
 
 	// 重建服务验证持久化。
@@ -770,13 +770,13 @@ func TestOwOCatalogURLDefaultAndRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("rebuilt get: %v", err)
 	}
-	if view.Settings.OwOCatalogURL != "https://cdn.example/owo.json?signature=abc" {
-		t.Fatalf("rebuilt owo_catalog_url = %q, want persisted value", view.Settings.OwOCatalogURL)
+	if view.Settings.EmojiCatalogURL != "https://cdn.example/emoji.json?signature=abc" {
+		t.Fatalf("rebuilt emoji_catalog_url = %q, want persisted value", view.Settings.EmojiCatalogURL)
 	}
 
 	// 清空。
 	if _, err := rebuilt.Patch(ctx, []SettingItem{
-		{Key: SettingKeyOwOCatalogURL, Type: SettingTypeString, Value: ""},
+		{Key: SettingKeyEmojiCatalogURL, Type: SettingTypeString, Value: ""},
 	}, 2); err != nil {
 		t.Fatalf("patch clear: %v", err)
 	}
@@ -784,13 +784,13 @@ func TestOwOCatalogURLDefaultAndRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get after clear: %v", err)
 	}
-	if view.Settings.OwOCatalogURL != "" {
-		t.Fatalf("owo_catalog_url after clear = %q, want empty", view.Settings.OwOCatalogURL)
+	if view.Settings.EmojiCatalogURL != "" {
+		t.Fatalf("emoji_catalog_url after clear = %q, want empty", view.Settings.EmojiCatalogURL)
 	}
 }
 
-// TestPatchOwOCatalogURLRejectsInvalid 验证非法 owo_catalog_url 值被整体拒绝且不落库。
-func TestPatchOwOCatalogURLRejectsInvalid(t *testing.T) {
+// TestPatchEmojiCatalogURLRejectsInvalid 验证非法 emoji_catalog_url 值被整体拒绝且不落库。
+func TestPatchEmojiCatalogURLRejectsInvalid(t *testing.T) {
 	svc := newTestService(t)
 	ctx := context.Background()
 
@@ -798,13 +798,13 @@ func TestPatchOwOCatalogURLRejectsInvalid(t *testing.T) {
 		t.Fatalf("seed defaults: %v", err)
 	}
 	for _, raw := range []string{
-		"http://cdn.example/owo.json",
-		"https://user:pass@cdn.example/owo.json",
-		"https://cdn.example/owo.json#fragment",
-		"ftp://cdn.example/owo.json",
+		"http://cdn.example/emoji.json",
+		"https://user:pass@cdn.example/emoji.json",
+		"https://cdn.example/emoji.json#fragment",
+		"ftp://cdn.example/emoji.json",
 	} {
 		if _, err := svc.Patch(ctx, []SettingItem{
-			{Key: SettingKeyOwOCatalogURL, Type: SettingTypeString, Value: raw},
+			{Key: SettingKeyEmojiCatalogURL, Type: SettingTypeString, Value: raw},
 		}, 1); !errors.Is(err, domain.ErrValidation) {
 			t.Fatalf("patch invalid catalog url %q error = %v, want ErrValidation", raw, err)
 		}
@@ -813,7 +813,7 @@ func TestPatchOwOCatalogURLRejectsInvalid(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
-	if view.Settings.OwOCatalogURL != "" {
-		t.Fatalf("owo_catalog_url = %q after rejected patches, want empty default", view.Settings.OwOCatalogURL)
+	if view.Settings.EmojiCatalogURL != "" {
+		t.Fatalf("emoji_catalog_url = %q after rejected patches, want empty default", view.Settings.EmojiCatalogURL)
 	}
 }

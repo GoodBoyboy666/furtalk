@@ -131,14 +131,14 @@ func (s *Service) RuntimeConfig(ctx context.Context, siteID int64) (*RuntimeConf
 		return nil, err
 	}
 	rc := &RuntimeConfig{
-		SiteID:         siteID,
-		Name:           site.Name,
-		CommentMode:    pol.Mode,
-		Moderation:     pol.Moderation,
-		UserDeleteMode: pol.UserDeleteMode,
-		MaxReplyDepth:  pol.MaxReplyDepth,
-		CommentSort:    pol.CommentSort,
-		OwOCatalogURL:  pol.OwOCatalogURL,
+		SiteID:          siteID,
+		Name:            site.Name,
+		CommentMode:     pol.Mode,
+		Moderation:      pol.Moderation,
+		UserDeleteMode:  pol.UserDeleteMode,
+		MaxReplyDepth:   pol.MaxReplyDepth,
+		CommentSort:     pol.CommentSort,
+		EmojiCatalogURL: pol.EmojiCatalogURL,
 	}
 	provider, err := s.providers.SelectedCaptcha(ctx)
 	if err != nil && !errors.Is(err, domain.ErrNotFound) && !errors.Is(err, domain.ErrProviderNotFound) {
