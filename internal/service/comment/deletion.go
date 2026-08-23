@@ -90,9 +90,6 @@ func (s *Service) softDeleteOne(ctx context.Context, siteID int64, comment *doma
 // 引用，然后只删除目标行。任一步失败整体回滚。
 func (s *Service) hardDeleteOne(ctx context.Context, siteID, id int64) error {
 	return s.txRunner.RunInTx(ctx, func(ctx context.Context) error {
-		if err := s.comments.DetachCommentChildren(ctx, siteID, id); err != nil {
-			return err
-		}
-		return s.comments.HardDelete(ctx, siteID, id)
+		return s.hardDeleteInCurrentTx(ctx, siteID, id)
 	})
 }

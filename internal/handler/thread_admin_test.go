@@ -733,3 +733,84 @@ func TestAdminThreadsDeleteRequiresCSRF(t *testing.T) {
 		t.Fatalf("status = %d %s, want 403 invalid_csrf_token", rec.Code, rec.Body.String())
 	}
 }
+
+func TestAdminThreadsBatchCountsChangesAndNoops(t *testing.T) {
+	env := newThreadHandlerEnv(t)
+	siteID, openID := seedAdminThreadFixture(t, env)
+	closed, err := repository.NewThreadRepo(env.db).GetBySiteAndKey(context.Background(), siteID, "closed-page")
+	if err != nil {
+		t.Fatalf("find closed thread: %v", err)
+	}
+	router := threadAdminRouter(t, env.svc)
+	body := `{"ids":["` + itoa(openID) + `","` + itoa(closed.ID) + `"],"action":"disable"}`
+	rec := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/admin/sites/"+itoa(siteID)+"/threads/batch", strings.NewReader(body))
+	request.Header.Set("Content-Type", "application/json")
+	request.AddCookie(&http.Cookie{Name: middleware.CSRFCookieName, Value: csrf})
+	request.Header.Set(middleware.CSRFHeaderName, csrf)
+	router.ServeHTTP(rec, request)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	var result AdminBatchResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil {
+		t.Fatalf("decode result: %v", err)
+	}
+	if result.ChangedCount != 1 || result.UnchangedCount != 1 || result.RequestedCount != 2 {
+		t.Fatalf("result = %+v, want one change and one noop", result)
+	}
+}
+
+func TestAdminThreadsBatchFailureReturnsIDAndRollsBack(t *testing.T) {
+	env := newThreadHandlerEnv(t)
+	siteID, openID := seedAdminThreadFixture(t, env)
+	router := threadAdminRouter(t, env.svc)
+	body := `{"ids":["` + itoa(openID) + `","999999"],"action":"disable"}`
+	rec := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/admin/sites/"+itoa(siteID)+"/threads/batch", strings.NewReader(body))
+	request.Header.Set("Content-Type", "application/json")
+	request.AddCookie(&http.Cookie{Name: middleware.CSRFCookieName, Value: csrf})
+	request.Header.Set(middleware.CSRFHeaderName, csrf)
+	router.ServeHTTP(rec, request)
+	if rec.Code != http.StatusNotFound || !strings.Contains(rec.Body.String(), `"failed_id":"999999"`) {
+		t.Fatalf("status = %d body=%s, want 404 with failed id", rec.Code, rec.Body.String())
+	}
+	thread, err := repository.NewThreadRepo(env.db).GetBySiteAndID(context.Background(), siteID, openID)
+	if err != nil || !thread.CommentsEnabled {
+		t.Fatalf("thread after rollback = %+v, err=%v; want still enabled", thread, err)
+	}
+}
+
+func TestAdminThreadsBatchHardDeleteRequiresConfirmationAndCascades(t *testing.T) {
+	env := newThreadHandlerEnv(t)
+	siteID, threadID := seedAdminThreadFixture(t, env)
+	seedAdminThreadCommentFixture(t, env, siteID, threadID)
+	router := threadAdminRouter(t, env.svc)
+	post := func(body string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodPost, "/api/v1/admin/sites/"+itoa(siteID)+"/threads/batch", strings.NewReader(body))
+		request.Header.Set("Content-Type", "application/json")
+		request.AddCookie(&http.Cookie{Name: middleware.CSRFCookieName, Value: csrf})
+		request.Header.Set(middleware.CSRFHeaderName, csrf)
+		router.ServeHTTP(rec, request)
+		return rec
+	}
+	missingConfirm := post(`{"ids":["` + itoa(threadID) + `"],"action":"hard_delete"}`)
+	if missingConfirm.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("missing confirm status = %d, want 422", missingConfirm.Code)
+	}
+	deleted := post(`{"ids":["` + itoa(threadID) + `"],"action":"hard_delete","confirm":true}`)
+	if deleted.Code != http.StatusOK {
+		t.Fatalf("delete status = %d, want 200; body=%s", deleted.Code, deleted.Body.String())
+	}
+	if _, err := repository.NewThreadRepo(env.db).GetBySiteAndID(context.Background(), siteID, threadID); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("thread must be gone, err=%v", err)
+	}
+	var comments int64
+	if err := env.db.Model(&model.Comment{}).Where("site_id = ? AND thread_id = ?", siteID, threadID).Count(&comments).Error; err != nil {
+		t.Fatalf("count comments: %v", err)
+	}
+	if comments != 0 {
+		t.Fatalf("comments = %d, want cascade deletion", comments)
+	}
+}

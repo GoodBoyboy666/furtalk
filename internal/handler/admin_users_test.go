@@ -329,6 +329,7 @@ func TestAdminUsersRoutesRequireCSRF(t *testing.T) {
 		method, path, body string
 	}{
 		{http.MethodPost, "/api/v1/admin/users", `{}`},
+		{http.MethodPost, "/api/v1/admin/users/batch", `{"ids":["1"],"action":"enable"}`},
 		{http.MethodPatch, "/api/v1/admin/users/1", `{}`},
 		{http.MethodPost, "/api/v1/admin/users/1/password", `{}`},
 	}
@@ -359,6 +360,51 @@ func TestAdminUsersRejectModeratorAndSuspended(t *testing.T) {
 	}
 }
 
+func TestAdminUsersBatchCountsChangesAndRejectsRoleAction(t *testing.T) {
+	env := newAdminUsersEnv(t)
+	createAdminUser(t, env, `{"email":"acting-batch-handler@example.com","nickname":"acting","role":"admin"}`)
+	first := createAdminUser(t, env, `{"email":"first-batch-handler@example.com","nickname":"first","role":"user"}`)
+	second := createAdminUser(t, env, `{"email":"second-batch-handler@example.com","nickname":"second","role":"user"}`)
+	status := domain.UserStatusDisabled
+	if _, err := env.svc.AdminUpdateUser(context.Background(), idOf(t, second), identity.AdminUpdateUserInput{Status: &status}); err != nil {
+		t.Fatalf("disable fixture: %v", err)
+	}
+	router := adminUsersRouter(t, env.svc)
+	rec := doAdminBatchPost(t, router, `{"ids":["`+first+`","`+second+`"],"action":"enable"}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("batch status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	for _, want := range []string{`"requested_count":2`, `"changed_count":1`, `"unchanged_count":1`} {
+		if !strings.Contains(rec.Body.String(), want) {
+			t.Fatalf("batch body missing %s: %s", want, rec.Body.String())
+		}
+	}
+	if rec := doAdminBatchPost(t, router, `{"ids":["`+first+`"],"action":"role"}`); rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("role batch status = %d, want 422; body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestAdminUsersBatchSelfDeleteRollsBackAndReturnsFailedID(t *testing.T) {
+	env := newAdminUsersEnv(t)
+	createAdminUser(t, env, `{"email":"acting-self-batch@example.com","nickname":"acting","role":"admin"}`)
+	target := createAdminUser(t, env, `{"email":"target-self-batch@example.com","nickname":"target","role":"user"}`)
+	router := adminUsersRouter(t, env.svc)
+	rec := doAdminBatchPost(t, router, `{"ids":["`+target+`","1"],"action":"soft_delete","confirm":true}`)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("self-delete batch status = %d, want 403; body=%s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"failed_id":"1"`) {
+		t.Fatalf("self-delete response missing failed_id: %s", rec.Body.String())
+	}
+	user, err := repository.NewUserRepo(env.userDB).FindByID(context.Background(), idOf(t, target))
+	if err != nil {
+		t.Fatalf("find target after rollback: %v", err)
+	}
+	if user.Status != domain.UserStatusActive {
+		t.Fatalf("target changed after rollback: %+v", user)
+	}
+}
+
 // createAdminUser 通过端点创建一个用户并返回其 ID。
 func createAdminUser(t *testing.T, env *adminUsersTestEnv, body string) string {
 	t.Helper()
@@ -374,6 +420,17 @@ func createAdminUser(t *testing.T, env *adminUsersTestEnv, body string) string {
 		t.Fatalf("parse create response: %v; body=%s", err, rec.Body.String())
 	}
 	return parsed.ID
+}
+
+func doAdminBatchPost(t *testing.T, router *gin.Engine, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/admin/users/batch", strings.NewReader(body))
+	request.Header.Set("Content-Type", "application/json")
+	request.AddCookie(&http.Cookie{Name: middleware.CSRFCookieName, Value: csrf})
+	request.Header.Set(middleware.CSRFHeaderName, csrf)
+	router.ServeHTTP(rec, request)
+	return rec
 }
 
 // TestAdminUsersDeleteSoft 验证软删除端点把用户置为 deleted。

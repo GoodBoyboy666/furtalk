@@ -223,6 +223,7 @@
 | GET | /api/v1/admin/sites/{site_id}/threads | 线程列表（按站点；可过滤 `comments_enabled`、搜索 `q`，页码分页） |
 | PATCH | /api/v1/admin/sites/{site_id}/threads/{thread_id} | 更新线程元数据（请求体 `{page_key?, page_title?, comments_enabled?}` 至少一个字段；`page_title` 省略保持、显式 `null`/空白清空；`page_key` 站点内重复 409；缺省 422；跨站点 404） |
 | DELETE | /api/v1/admin/sites/{site_id}/threads/{thread_id} | 删除线程（需 `confirm=true`；硬删除线程及其下全部评论，跨站点 404，204） |
+| POST | /api/v1/admin/sites/{site_id}/threads/batch | 批量开启、关闭或硬删除评论区（`enable`、`disable`、`hard_delete`；当前页 ID，单批 1–100 个） |
 | GET | /api/v1/admin/comments | 评论管理列表（页码分页；支持正文/作者邮箱/昵称 `q` 搜索） |
 | GET/PATCH/DELETE | /api/v1/admin/comments/{comment_id} | 管理评论（PATCH 编辑正文） |
 | PUT/DELETE | /api/v1/admin/comments/{comment_id}/pin | 管理员置顶/取消置顶根评论（幂等） |
@@ -230,12 +231,22 @@
 | POST | /api/v1/admin/comments/{comment_id}/pending | 移入待审核 |
 | POST | /api/v1/admin/comments/{comment_id}/spam | 标记垃圾 |
 | POST | /api/v1/admin/comments/{comment_id}/restore | 恢复 |
+| POST | /api/v1/admin/comments/batch | 批量管理评论（`pending`、`publish`、`spam`、`soft_delete`、`restore`、`hard_delete`、`pin`、`unpin`；当前页 ID，单批 1–100 个） |
 | GET | /api/v1/admin/users | 用户列表 |
 | POST | /api/v1/admin/users | 预创建用户（资料、角色、可选初始密码、邮箱验证开关） |
+| POST | /api/v1/admin/users/batch | 批量管理用户（`enable`、`disable`、`verify_email`、`unverify_email`、`soft_delete`、`hard_delete`、`restore`；当前页 ID，单批 1–100 个；不支持批量修改角色） |
 | GET/PATCH/DELETE | /api/v1/admin/users/{user_id} | 用户操作（更新邮箱/昵称/网站/角色/状态/验证状态；DELETE 删除用户，`mode=soft\|hard` 缺省 soft，hard 需 `confirm=true`，无法删除自己或最后一名活跃管理员） |
 | POST | /api/v1/admin/users/{user_id}/restore | 恢复软删除用户（仅恢复账号，不含评论） |
 | POST | /api/v1/admin/users/{user_id}/password | 管理员重置目标用户密码 |
 | POST | /api/v1/admin/smtp/test | SMTP 连通性测试 |
+
+批量命令请求体为 `{ids:["12", "18"], action:"publish", confirm?:true}`，ID
+必须是 1–100 个唯一的十进制字符串；软删除和硬删除都需要 `confirm=true`。
+响应为 `{action, requested_count, changed_count, unchanged_count}`。所有目标在
+一个数据库事务中按稳定顺序校验和写入，任一目标失败都会整批回滚并在统一错误
+信封的 `details.failed_id` 中指出失败 ID；合法的同目标状态按幂等未变化计数。
+批量发布事件仅在事务提交后为实际变更项发送。评论硬删除会先解除保留回复的
+父/根引用，未选中的回复保持不变。
 
 线程管理响应项包含十进制字符串 ID、站点名、页面标识、可空 URL/标题、
 `comments_enabled` 与发现/更新时间。管理员可编辑 `page_key` 与 `page_title`
@@ -243,6 +254,11 @@
 外部 Widget 以原值访问时按惰性解析语义可能创建新的空线程），也可以切换
 评论开关。删除线程是破坏性操作：需 `confirm=true` 显式确认，硬删除线程及其
 下全部评论；历史评论的正文归属无法修改。
+
+评论区批量命令复用批量请求体与响应计数：`action` 仅允许 `enable`、`disable`、
+`hard_delete`，后者必须携带 `confirm=true`。所有目标均在同一个数据库事务中按
+稳定 ID 顺序校验和写入；同一开关状态计为 `unchanged`，缺失或跨站点 ID 在
+`details.failed_id` 指出并回滚全部写入。硬删除会级联删除选中评论区下的全部评论。
 
 ### 第一方列表页码分页约定（评论/线程/用户/本人评论）
 

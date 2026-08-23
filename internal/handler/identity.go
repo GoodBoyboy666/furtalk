@@ -49,11 +49,47 @@ func RegisterMe(api *gin.RouterGroup, service *identity.Service, userGate middle
 func RegisterAdminUsers(admin *gin.RouterGroup, service *identity.Service) {
 	admin.GET("/users", adminUsersList(service))
 	admin.POST("/users", adminUsersCreate(service))
+	// 静态 batch 路由必须在 /users/:user_id 之前注册。
+	admin.POST("/users/batch", adminUsersBatch(service))
 	admin.GET("/users/:user_id", adminUsersGet(service))
 	admin.PATCH("/users/:user_id", adminUsersUpdate(service))
 	admin.POST("/users/:user_id/password", adminUsersResetPassword(service))
 	admin.DELETE("/users/:user_id", adminUsersDelete(service))
 	admin.POST("/users/:user_id/restore", adminUsersRestore(service))
+}
+
+// @Summary 批量管理用户
+// @Tags admin-users
+// @Accept json
+// @Produce json
+// @Param body body AdminBatchRequest true "用户批量命令"
+// @Success 200 {object} AdminBatchResponse "批量操作计数"
+// @Failure 400 {object} httpx.ErrorResponse "请求参数无效"
+// @Failure 401 {object} httpx.ErrorResponse "需要管理员登录"
+// @Failure 403 {object} httpx.ErrorResponse "不能删除当前操作者或权限不足"
+// @Failure 404 {object} httpx.ErrorResponse "用户不存在"
+// @Failure 409 {object} httpx.ErrorResponse "生命周期冲突或不能移除最后一个管理员"
+// @Failure 422 {object} httpx.ErrorResponse "请求参数无效或缺少破坏性操作确认"
+// @Param X-CSRF-Token header string true "CSRF token"
+// @Router /api/v1/admin/users/batch [post]
+func adminUsersBatch(service *identity.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		input, err := decodeUserBatchRequest(c)
+		if err != nil {
+			writeBatchError(c, err)
+			return
+		}
+		input.ActingID = actingUserID(c)
+		if input.ActingID <= 0 {
+			return
+		}
+		result, err := service.AdminBatchUsers(c.Request.Context(), input)
+		if err != nil {
+			writeBatchError(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, toAdminBatchResponse(*result))
+	}
 }
 
 // @Summary 请求发送邮箱验证码

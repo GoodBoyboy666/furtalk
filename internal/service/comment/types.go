@@ -229,6 +229,69 @@ type AdminListResult struct {
 	Total    int64
 }
 
+// AdminBatchAction 是管理员评论批量命令的受控动作集合。
+type AdminBatchAction string
+
+const (
+	AdminBatchPending    AdminBatchAction = "pending"
+	AdminBatchPublish    AdminBatchAction = "publish"
+	AdminBatchSpam       AdminBatchAction = "spam"
+	AdminBatchSoftDelete AdminBatchAction = "soft_delete"
+	AdminBatchRestore    AdminBatchAction = "restore"
+	AdminBatchHardDelete AdminBatchAction = "hard_delete"
+	AdminBatchPin        AdminBatchAction = "pin"
+	AdminBatchUnpin      AdminBatchAction = "unpin"
+)
+
+// ValidAdminBatchAction 报告动作是否属于评论批量命令白名单。
+func ValidAdminBatchAction(action string) bool {
+	switch AdminBatchAction(action) {
+	case AdminBatchPending, AdminBatchPublish, AdminBatchSpam,
+		AdminBatchSoftDelete, AdminBatchRestore, AdminBatchHardDelete,
+		AdminBatchPin, AdminBatchUnpin:
+		return true
+	default:
+		return false
+	}
+}
+
+// AdminBatchInput 是评论批量管理服务输入。
+type AdminBatchInput struct {
+	IDs     []int64
+	Action  AdminBatchAction
+	Confirm bool
+}
+
+// AdminThreadBatchAction 是管理员评论区批量命令的受控动作集合。
+type AdminThreadBatchAction string
+
+const (
+	AdminThreadBatchEnable     AdminThreadBatchAction = "enable"
+	AdminThreadBatchDisable    AdminThreadBatchAction = "disable"
+	AdminThreadBatchHardDelete AdminThreadBatchAction = "hard_delete"
+)
+
+// ValidAdminThreadBatchAction 报告动作是否属于评论区批量命令白名单。
+func ValidAdminThreadBatchAction(action string) bool {
+	switch AdminThreadBatchAction(action) {
+	case AdminThreadBatchEnable, AdminThreadBatchDisable, AdminThreadBatchHardDelete:
+		return true
+	default:
+		return false
+	}
+}
+
+// AdminThreadBatchInput 是评论区批量管理服务输入。
+type AdminThreadBatchInput struct {
+	IDs     []int64
+	Action  AdminThreadBatchAction
+	Confirm bool
+}
+
+// ThreadBatchAction/ThreadBatchInput 是简短别名，便于其他层复用相同契约。
+type ThreadBatchAction = AdminThreadBatchAction
+type ThreadBatchInput = AdminThreadBatchInput
+
 // OwnerCommentView 是当前用户本人评论的展示视图，不含邮箱/IP/UA。
 type OwnerCommentView struct {
 	CommentView

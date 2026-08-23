@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"furtalk/internal/domain"
-	"furtalk/internal/platform/logging"
 	"furtalk/internal/platform/value"
 )
 
@@ -233,10 +232,8 @@ func (s *Service) AdminUpdateUser(ctx context.Context, targetID int64, input Adm
 
 	// 角色/状态实际变化并提交后，同步删除 authz 缓存，失败按 fail-fast 契约处理。
 	if roleStatusChanged {
-		if err := s.cache.Delete(ctx, authzKey(targetID)); err != nil {
-			logging.FromContext(ctx, s.log).ErrorContext(ctx, "authz cache invalidation failed", logging.ID("user_id", targetID), logging.Error(err))
-			s.failFast(err)
-			return nil, domain.ErrCacheInvalidation
+		if err := s.invalidateAuthz(ctx, targetID); err != nil {
+			return nil, err
 		}
 	}
 	return s.getWithPrefs(ctx, targetID)
@@ -276,69 +273,43 @@ func (s *Service) AdminDeleteUser(ctx context.Context, actingID, targetID int64,
 	if mode == domain.UserDeleteModeHard && !confirm {
 		return domain.ErrConfirmationRequired
 	}
-	target, err := s.users.FindByID(ctx, targetID)
-	if err != nil {
+	err := s.txRunner.RunInTx(ctx, func(txCtx context.Context) error {
+		target, findErr := s.users.FindByID(txCtx, targetID)
+		if findErr != nil {
+			return findErr
+		}
+		var err error
+		_, err = s.applyAdminUserDeleteInTx(txCtx, actingID, target, mode, confirm, s.now().UTC().Truncate(time.Microsecond))
 		return err
-	}
-	// 最后活跃管理员守卫：软删或硬删当前活跃的管理员时必须有其他活跃管理员。
-	if target.Role == domain.RoleAdmin && target.Status == domain.UserStatusActive {
-		count, err := s.users.CountByRoleAndStatus(ctx, domain.RoleAdmin, domain.UserStatusActive)
-		if err != nil {
-			return err
-		}
-		if count <= 1 {
-			return domain.ErrLastAdmin
-		}
-	}
-	if mode == domain.UserDeleteModeHard {
-		err = s.txRunner.RunInTx(ctx, func(ctx context.Context) error {
-			if s.commentDeleter != nil {
-				if err := s.commentDeleter.PrepareUserHardDelete(ctx, targetID); err != nil {
-					return err
-				}
-			}
-			return s.users.Delete(ctx, targetID)
-		})
-	} else {
-		err = s.txRunner.RunInTx(ctx, func(ctx context.Context) error {
-			if err := s.users.SoftDelete(ctx, targetID, target.Status, s.now().UTC().Truncate(time.Microsecond)); err != nil {
-				return err
-			}
-			if s.commentDeleter == nil {
-				return nil
-			}
-			return s.commentDeleter.SoftDeleteUserComments(ctx, targetID)
-		})
-	}
+	})
 	if err != nil {
 		return err
 	}
 	// 提交后同步失效 authz 缓存，失败按 fail-fast 契约处理。
-	if err := s.cache.Delete(ctx, authzKey(targetID)); err != nil {
-		logging.FromContext(ctx, s.log).ErrorContext(ctx, "authz cache invalidation failed", logging.ID("user_id", targetID), logging.Error(err))
-		s.failFast(err)
-		return domain.ErrCacheInvalidation
-	}
-	return nil
+	return s.invalidateAuthz(ctx, targetID)
 }
 
 // AdminRestoreUser 恢复被软删除的用户账号：清除删除标记，回到删除前状态，
 // 缺失历史状态时默认 active。恢复只改变账号生命周期，不恢复任何评论。
 func (s *Service) AdminRestoreUser(ctx context.Context, targetID int64) (*Profile, error) {
-	current, err := s.users.FindByID(ctx, targetID)
+	restored := false
+	err := s.txRunner.RunInTx(ctx, func(txCtx context.Context) error {
+		current, findErr := s.users.FindByID(txCtx, targetID)
+		if findErr != nil {
+			return findErr
+		}
+		var err error
+		restored, err = s.restoreAdminUserInTx(txCtx, current)
+		return err
+	})
 	if err != nil {
 		return nil, err
 	}
-	if current.Status != domain.UserStatusDeleted {
+	if !restored {
 		return nil, domain.ErrConflict
 	}
-	if err := s.users.Restore(ctx, targetID); err != nil {
+	if err := s.invalidateAuthz(ctx, targetID); err != nil {
 		return nil, err
-	}
-	if err := s.cache.Delete(ctx, authzKey(targetID)); err != nil {
-		logging.FromContext(ctx, s.log).ErrorContext(ctx, "authz cache invalidation failed", logging.ID("user_id", targetID), logging.Error(err))
-		s.failFast(err)
-		return nil, domain.ErrCacheInvalidation
 	}
 	return s.getWithPrefs(ctx, targetID)
 }

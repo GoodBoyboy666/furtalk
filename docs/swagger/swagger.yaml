@@ -1,10 +1,76 @@
 definitions:
+  furtalk_internal_platform_httpx.ErrorBody:
+    properties:
+      code:
+        type: string
+      details:
+        additionalProperties: {}
+        type: object
+      message:
+        type: string
+      request_id:
+        type: string
+    type: object
+  furtalk_internal_platform_httpx.ErrorResponse:
+    properties:
+      error:
+        $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorBody'
+    type: object
   furtalk_internal_service_comment.OptionalNullableString:
     properties:
       set:
         type: boolean
       value:
         type: string
+    type: object
+  furtalk_internal_service_identity.OptionalNullableString:
+    properties:
+      set:
+        type: boolean
+      value:
+        type: string
+    type: object
+  furtalk_internal_service_setting.SettingItem:
+    properties:
+      key:
+        type: string
+      type:
+        $ref: '#/definitions/furtalk_internal_service_setting.SettingType'
+      value: {}
+    type: object
+  furtalk_internal_service_setting.SettingType:
+    enum:
+    - string
+    - integer
+    - boolean
+    - json
+    type: string
+    x-enum-varnames:
+    - SettingTypeString
+    - SettingTypeInteger
+    - SettingTypeBoolean
+    - SettingTypeJSON
+  internal_handler.AdminBatchRequest:
+    properties:
+      action:
+        type: string
+      confirm:
+        type: boolean
+      ids:
+        items:
+          type: string
+        type: array
+    type: object
+  internal_handler.AdminBatchResponse:
+    properties:
+      action:
+        type: string
+      changed_count:
+        type: integer
+      requested_count:
+        type: integer
+      unchanged_count:
+        type: integer
     type: object
   internal_handler.AdminCommentListResponse:
     properties:
@@ -887,50 +953,6 @@ definitions:
       valid:
         type: boolean
     type: object
-  furtalk_internal_platform_httpx.ErrorBody:
-    properties:
-      code:
-        type: string
-      details:
-        additionalProperties: {}
-        type: object
-      message:
-        type: string
-      request_id:
-        type: string
-    type: object
-  furtalk_internal_platform_httpx.ErrorResponse:
-    properties:
-      error:
-        $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorBody'
-    type: object
-  furtalk_internal_service_identity.OptionalNullableString:
-    properties:
-      set:
-        type: boolean
-      value:
-        type: string
-    type: object
-  furtalk_internal_service_setting.SettingItem:
-    properties:
-      key:
-        type: string
-      type:
-        $ref: '#/definitions/furtalk_internal_service_setting.SettingType'
-      value: {}
-    type: object
-  furtalk_internal_service_setting.SettingType:
-    enum:
-    - string
-    - integer
-    - boolean
-    - json
-    type: string
-    x-enum-varnames:
-    - SettingTypeString
-    - SettingTypeInteger
-    - SettingTypeBoolean
-    - SettingTypeJSON
 info:
   contact: {}
   description: |-
@@ -1366,6 +1388,56 @@ paths:
           schema:
             $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 将评论标记为垃圾评论
+      tags:
+      - admin-comments
+  /api/v1/admin/comments/batch:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 评论批量命令
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.AdminBatchRequest'
+      - description: CSRF token
+        in: header
+        name: X-CSRF-Token
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 批量操作计数
+          schema:
+            $ref: '#/definitions/internal_handler.AdminBatchResponse'
+        "400":
+          description: 请求参数或 ID 无效
+          schema:
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
+        "401":
+          description: 需要管理员登录
+          schema:
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
+        "403":
+          description: 权限不足
+          schema:
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
+        "404":
+          description: 评论不存在
+          schema:
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
+        "409":
+          description: 评论状态或置顶资格冲突
+          schema:
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
+        "422":
+          description: 请求参数无效或需要确认
+          schema:
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
+      summary: 批量管理评论
       tags:
       - admin-comments
   /api/v1/admin/providers:
@@ -2060,6 +2132,57 @@ paths:
       summary: 更新线程元数据（page_key / page_title / comments_enabled）
       tags:
       - admin-threads
+  /api/v1/admin/sites/{site_id}/threads/batch:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 站点 ID（十进制字符串）
+        in: path
+        name: site_id
+        required: true
+        type: integer
+      - description: 评论区批量命令
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.AdminBatchRequest'
+      - description: CSRF token
+        in: header
+        name: X-CSRF-Token
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 批量操作计数
+          schema:
+            $ref: '#/definitions/internal_handler.AdminBatchResponse'
+        "400":
+          description: 请求参数或 ID 无效
+          schema:
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
+        "401":
+          description: 需要管理员登录
+          schema:
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
+        "403":
+          description: 权限不足
+          schema:
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
+        "404":
+          description: 评论区不存在或不属于该站点
+          schema:
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
+        "422":
+          description: 请求参数无效或需要确认
+          schema:
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
+      summary: 批量管理评论区
+      tags:
+      - admin-threads
   /api/v1/admin/smtp/test:
     post:
       parameters:
@@ -2397,6 +2520,56 @@ paths:
           schema:
             $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 恢复被软删除的用户
+      tags:
+      - admin-users
+  /api/v1/admin/users/batch:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 用户批量命令
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.AdminBatchRequest'
+      - description: CSRF token
+        in: header
+        name: X-CSRF-Token
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 批量操作计数
+          schema:
+            $ref: '#/definitions/internal_handler.AdminBatchResponse'
+        "400":
+          description: 请求参数无效
+          schema:
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
+        "401":
+          description: 需要管理员登录
+          schema:
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
+        "403":
+          description: 不能删除当前操作者或权限不足
+          schema:
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
+        "404":
+          description: 用户不存在
+          schema:
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
+        "409":
+          description: 生命周期冲突或不能移除最后一个管理员
+          schema:
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
+        "422":
+          description: 请求参数无效或缺少破坏性操作确认
+          schema:
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
+      summary: 批量管理用户
       tags:
       - admin-users
   /api/v1/auth/email-code/login:

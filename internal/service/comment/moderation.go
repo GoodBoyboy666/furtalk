@@ -160,58 +160,68 @@ func (s *Service) adminTransition(ctx context.Context, id int64, action adminAct
 	if err != nil {
 		return nil, err
 	}
-	now := s.now().UTC()
-	switch action {
-	case actionPublish:
-		if !canTransition(comment.Status, domain.CommentStatusPublished) {
-			return nil, domain.ErrConflict
-		}
-		if err := s.comments.UpdateStatus(ctx, comment.SiteID, id, domain.CommentStatusPublished, nil, &now, nil); err != nil {
-			return nil, err
-		}
-	case actionPending:
-		if !canTransition(comment.Status, domain.CommentStatusPending) {
-			return nil, domain.ErrConflict
-		}
-		// 目标 pending：清除 published_at、deleted_at 与 status_before_delete。
-		if err := s.comments.UpdateStatus(ctx, comment.SiteID, id, domain.CommentStatusPending, nil, nil, nil); err != nil {
-			return nil, err
-		}
-	case actionSpam:
-		if !canTransition(comment.Status, domain.CommentStatusSpam) {
-			return nil, domain.ErrConflict
-		}
-		if err := s.comments.UpdateStatus(ctx, comment.SiteID, id, domain.CommentStatusSpam, nil, comment.PublishedAt, nil); err != nil {
-			return nil, err
-		}
-	case actionSoftDelete:
-		if !canTransition(comment.Status, domain.CommentStatusDeleted) {
-			return nil, domain.ErrConflict
-		}
-		before := comment.Status
-		if err := s.comments.UpdateStatus(ctx, comment.SiteID, id, domain.CommentStatusDeleted, &before, comment.PublishedAt, &now); err != nil {
-			return nil, err
-		}
-	case actionRestore:
-		if comment.Status != domain.CommentStatusDeleted || comment.StatusBeforeDelete == nil {
-			return nil, domain.ErrConflict
-		}
-		target := *comment.StatusBeforeDelete
-		var publishedAt *time.Time
-		if target == domain.CommentStatusPublished {
-			publishedAt = &now
-		}
-		if err := s.comments.UpdateStatus(ctx, comment.SiteID, id, target, nil, publishedAt, nil); err != nil {
-			return nil, err
-		}
-	default:
-		return nil, errors.New("comment: unknown moderation action")
+	if _, err := s.applyAdminTransition(ctx, comment, action, s.now().UTC()); err != nil {
+		return nil, err
 	}
 	updated, err := s.comments.FindGlobalByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 	return updated, nil
+}
+
+// applyAdminTransition 在当前事务中把已加载评论移动到目标审核状态。
+// 单条和批量入口共用该状态机；调用方负责在需要时处理 no-op 语义。
+func (s *Service) applyAdminTransition(ctx context.Context, comment *domain.Comment, action adminAction, now time.Time) (bool, error) {
+	if comment == nil {
+		return false, domain.ErrNotFound
+	}
+	switch action {
+	case actionPublish:
+		if !canTransition(comment.Status, domain.CommentStatusPublished) {
+			return false, domain.ErrConflict
+		}
+		if err := s.comments.UpdateStatus(ctx, comment.SiteID, comment.ID, domain.CommentStatusPublished, nil, &now, nil); err != nil {
+			return false, err
+		}
+	case actionPending:
+		if !canTransition(comment.Status, domain.CommentStatusPending) {
+			return false, domain.ErrConflict
+		}
+		if err := s.comments.UpdateStatus(ctx, comment.SiteID, comment.ID, domain.CommentStatusPending, nil, nil, nil); err != nil {
+			return false, err
+		}
+	case actionSpam:
+		if !canTransition(comment.Status, domain.CommentStatusSpam) {
+			return false, domain.ErrConflict
+		}
+		if err := s.comments.UpdateStatus(ctx, comment.SiteID, comment.ID, domain.CommentStatusSpam, nil, comment.PublishedAt, nil); err != nil {
+			return false, err
+		}
+	case actionSoftDelete:
+		if !canTransition(comment.Status, domain.CommentStatusDeleted) {
+			return false, domain.ErrConflict
+		}
+		before := comment.Status
+		if err := s.comments.UpdateStatus(ctx, comment.SiteID, comment.ID, domain.CommentStatusDeleted, &before, comment.PublishedAt, &now); err != nil {
+			return false, err
+		}
+	case actionRestore:
+		if comment.Status != domain.CommentStatusDeleted || comment.StatusBeforeDelete == nil {
+			return false, domain.ErrConflict
+		}
+		target := *comment.StatusBeforeDelete
+		var publishedAt *time.Time
+		if target == domain.CommentStatusPublished {
+			publishedAt = &now
+		}
+		if err := s.comments.UpdateStatus(ctx, comment.SiteID, comment.ID, target, nil, publishedAt, nil); err != nil {
+			return false, err
+		}
+	default:
+		return false, errors.New("comment: unknown moderation action")
+	}
+	return true, nil
 }
 
 // adminViewFor 加载作者资料并构建管理员视图。

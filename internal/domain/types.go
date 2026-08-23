@@ -361,6 +361,45 @@ type AdminFilter struct {
 	Limit    int
 }
 
+// BatchResult 是管理端批量命令的统一计数结果。
+// RequestedCount 始终等于请求中的唯一 ID 数量；ChangedCount 与
+// UnchangedCount 之和等于 RequestedCount。
+type BatchResult struct {
+	Action         string
+	RequestedCount int
+	ChangedCount   int
+	UnchangedCount int
+}
+
+// ResourceError 标识批量命令中导致整批回滚的资源。
+// Unwrap 保留底层领域 sentinel，使 HTTP 层仍可沿用统一错误翻译。
+type ResourceError struct {
+	ResourceID int64
+	Err        error
+}
+
+// Error 返回底层资源错误的文本，不包含资源 ID。
+func (e *ResourceError) Error() string {
+	if e == nil {
+		return "domain: resource error"
+	}
+	if e.Err == nil {
+		return "domain: resource error"
+	}
+	return e.Err.Error()
+}
+
+// Unwrap 暴露底层领域错误，供统一错误翻译使用。
+func (e *ResourceError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Err
+}
+
+// BatchItemError 是 ResourceError 的语义别名，便于调用方按批量语境命名。
+type BatchItemError = ResourceError
+
 // OwnerFilter 收窄当前用户本人的评论列表。nil 字段表示"不过滤"。
 type OwnerFilter struct {
 	SiteID *int64

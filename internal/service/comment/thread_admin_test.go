@@ -227,6 +227,68 @@ func TestAdminUpdateThreadValidation(t *testing.T) {
 	}
 }
 
+func TestAdminBatchThreadsCountsNoopAndChangesState(t *testing.T) {
+	db := newThreadAdminTestDB(t)
+	siteID, threadA, threadB := seedThreadAdminFixture(t, db)
+	svc := threadAdminService(db)
+	if _, err := repository.NewThreadRepo(db).UpdateCommentsEnabled(context.Background(), siteID, threadB, false); err != nil {
+		t.Fatalf("seed disabled thread: %v", err)
+	}
+
+	result, err := svc.AdminBatchThreads(context.Background(), siteID, AdminThreadBatchInput{
+		IDs: []int64{threadA, threadB}, Action: AdminThreadBatchDisable,
+	})
+	if err != nil {
+		t.Fatalf("disable threads: %v", err)
+	}
+	if result.ChangedCount != 1 || result.UnchangedCount != 1 || result.RequestedCount != 2 {
+		t.Fatalf("result = %+v, want one change and one no-op", result)
+	}
+	for _, id := range []int64{threadA, threadB} {
+		thread, findErr := repository.NewThreadRepo(db).GetBySiteAndID(context.Background(), siteID, id)
+		if findErr != nil || thread.CommentsEnabled {
+			t.Fatalf("thread %d = %+v, err=%v; want disabled", id, thread, findErr)
+		}
+	}
+}
+
+func TestAdminBatchThreadsRollsBackWhenLaterTargetMissing(t *testing.T) {
+	db := newThreadAdminTestDB(t)
+	siteID, threadA, _ := seedThreadAdminFixture(t, db)
+	svc := threadAdminService(db)
+
+	_, err := svc.AdminBatchThreads(context.Background(), siteID, AdminThreadBatchInput{
+		IDs: []int64{threadA, 999999}, Action: AdminThreadBatchDisable,
+	})
+	var resourceErr *domain.ResourceError
+	if !errors.As(err, &resourceErr) || resourceErr.ResourceID != 999999 {
+		t.Fatalf("error = %v, want failed id 999999", err)
+	}
+	thread, findErr := repository.NewThreadRepo(db).GetBySiteAndID(context.Background(), siteID, threadA)
+	if findErr != nil {
+		t.Fatalf("find thread after rollback: %v", findErr)
+	}
+	if !thread.CommentsEnabled {
+		t.Fatal("thread was changed despite later target failure")
+	}
+}
+
+func TestAdminBatchThreadsRequiresConfirmationAndSiteScope(t *testing.T) {
+	db := newThreadAdminTestDB(t)
+	siteID, threadA, _ := seedThreadAdminFixture(t, db)
+	svc := threadAdminService(db)
+	if _, err := svc.AdminBatchThreads(context.Background(), siteID, AdminThreadBatchInput{
+		IDs: []int64{threadA}, Action: AdminThreadBatchHardDelete,
+	}); !errors.Is(err, domain.ErrConfirmationRequired) {
+		t.Fatalf("missing confirmation = %v", err)
+	}
+	if _, err := svc.AdminBatchThreads(context.Background(), siteID+1, AdminThreadBatchInput{
+		IDs: []int64{threadA}, Action: AdminThreadBatchDisable,
+	}); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("cross-site target = %v, want not found", err)
+	}
+}
+
 // TestAdminUpdateThreadPageURL 验证 page_url 三态更新：覆盖、清空与缺省保持。
 func TestAdminUpdateThreadPageURL(t *testing.T) {
 	db := newThreadAdminTestDB(t)

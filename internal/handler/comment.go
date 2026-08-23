@@ -213,6 +213,8 @@ func meCommentsGet(service *comment.Service) gin.HandlerFunc {
 // RegisterAdminComments 挂载管理端评论端点。
 func RegisterAdminComments(admin *gin.RouterGroup, service *comment.Service) {
 	admin.GET("/comments", adminCommentsList(service))
+	// 静态 batch 路由必须在 /comments/:comment_id 之前注册。
+	admin.POST("/comments/batch", adminCommentsBatch(service))
 	admin.GET("/comments/:comment_id", adminCommentsGet(service))
 	admin.PUT("/comments/:comment_id/pin", adminCommentsPin(service, true))
 	admin.DELETE("/comments/:comment_id/pin", adminCommentsUnpin(service))
@@ -224,12 +226,79 @@ func RegisterAdminComments(admin *gin.RouterGroup, service *comment.Service) {
 	admin.POST("/comments/:comment_id/restore", adminCommentsRestore(service))
 }
 
+// @Summary 批量管理评论
+// @Tags admin-comments
+// @Accept json
+// @Produce json
+// @Param body body AdminBatchRequest true "评论批量命令"
+// @Success 200 {object} AdminBatchResponse "批量操作计数"
+// @Failure 400 {object} httpx.ErrorResponse "请求参数或 ID 无效"
+// @Failure 401 {object} httpx.ErrorResponse "需要管理员登录"
+// @Failure 403 {object} httpx.ErrorResponse "权限不足"
+// @Failure 404 {object} httpx.ErrorResponse "评论不存在"
+// @Failure 409 {object} httpx.ErrorResponse "评论状态或置顶资格冲突"
+// @Failure 422 {object} httpx.ErrorResponse "请求参数无效或需要确认"
+// @Param X-CSRF-Token header string true "CSRF token"
+// @Router /api/v1/admin/comments/batch [post]
+func adminCommentsBatch(service *comment.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		input, err := decodeCommentBatchRequest(c)
+		if err != nil {
+			writeBatchError(c, err)
+			return
+		}
+		result, err := service.AdminBatch(c.Request.Context(), input)
+		if err != nil {
+			writeBatchError(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, toAdminBatchResponse(*result))
+	}
+}
+
 // RegisterAdminThreads 挂载管理端线程（评论区开关）端点。
 func RegisterAdminThreads(admin *gin.RouterGroup, service *comment.Service) {
 	group := admin.Group("/sites/:site_id/threads")
 	group.GET("", adminThreadsList(service))
+	// 静态 batch 路由必须在 /threads/:thread_id 之前注册。
+	group.POST("/batch", adminThreadsBatch(service))
 	group.PATCH("/:thread_id", adminThreadsPatch(service))
 	group.DELETE("/:thread_id", adminThreadsDelete(service))
+}
+
+// @Summary 批量管理评论区
+// @Tags admin-threads
+// @Accept json
+// @Produce json
+// @Param site_id path integer true "站点 ID（十进制字符串）"
+// @Param body body AdminBatchRequest true "评论区批量命令"
+// @Success 200 {object} AdminBatchResponse "批量操作计数"
+// @Failure 400 {object} httpx.ErrorResponse "请求参数或 ID 无效"
+// @Failure 401 {object} httpx.ErrorResponse "需要管理员登录"
+// @Failure 403 {object} httpx.ErrorResponse "权限不足"
+// @Failure 404 {object} httpx.ErrorResponse "评论区不存在或不属于该站点"
+// @Failure 422 {object} httpx.ErrorResponse "请求参数无效或需要确认"
+// @Param X-CSRF-Token header string true "CSRF token"
+// @Router /api/v1/admin/sites/{site_id}/threads/batch [post]
+func adminThreadsBatch(service *comment.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		siteID, err := httpx.ParseIDParam(c, "site_id")
+		if err != nil {
+			writeBatchError(c, err)
+			return
+		}
+		input, err := decodeThreadBatchRequest(c)
+		if err != nil {
+			writeBatchError(c, err)
+			return
+		}
+		result, err := service.AdminBatchThreads(c.Request.Context(), siteID, input)
+		if err != nil {
+			writeBatchError(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, toAdminBatchResponse(*result))
+	}
 }
 
 // @Summary 按站点列出线程

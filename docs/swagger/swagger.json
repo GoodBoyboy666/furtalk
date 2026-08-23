@@ -106,6 +106,82 @@
                 }
             }
         },
+        "/api/v1/admin/comments/batch": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin-comments"
+                ],
+                "summary": "批量管理评论",
+                "parameters": [
+                    {
+                        "description": "评论批量命令",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.AdminBatchRequest"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "CSRF token",
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "批量操作计数",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.AdminBatchResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数或 ID 无效",
+                        "schema": {
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "需要管理员登录",
+                        "schema": {
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "权限不足",
+                        "schema": {
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "评论不存在",
+                        "schema": {
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "评论状态或置顶资格冲突",
+                        "schema": {
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "请求参数无效或需要确认",
+                        "schema": {
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/admin/comments/{comment_id}": {
             "get": {
                 "produces": [
@@ -1534,6 +1610,83 @@
                 }
             }
         },
+        "/api/v1/admin/sites/{site_id}/threads/batch": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin-threads"
+                ],
+                "summary": "批量管理评论区",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "站点 ID（十进制字符串）",
+                        "name": "site_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "评论区批量命令",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.AdminBatchRequest"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "CSRF token",
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "批量操作计数",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.AdminBatchResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数或 ID 无效",
+                        "schema": {
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "需要管理员登录",
+                        "schema": {
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "权限不足",
+                        "schema": {
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "评论区不存在或不属于该站点",
+                        "schema": {
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "请求参数无效或需要确认",
+                        "schema": {
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/admin/sites/{site_id}/threads/{thread_id}": {
             "delete": {
                 "produces": [
@@ -1865,6 +2018,82 @@
                     },
                     "409": {
                         "description": "邮箱已被注册",
+                        "schema": {
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/admin/users/batch": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin-users"
+                ],
+                "summary": "批量管理用户",
+                "parameters": [
+                    {
+                        "description": "用户批量命令",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.AdminBatchRequest"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "CSRF token",
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "批量操作计数",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.AdminBatchResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数无效",
+                        "schema": {
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "需要管理员登录",
+                        "schema": {
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "不能删除当前操作者或权限不足",
+                        "schema": {
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "用户不存在",
+                        "schema": {
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "生命周期冲突或不能移除最后一个管理员",
+                        "schema": {
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "请求参数无效或缺少破坏性操作确认",
                         "schema": {
                             "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
@@ -4378,6 +4607,32 @@
         }
     },
     "definitions": {
+        "furtalk_internal_platform_httpx.ErrorBody": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "details": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "message": {
+                    "type": "string"
+                },
+                "request_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "furtalk_internal_platform_httpx.ErrorResponse": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorBody"
+                }
+            }
+        },
         "furtalk_internal_service_comment.OptionalNullableString": {
             "type": "object",
             "properties": {
@@ -4386,6 +4641,78 @@
                 },
                 "value": {
                     "type": "string"
+                }
+            }
+        },
+        "furtalk_internal_service_identity.OptionalNullableString": {
+            "type": "object",
+            "properties": {
+                "set": {
+                    "type": "boolean"
+                },
+                "value": {
+                    "type": "string"
+                }
+            }
+        },
+        "furtalk_internal_service_setting.SettingItem": {
+            "type": "object",
+            "properties": {
+                "key": {
+                    "type": "string"
+                },
+                "type": {
+                    "$ref": "#/definitions/furtalk_internal_service_setting.SettingType"
+                },
+                "value": {}
+            }
+        },
+        "furtalk_internal_service_setting.SettingType": {
+            "type": "string",
+            "enum": [
+                "string",
+                "integer",
+                "boolean",
+                "json"
+            ],
+            "x-enum-varnames": [
+                "SettingTypeString",
+                "SettingTypeInteger",
+                "SettingTypeBoolean",
+                "SettingTypeJSON"
+            ]
+        },
+        "internal_handler.AdminBatchRequest": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string"
+                },
+                "confirm": {
+                    "type": "boolean"
+                },
+                "ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "internal_handler.AdminBatchResponse": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string"
+                },
+                "changed_count": {
+                    "type": "integer"
+                },
+                "requested_count": {
+                    "type": "integer"
+                },
+                "unchanged_count": {
+                    "type": "integer"
                 }
             }
         },
@@ -5738,70 +6065,6 @@
                     "type": "boolean"
                 }
             }
-        },
-        "furtalk_internal_platform_httpx.ErrorBody": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "type": "string"
-                },
-                "details": {
-                    "type": "object",
-                    "additionalProperties": {}
-                },
-                "message": {
-                    "type": "string"
-                },
-                "request_id": {
-                    "type": "string"
-                }
-            }
-        },
-        "furtalk_internal_platform_httpx.ErrorResponse": {
-            "type": "object",
-            "properties": {
-                "error": {
-                    "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorBody"
-                }
-            }
-        },
-        "furtalk_internal_service_identity.OptionalNullableString": {
-            "type": "object",
-            "properties": {
-                "set": {
-                    "type": "boolean"
-                },
-                "value": {
-                    "type": "string"
-                }
-            }
-        },
-        "furtalk_internal_service_setting.SettingItem": {
-            "type": "object",
-            "properties": {
-                "key": {
-                    "type": "string"
-                },
-                "type": {
-                    "$ref": "#/definitions/furtalk_internal_service_setting.SettingType"
-                },
-                "value": {}
-            }
-        },
-        "furtalk_internal_service_setting.SettingType": {
-            "type": "string",
-            "enum": [
-                "string",
-                "integer",
-                "boolean",
-                "json"
-            ],
-            "x-enum-varnames": [
-                "SettingTypeString",
-                "SettingTypeInteger",
-                "SettingTypeBoolean",
-                "SettingTypeJSON"
-            ]
         }
     }
 }
