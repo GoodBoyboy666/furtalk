@@ -50,6 +50,7 @@ func ClearWidgetCookie(c *gin.Context) {
 }
 
 const widgetCredentialKey = "widget_credential"
+const widgetPrincipalKey = "widget_principal"
 
 // WidgetPrincipalResolution 认证 widget 评论路由（强制要求有效凭证）。
 func WidgetPrincipalResolution(verifier comment.WidgetCredentialVerifier, settingsReader comment.WidgetSettingsReader, authz PrincipalStore) gin.HandlerFunc {
@@ -68,7 +69,8 @@ func WidgetPrincipalResolution(verifier comment.WidgetCredentialVerifier, settin
 			httpx.Abort(c, http.StatusUnauthorized, "invalid_credentials", "invalid widget credential")
 			return
 		}
-		if err := checkWidgetCredential(c, verifier, settingsReader, authz, cred); err != nil {
+		principal, err := checkWidgetCredential(c, verifier, settingsReader, authz, cred)
+		if err != nil {
 			httpx.Abort(c, http.StatusForbidden, "widget_credential_invalid", "widget credential no longer applies")
 			return
 		}
@@ -80,6 +82,7 @@ func WidgetPrincipalResolution(verifier comment.WidgetCredentialVerifier, settin
 			}
 		}
 		c.Set(widgetCredentialKey, cred)
+		c.Set(widgetPrincipalKey, principal)
 		c.Request = c.Request.WithContext(logging.WithAttrs(c.Request.Context(),
 			logging.ID("user_id", cred.UserID()),
 			logging.ID("site_id", cred.SiteID()),
@@ -112,7 +115,8 @@ func WidgetOptionalResolution(verifier comment.WidgetCredentialVerifier, setting
 			c.Next()
 			return
 		}
-		if err := checkWidgetCredential(c, verifier, settingsReader, authz, cred); err != nil {
+		principal, err := checkWidgetCredential(c, verifier, settingsReader, authz, cred)
+		if err != nil {
 			// 有效签名但 epoch/site/活跃主体/实时角色矩阵不满足：不授予 principal，
 			// 也不清除（仍可能是其他合法场景的 Cookie）。由 handler 按提交邮箱
 			// 决定失败关闭或匿名放行。
@@ -127,6 +131,7 @@ func WidgetOptionalResolution(verifier comment.WidgetCredentialVerifier, setting
 			}
 		}
 		c.Set(widgetCredentialKey, cred)
+		c.Set(widgetPrincipalKey, principal)
 		c.Request = c.Request.WithContext(logging.WithAttrs(c.Request.Context(),
 			logging.ID("user_id", cred.UserID()),
 			logging.ID("site_id", cred.SiteID()),
@@ -136,23 +141,23 @@ func WidgetOptionalResolution(verifier comment.WidgetCredentialVerifier, setting
 }
 
 // checkWidgetCredential 校验凭证的实时 epoch、站点绑定、活跃主体与实时模式角色矩阵。
-func checkWidgetCredential(c *gin.Context, verifier comment.WidgetCredentialVerifier, settingsReader comment.WidgetSettingsReader, authz PrincipalStore, cred comment.WidgetCredential) error {
+func checkWidgetCredential(c *gin.Context, verifier comment.WidgetCredentialVerifier, settingsReader comment.WidgetSettingsReader, authz PrincipalStore, cred comment.WidgetCredential) (domain.Principal, error) {
 	mode, epoch, err := settingsReader.WidgetConfig(c.Request.Context())
 	if err != nil {
 		c.Error(err)
-		return err
+		return domain.Principal{}, err
 	}
 	if cred.Epoch() != epoch {
-		return domain.ErrCredentialStale
+		return domain.Principal{}, domain.ErrCredentialStale
 	}
 	principal, err := authz.Resolve(c.Request.Context(), cred.UserID())
 	if err != nil {
-		return err
+		return domain.Principal{}, err
 	}
 	if principal.Status != domain.UserStatusActive || !comment.WidgetRoleAllowed(mode, principal.Role) {
-		return domain.ErrCredentialMode
+		return domain.Principal{}, domain.ErrCredentialMode
 	}
-	return nil
+	return principal, nil
 }
 
 // WidgetCredentialOf 返回当前请求已验证的 widget 凭据。
@@ -163,6 +168,17 @@ func WidgetCredentialOf(c *gin.Context) (comment.WidgetCredential, bool) {
 	}
 	cred, ok := value.(comment.WidgetCredential)
 	return cred, ok
+}
+
+// WidgetPrincipalOf 返回与当前 Widget 凭据一起实时解析的主体。
+// 主体与凭据声明分开保存，角色敏感操作不会信任客户端提交的角色数据。
+func WidgetPrincipalOf(c *gin.Context) (domain.Principal, bool) {
+	value, ok := c.Get(widgetPrincipalKey)
+	if !ok {
+		return domain.Principal{}, false
+	}
+	principal, ok := value.(domain.Principal)
+	return principal, ok
 }
 
 // SiteIDFromCredential 从已验证 widget credential 读取站点 id。

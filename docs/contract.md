@@ -127,12 +127,14 @@
 | 方法 | 路径 | 鉴权 | 说明 |
 |---|---|---|---|
 | GET | /api/v1/widget/sites/{site_id}/runtime-config | 公开 | 站点运行时配置（含按 action 的公共 CAPTCHA 投影） |
-| GET | /api/v1/widget/sites/{site_id}/comments | 公开（可选 widget credential） | 评论列表（`page_key` 必填；`sort=asc|desc|hot`，缺省用实例策略；keyset 游标分页，hot 游标只能用于 hot；响应含 `thread.comments_enabled`、`next_cursor`、每条评论 `like_count` 与查看者 `liked_by_me`） |
+| GET | /api/v1/widget/sites/{site_id}/comments | 公开（可选 widget credential） | 评论列表（`page_key` 必填；`sort=asc|desc|hot`，缺省用实例策略；置顶根评论先于普通评论、组内继续按所选排序；keyset 游标分页；响应含 `thread.comments_enabled`、`next_cursor`、每条评论 `is_pinned`、`like_count` 与查看者 `liked_by_me`） |
 | GET | /api/v1/widget/sites/{site_id}/latest-comments | 公开 | 站点最新评论列表（默认 25，最大 25；按 `(created_at DESC, id DESC)` 排序，包含页面元数据） |
 | POST | /api/v1/widget/sites/{site_id}/comments | 可选 widget credential | 统一评论创建：匿名普通邮箱单次提交；管理员邮箱无凭据时返回受控 `need_auth_code`（线程关闭时 409 `thread_closed`） |
 | DELETE | /api/v1/widget/comments/{comment_id} | widget credential | 删除自己的评论 |
 | PUT | /api/v1/widget/sites/{site_id}/comments/{comment_id}/like | widget credential | 点赞已发布评论（幂等），返回 `{comment_id, like_count, liked}` |
 | DELETE | /api/v1/widget/sites/{site_id}/comments/{comment_id}/like | widget credential | 取消点赞已发布评论（幂等，计数不为负） |
+| PUT | /api/v1/widget/sites/{site_id}/comments/{comment_id}/pin | 管理员 widget credential | 置顶已发布根评论（幂等），返回 `{comment_id, is_pinned}` |
+| DELETE | /api/v1/widget/sites/{site_id}/comments/{comment_id}/pin | 管理员 widget credential | 取消根评论置顶（幂等），返回 `{comment_id, is_pinned}` |
 | POST | /api/v1/widget/comment-authorizations/exchange | 公开 | 把一次性授权码兑换为 `widget_authenticated` 并写入 CHIPS Cookie |
 | GET | /api/v1/widget/session | 公开（CHIPS cookie） | 会话探测 |
 | DELETE | /api/v1/widget/session | 公开 | 清除会话 |
@@ -155,6 +157,19 @@
   决胜，不聚合回复点赞、无时间衰减。
 - hot 游标为版本化 `(like_count, created_at, id)` 编码，只能用于 hot；切换排序时
   丢弃旧游标与已加载行并重载第一页。
+
+### 评论置顶（PUT/DELETE /admin/comments/{comment_id}/pin 与 Widget pin 路由）
+
+- 置顶只允许管理员执行：后台使用 RequireAdmin，Widget 使用已验证且站点绑定的管理员
+  凭据；普通用户、匿名访客、失效或跨站凭据均被拒绝。
+- 只有根评论可以置顶，且从未置顶到置顶只接受 `published` 状态；回复和其他状态返回
+  409。置顶与取消命令均幂等。
+- 置顶根评论组整体位于未置顶评论之前，组内继续遵循 `asc`、`desc` 或 `hot` 的当前
+  排序；不限制同一评论区的置顶数量，也不记录置顶时间或手工次序。
+- 评论进入 `pending`、`spam` 或 `deleted` 时保留 `is_pinned`，公开读取仍只返回
+  `published`；恢复发布后自动回到置顶组。管理员可对隐藏但仍存在的根评论取消置顶。
+- Widget 只在已经探测到有效管理员 Widget 会话时，在根评论现有回复/点赞操作栏显示快捷
+  操作，不新增管理员授权入口；所有访客仍能看到公开置顶标识。
 
 ### 统一评论创建与管理员保护（POST /api/v1/widget/sites/{site_id}/comments）
 
@@ -210,6 +225,7 @@
 | DELETE | /api/v1/admin/sites/{site_id}/threads/{thread_id} | 删除线程（需 `confirm=true`；硬删除线程及其下全部评论，跨站点 404，204） |
 | GET | /api/v1/admin/comments | 评论管理列表（页码分页；支持正文/作者邮箱/昵称 `q` 搜索） |
 | GET/PATCH/DELETE | /api/v1/admin/comments/{comment_id} | 管理评论（PATCH 编辑正文） |
+| PUT/DELETE | /api/v1/admin/comments/{comment_id}/pin | 管理员置顶/取消置顶根评论（幂等） |
 | POST | /api/v1/admin/comments/{comment_id}/publish | 发布 |
 | POST | /api/v1/admin/comments/{comment_id}/pending | 移入待审核 |
 | POST | /api/v1/admin/comments/{comment_id}/spam | 标记垃圾 |
@@ -448,6 +464,9 @@
   `(site_id, root_id)`，均指向 `UNIQUE (site_id, id)`。
 - 评论软删除保留占位节点（非 `gorm.DeletedAt`）；垃圾、软删除与单条硬删除都只
   处理选中的评论，其回复保持原状态与正文。
+- `comments.is_pinned` 为 `NOT NULL DEFAULT false`；数据库 CHECK 保证置顶行是持久化根评论
+  （`parent_id IS NULL`、`root_id IS NULL` 且 `depth = 0`）。该字段与审核状态正交：隐藏评论可保留置顶状态，恢复发布后重新
+  进入置顶组。
 - `comments` 含 `reply_to_user_id` 列：可空、索引，指向 `users.id`，外键
   `ON DELETE SET NULL`。创建回复时写入被回复者的用户 ID；被回复者账号硬删除后
   该列被清空，回复继续保留并显示「回复 已注销用户」。

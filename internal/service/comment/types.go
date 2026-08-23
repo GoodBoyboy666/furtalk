@@ -110,6 +110,7 @@ type CommentView struct {
 	BodyMarkdown       string
 	Status             domain.CommentStatus
 	StatusBeforeDelete *domain.CommentStatus
+	IsPinned           bool
 	AuthorNickname     string
 	AuthorWebsite      *string
 	AuthorRole         domain.Role
@@ -123,6 +124,12 @@ type CommentView struct {
 	LikeCount int64
 	// LikedByMe 只反映已验证查看者是否点赞；匿名读取恒为 false。
 	LikedByMe bool
+}
+
+// PinResult 是 Widget 置顶命令返回的权威状态。
+type PinResult struct {
+	CommentID int64
+	IsPinned  bool
 }
 
 // ThreadView 是一个线程的扁平评论列表及其元数据。
@@ -305,6 +312,7 @@ func toCommentView(comment *domain.Comment, nickname string, website *string, ro
 		BodyMarkdown:       comment.BodyMarkdown,
 		Status:             comment.Status,
 		StatusBeforeDelete: comment.StatusBeforeDelete,
+		IsPinned:           comment.IsPinned,
 		AuthorNickname:     nickname,
 		AuthorWebsite:      website,
 		AuthorRole:         role,

@@ -233,17 +233,19 @@ type Comment struct {
 	BodyMarkdown       string
 	Status             CommentStatus
 	StatusBeforeDelete *CommentStatus
-	IPMode             PrivacyMode
-	IPValue            *string
-	UAMode             PrivacyMode
-	UARaw              *string
-	UABrowser          *string
-	UAOS               *string
-	UADevice           *string
-	CreatedAt          time.Time
-	UpdatedAt          time.Time
-	PublishedAt        *time.Time
-	DeletedAt          *time.Time
+	// IsPinned 标记根评论是否属于公开置顶分组；持久化层同时约束回复不能携带该标记。
+	IsPinned    bool
+	IPMode      PrivacyMode
+	IPValue     *string
+	UAMode      PrivacyMode
+	UARaw       *string
+	UABrowser   *string
+	UAOS        *string
+	UADevice    *string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+	PublishedAt *time.Time
+	DeletedAt   *time.Time
 }
 
 // Thread 是线程的业务数据。
@@ -291,6 +293,8 @@ type ThreadPatch struct {
 // LikeCount 与 Hot 仅对 hot 排序游标有意义：hot 游标携带
 // (like_count, created_at, id) 且带版本/排序标记，方向游标不得用于 hot。
 type Cursor struct {
+	// Pinned 是公开排序中的置顶分组位；旧游标解码为 false 以保持兼容。
+	Pinned    bool
 	CreatedAt time.Time
 	ID        int64
 	LikeCount int64

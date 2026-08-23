@@ -357,6 +357,134 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/admin/comments/{comment_id}/pin": {
+            "put": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin-comments"
+                ],
+                "summary": "设置或取消评论置顶",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "评论 ID（十进制字符串）",
+                        "name": "comment_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "CSRF token",
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "更新后的管理视图",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.AdminCommentResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数无效",
+                        "schema": {
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "需要管理员登录",
+                        "schema": {
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "权限不足",
+                        "schema": {
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "评论不存在",
+                        "schema": {
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "回复评论或评论状态不允许置顶",
+                        "schema": {
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin-comments"
+                ],
+                "summary": "取消评论置顶",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "评论 ID（十进制字符串）",
+                        "name": "comment_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "CSRF token",
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "更新后的管理视图",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.AdminCommentResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数无效",
+                        "schema": {
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "需要管理员登录",
+                        "schema": {
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "权限不足",
+                        "schema": {
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "评论不存在",
+                        "schema": {
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "回复评论不允许取消置顶",
+                        "schema": {
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/admin/comments/{comment_id}/publish": {
             "post": {
                 "produces": [
@@ -3992,6 +4120,122 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/widget/sites/{site_id}/comments/{comment_id}/pin": {
+            "put": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "widget"
+                ],
+                "summary": "置顶一条根评论",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "站点 ID（十进制字符串）",
+                        "name": "site_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "评论 ID（十进制字符串）",
+                        "name": "comment_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "权威的置顶状态（幂等）",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.CommentPinResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "缺少 widget 凭证",
+                        "schema": {
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "凭证不是管理员、站点不匹配或 origin 不被允许",
+                        "schema": {
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "评论不存在",
+                        "schema": {
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "回复评论或评论状态不允许置顶",
+                        "schema": {
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "widget"
+                ],
+                "summary": "取消一条根评论置顶",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "站点 ID（十进制字符串）",
+                        "name": "site_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "评论 ID（十进制字符串）",
+                        "name": "comment_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "权威的置顶状态（幂等）",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.CommentPinResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "缺少 widget 凭证",
+                        "schema": {
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "凭证不是管理员、站点不匹配或 origin 不被允许",
+                        "schema": {
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "评论不存在",
+                        "schema": {
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "回复评论或评论状态不允许取消置顶",
+                        "schema": {
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/widget/sites/{site_id}/latest-comments": {
             "get": {
                 "produces": [
@@ -4142,32 +4386,6 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "furtalk_internal_platform_httpx.ErrorBody": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "type": "string"
-                },
-                "details": {
-                    "type": "object",
-                    "additionalProperties": {}
-                },
-                "message": {
-                    "type": "string"
-                },
-                "request_id": {
-                    "type": "string"
-                }
-            }
-        },
-        "furtalk_internal_platform_httpx.ErrorResponse": {
-            "type": "object",
-            "properties": {
-                "error": {
-                    "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorBody"
-                }
-            }
-        },
         "furtalk_internal_service_comment.OptionalNullableString": {
             "type": "object",
             "properties": {
@@ -4178,44 +4396,6 @@ const docTemplate = `{
                     "type": "string"
                 }
             }
-        },
-        "furtalk_internal_service_identity.OptionalNullableString": {
-            "type": "object",
-            "properties": {
-                "set": {
-                    "type": "boolean"
-                },
-                "value": {
-                    "type": "string"
-                }
-            }
-        },
-        "furtalk_internal_service_setting.SettingItem": {
-            "type": "object",
-            "properties": {
-                "key": {
-                    "type": "string"
-                },
-                "type": {
-                    "$ref": "#/definitions/furtalk_internal_service_setting.SettingType"
-                },
-                "value": {}
-            }
-        },
-        "furtalk_internal_service_setting.SettingType": {
-            "type": "string",
-            "enum": [
-                "string",
-                "integer",
-                "boolean",
-                "json"
-            ],
-            "x-enum-varnames": [
-                "SettingTypeString",
-                "SettingTypeInteger",
-                "SettingTypeBoolean",
-                "SettingTypeJSON"
-            ]
         },
         "internal_handler.AdminCommentListResponse": {
             "type": "object",
@@ -4266,6 +4446,9 @@ const docTemplate = `{
                 },
                 "ip_value": {
                     "type": "string"
+                },
+                "is_pinned": {
+                    "type": "boolean"
                 },
                 "parent_id": {
                     "type": "string"
@@ -4632,6 +4815,17 @@ const docTemplate = `{
                 }
             }
         },
+        "internal_handler.CommentPinResponse": {
+            "type": "object",
+            "properties": {
+                "comment_id": {
+                    "type": "string"
+                },
+                "is_pinned": {
+                    "type": "boolean"
+                }
+            }
+        },
         "internal_handler.CommentResponse": {
             "type": "object",
             "properties": {
@@ -4658,6 +4852,9 @@ const docTemplate = `{
                 },
                 "id": {
                     "type": "string"
+                },
+                "is_pinned": {
+                    "type": "boolean"
                 },
                 "like_count": {
                     "description": "LikeCount 是公开的 Like 计数，始终存在。",
@@ -5549,6 +5746,70 @@ const docTemplate = `{
                     "type": "boolean"
                 }
             }
+        },
+        "furtalk_internal_platform_httpx.ErrorBody": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "details": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "message": {
+                    "type": "string"
+                },
+                "request_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "furtalk_internal_platform_httpx.ErrorResponse": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorBody"
+                }
+            }
+        },
+        "furtalk_internal_service_identity.OptionalNullableString": {
+            "type": "object",
+            "properties": {
+                "set": {
+                    "type": "boolean"
+                },
+                "value": {
+                    "type": "string"
+                }
+            }
+        },
+        "furtalk_internal_service_setting.SettingItem": {
+            "type": "object",
+            "properties": {
+                "key": {
+                    "type": "string"
+                },
+                "type": {
+                    "$ref": "#/definitions/furtalk_internal_service_setting.SettingType"
+                },
+                "value": {}
+            }
+        },
+        "furtalk_internal_service_setting.SettingType": {
+            "type": "string",
+            "enum": [
+                "string",
+                "integer",
+                "boolean",
+                "json"
+            ],
+            "x-enum-varnames": [
+                "SettingTypeString",
+                "SettingTypeInteger",
+                "SettingTypeBoolean",
+                "SettingTypeJSON"
+            ]
         }
     }
 }`

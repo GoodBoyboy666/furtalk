@@ -327,7 +327,7 @@ func (r *CommentRepo) FindGlobalByID(ctx context.Context, id int64) (*domain.Com
 const publicListCteAnchor = `
 	SELECT id, site_id, thread_id, user_id, reply_to_user_id, depth, body_markdown, status,
 	       status_before_delete, ip_mode, ip_value, ua_mode, ua_raw, ua_browser, ua_os, ua_device,
-	       created_at, updated_at, published_at, deleted_at,
+	       created_at, updated_at, published_at, deleted_at, is_pinned,
 	       CAST(NULL AS BIGINT) AS vis_parent_id, CAST(NULL AS BIGINT) AS vis_root_id
 	  FROM comments
 	 WHERE site_id = ? AND thread_id = ? AND parent_id IS NULL`
@@ -339,7 +339,7 @@ const publicListCteStep = `
 	UNION ALL
 	SELECT c.id, c.site_id, c.thread_id, c.user_id, c.reply_to_user_id, c.depth, c.body_markdown, c.status,
 	       c.status_before_delete, c.ip_mode, c.ip_value, c.ua_mode, c.ua_raw, c.ua_browser, c.ua_os, c.ua_device,
-	       c.created_at, c.updated_at, c.published_at, c.deleted_at,
+	       c.created_at, c.updated_at, c.published_at, c.deleted_at, c.is_pinned,
 	       CASE WHEN v.status = 'published' THEN v.id ELSE v.vis_parent_id END AS vis_parent_id,
 	       CASE WHEN v.status = 'published' THEN COALESCE(v.vis_root_id, v.id) ELSE v.vis_root_id END AS vis_root_id
 	  FROM comments AS c
@@ -357,6 +357,7 @@ SELECT visible.id, visible.site_id, visible.thread_id, visible.user_id,
        visible.status_before_delete, visible.ip_mode, visible.ip_value,
        visible.ua_mode, visible.ua_raw, visible.ua_browser, visible.ua_os, visible.ua_device,
        visible.created_at, visible.updated_at, visible.published_at, visible.deleted_at,
+       visible.is_pinned,
        users.email_normalized AS author_email_normalized,
        users.nickname AS author_nickname,
        users.website_url AS author_website,
@@ -401,26 +402,34 @@ func (r *CommentRepo) ListPublic(ctx context.Context, siteID, threadID int64, so
 	}
 	args = append(args, string(domain.CommentStatusPublished))
 	qualifier := "visible"
+	// Compare the pinned group through an integer expression. This keeps the
+	// keyset SQL portable across SQLite and PostgreSQL instead of relying on
+	// dialect-specific boolean ordering operators.
+	pinnedExpr := "CASE WHEN visible.is_pinned THEN 1 ELSE 0 END"
+	pinnedCursor := 0
+	if cursor != nil && cursor.Pinned {
+		pinnedCursor = 1
+	}
 	switch sort {
 	case domain.CommentSortHot:
 		countExpr := likeCountExpr(qualifier)
 		if cursor != nil {
-			sql += " AND (" + countExpr + " < ? OR (" + countExpr + " = ? AND (visible.created_at < ? OR (visible.created_at = ? AND visible.id < ?))))"
-			args = append(args, cursor.LikeCount, cursor.LikeCount, cursor.CreatedAt, cursor.CreatedAt, cursor.ID)
+			sql += " AND (" + pinnedExpr + " < ? OR (" + pinnedExpr + " = ? AND (" + countExpr + " < ? OR (" + countExpr + " = ? AND (visible.created_at < ? OR (visible.created_at = ? AND visible.id < ?))))))"
+			args = append(args, pinnedCursor, pinnedCursor, cursor.LikeCount, cursor.LikeCount, cursor.CreatedAt, cursor.CreatedAt, cursor.ID)
 		}
-		sql += " ORDER BY " + countExpr + " DESC, visible.created_at DESC, visible.id DESC"
+		sql += " ORDER BY " + pinnedExpr + " DESC, " + countExpr + " DESC, visible.created_at DESC, visible.id DESC"
 	case domain.CommentSortDesc:
 		if cursor != nil {
-			sql += " AND (visible.created_at < ? OR (visible.created_at = ? AND visible.id < ?))"
-			args = append(args, cursor.CreatedAt, cursor.CreatedAt, cursor.ID)
+			sql += " AND (" + pinnedExpr + " < ? OR (" + pinnedExpr + " = ? AND (visible.created_at < ? OR (visible.created_at = ? AND visible.id < ?))))"
+			args = append(args, pinnedCursor, pinnedCursor, cursor.CreatedAt, cursor.CreatedAt, cursor.ID)
 		}
-		sql += " ORDER BY visible.created_at DESC, visible.id DESC"
+		sql += " ORDER BY " + pinnedExpr + " DESC, visible.created_at DESC, visible.id DESC"
 	default:
 		if cursor != nil {
-			sql += " AND (visible.created_at > ? OR (visible.created_at = ? AND visible.id > ?))"
-			args = append(args, cursor.CreatedAt, cursor.CreatedAt, cursor.ID)
+			sql += " AND (" + pinnedExpr + " < ? OR (" + pinnedExpr + " = ? AND (visible.created_at > ? OR (visible.created_at = ? AND visible.id > ?))))"
+			args = append(args, pinnedCursor, pinnedCursor, cursor.CreatedAt, cursor.CreatedAt, cursor.ID)
 		}
-		sql += " ORDER BY visible.created_at ASC, visible.id ASC"
+		sql += " ORDER BY " + pinnedExpr + " DESC, visible.created_at ASC, visible.id ASC"
 	}
 	if limit <= 0 {
 		limit = 50
@@ -666,6 +675,37 @@ func (r *CommentRepo) UpdateStatus(ctx context.Context, siteID, id int64, status
 	return nil
 }
 
+// SetPinned 只更新站点范围内评论的置顶位并返回权威行。
+// 先读后写使 SQLite 在同值更新 RowsAffected 为零时仍保持幂等。
+func (r *CommentRepo) SetPinned(ctx context.Context, siteID, id int64, pinned bool) (*domain.Comment, error) {
+	db := gormtx.DB(ctx, r.db)
+	var row model.Comment
+	if err := db.Where("site_id = ? AND id = ?", siteID, id).First(&row).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, domain.ErrNotFound
+		}
+		return nil, fmt.Errorf("find comment for pinned update: %w", err)
+	}
+	if row.IsPinned != pinned {
+		if err := db.Model(&model.Comment{}).
+			Where("site_id = ? AND id = ?", siteID, id).
+			Update("is_pinned", pinned).Error; err != nil {
+			if strings.Contains(strings.ToLower(err.Error()), "check constraint") || strings.Contains(strings.ToLower(err.Error()), "ck_comments_pinned_root") {
+				return nil, fmt.Errorf("set comment pinned: %w", domain.ErrConflict)
+			}
+			return nil, fmt.Errorf("set comment pinned: %w", err)
+		}
+	}
+	if err := db.Where("site_id = ? AND id = ?", siteID, id).First(&row).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, domain.ErrNotFound
+		}
+		return nil, fmt.Errorf("reload comment after pinned update: %w", err)
+	}
+	out := row.ToComment()
+	return &out, nil
+}
+
 // DetachCommentChildren 解除保留评论对待删除评论的 parent_id / root_id 引用。
 // 必须在删除目标行前执行，复合外键 ON DELETE CASCADE 否则会误删回复；
 // 保留评论自身保持原状态与正文。同一事务内与 HardDelete 一起提交。
@@ -782,6 +822,7 @@ func fromComment(c *domain.Comment) *model.Comment {
 		BodyMarkdown:       c.BodyMarkdown,
 		Status:             c.Status,
 		StatusBeforeDelete: c.StatusBeforeDelete,
+		IsPinned:           c.IsPinned,
 		IPMode:             c.IPMode,
 		IPValue:            c.IPValue,
 		UAMode:             c.UAMode,

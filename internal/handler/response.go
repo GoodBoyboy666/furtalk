@@ -191,6 +191,7 @@ type CommentResponse struct {
 	Depth          int     `json:"depth"`
 	Body           string  `json:"body"`
 	Status         string  `json:"status"`
+	IsPinned       bool    `json:"is_pinned"`
 	AuthorNickname string  `json:"author_nickname"`
 	AuthorWebsite  *string `json:"author_website"`
 	AuthorRole     string  `json:"author_role"`
@@ -212,6 +213,12 @@ type LikeResponse struct {
 	CommentID string `json:"comment_id"`
 	LikeCount int64  `json:"like_count"`
 	Liked     bool   `json:"liked"`
+}
+
+// CommentPinResponse 是 Widget 置顶变更返回的权威结果。
+type CommentPinResponse struct {
+	CommentID string `json:"comment_id"`
+	IsPinned  bool   `json:"is_pinned"`
 }
 
 // ThreadMetaResponse 是线程元数据。
@@ -354,6 +361,7 @@ type AdminCommentResponse struct {
 	Depth          int     `json:"depth"`
 	Body           string  `json:"body"`
 	Status         string  `json:"status"`
+	IsPinned       bool    `json:"is_pinned"`
 	AuthorEmail    string  `json:"author_email"`
 	AuthorNickname string  `json:"author_nickname"`
 	AuthorWebsite  *string `json:"author_website"`
@@ -458,6 +466,7 @@ func toCommentResponse(view comment.CommentView) CommentResponse {
 		Depth:           view.Depth,
 		Body:            view.BodyMarkdown,
 		Status:          string(view.Status),
+		IsPinned:        view.IsPinned,
 		AuthorNickname:  view.AuthorNickname,
 		AuthorWebsite:   view.AuthorWebsite,
 		AuthorRole:      string(view.AuthorRole),
@@ -576,6 +585,7 @@ func toAdminCommentResponse(view comment.AdminCommentView) AdminCommentResponse 
 		Depth:           base.Depth,
 		Body:            base.Body,
 		Status:          base.Status,
+		IsPinned:        base.IsPinned,
 		AuthorEmail:     view.Email,
 		AuthorNickname:  base.AuthorNickname,
 		AuthorWebsite:   base.AuthorWebsite,

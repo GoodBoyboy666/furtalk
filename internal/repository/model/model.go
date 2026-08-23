@@ -218,7 +218,7 @@ func (r Thread) ToThread() domain.Thread {
 // 复合外键 (site_id, thread_id) / (site_id, parent_id) / (site_id, root_id)
 // 对 UNIQUE (site_id, id) 的约束语义保持不变。
 type Comment struct {
-	ID                 int64                 `gorm:"primaryKey;autoIncrement;generated:identity;uniqueIndex:uq_comments_site_id,priority:2;index:idx_comments_public,priority:4;index:idx_comments_site_status,priority:4;index:idx_comments_user,priority:3;index:idx_comments_site_parent,priority:4;index:idx_comments_site_root,priority:4"`
+	ID                 int64                 `gorm:"primaryKey;autoIncrement;generated:identity;uniqueIndex:uq_comments_site_id,priority:2;index:idx_comments_public,priority:5;index:idx_comments_site_status,priority:4;index:idx_comments_user,priority:3;index:idx_comments_site_parent,priority:4;index:idx_comments_site_root,priority:4"`
 	SiteID             int64                 `gorm:"column:site_id;not null;uniqueIndex:uq_comments_site_id,priority:1;index:idx_comments_public,priority:1;index:idx_comments_site_status,priority:1;index:idx_comments_site_parent,priority:1;index:idx_comments_site_root,priority:1"`
 	ThreadID           int64                 `gorm:"column:thread_id;not null;index:idx_comments_public,priority:2"`
 	UserID             int64                 `gorm:"column:user_id;not null;index:idx_comments_user,priority:1"`
@@ -236,7 +236,8 @@ type Comment struct {
 	UABrowser          *string               `gorm:"column:ua_browser;type:text"`
 	UAOS               *string               `gorm:"column:ua_os;type:text"`
 	UADevice           *string               `gorm:"column:ua_device;type:text"`
-	CreatedAt          time.Time             `gorm:"column:created_at;precision:6;autoCreateTime;index:idx_comments_public,priority:3;index:idx_comments_site_status,priority:3;index:idx_comments_user,priority:2;index:idx_comments_site_parent,priority:3;index:idx_comments_site_root,priority:3"`
+	IsPinned           bool                  `gorm:"column:is_pinned;not null;default:false;check:ck_comments_pinned_root,NOT is_pinned OR (parent_id IS NULL AND root_id IS NULL AND depth = 0);index:idx_comments_public,priority:3"`
+	CreatedAt          time.Time             `gorm:"column:created_at;precision:6;autoCreateTime;index:idx_comments_public,priority:4;index:idx_comments_site_status,priority:3;index:idx_comments_user,priority:2;index:idx_comments_site_parent,priority:3;index:idx_comments_site_root,priority:3"`
 	UpdatedAt          time.Time             `gorm:"column:updated_at;precision:6;autoUpdateTime"`
 	PublishedAt        *time.Time            `gorm:"column:published_at;precision:6"`
 	DeletedAt          *time.Time            `gorm:"column:deleted_at;precision:6"`
@@ -262,6 +263,7 @@ func (r Comment) ToComment() domain.Comment {
 		BodyMarkdown:       r.BodyMarkdown,
 		Status:             r.Status,
 		StatusBeforeDelete: r.StatusBeforeDelete,
+		IsPinned:           r.IsPinned,
 		IPMode:             r.IPMode,
 		IPValue:            r.IPValue,
 		UAMode:             r.UAMode,

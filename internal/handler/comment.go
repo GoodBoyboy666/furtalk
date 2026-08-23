@@ -49,6 +49,21 @@ func RegisterWidget(api *gin.RouterGroup, service *comment.Service, verifier com
 		widgetUnlikeComment(service),
 	)
 	widget.OPTIONS("/sites/:site_id/comments/:comment_id/like", httpx.CORSForSiteParam("site_id", origins))
+	widget.PUT(
+		"/sites/:site_id/comments/:comment_id/pin",
+		httpx.CORSForSiteParam("site_id", origins),
+		widgetCredential,
+		httpx.RequireAllowedOrigin(origins, httpx.SiteIDFromParam("site_id")),
+		widgetPinComment(service, true),
+	)
+	widget.DELETE(
+		"/sites/:site_id/comments/:comment_id/pin",
+		httpx.CORSForSiteParam("site_id", origins),
+		widgetCredential,
+		httpx.RequireAllowedOrigin(origins, httpx.SiteIDFromParam("site_id")),
+		widgetUnpinComment(service),
+	)
+	widget.OPTIONS("/sites/:site_id/comments/:comment_id/pin", httpx.CORSForSiteParam("site_id", origins))
 
 	widget.POST("/comment-authorizations/exchange", httpx.CORSForCredentialContext(), widgetExchange(service))
 	widget.OPTIONS("/comment-authorizations/exchange", httpx.CORSForCredentialContext())
@@ -199,6 +214,8 @@ func meCommentsGet(service *comment.Service) gin.HandlerFunc {
 func RegisterAdminComments(admin *gin.RouterGroup, service *comment.Service) {
 	admin.GET("/comments", adminCommentsList(service))
 	admin.GET("/comments/:comment_id", adminCommentsGet(service))
+	admin.PUT("/comments/:comment_id/pin", adminCommentsPin(service, true))
+	admin.DELETE("/comments/:comment_id/pin", adminCommentsUnpin(service))
 	admin.PATCH("/comments/:comment_id", adminCommentsPatch(service))
 	admin.POST("/comments/:comment_id/pending", adminCommentsPending(service))
 	admin.POST("/comments/:comment_id/publish", adminCommentsPublish(service))
@@ -488,6 +505,61 @@ func widgetUnlikeComment(service *comment.Service) gin.HandlerFunc {
 		}
 		c.JSON(http.StatusOK, toLikeResponse(result))
 	}
+}
+
+// @Summary 置顶一条根评论
+// @Tags widget
+// @Produce json
+// @Param site_id path integer true "站点 ID（十进制字符串）"
+// @Param comment_id path integer true "评论 ID（十进制字符串）"
+// @Success 200 {object} CommentPinResponse "权威的置顶状态（幂等）"
+// @Failure 401 {object} httpx.ErrorResponse "缺少 widget 凭证"
+// @Failure 403 {object} httpx.ErrorResponse "凭证不是管理员、站点不匹配或 origin 不被允许"
+// @Failure 404 {object} httpx.ErrorResponse "评论不存在"
+// @Failure 409 {object} httpx.ErrorResponse "回复评论或评论状态不允许置顶"
+// @Router /api/v1/widget/sites/{site_id}/comments/{comment_id}/pin [put]
+func widgetPinComment(service *comment.Service, pinned bool) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		siteID, err := httpx.ParseIDParam(c, "site_id")
+		if err != nil {
+			writeError(c, err)
+			return
+		}
+		commentID, err := httpx.ParseIDParam(c, "comment_id")
+		if err != nil {
+			writeError(c, err)
+			return
+		}
+		principal, ok := middleware.WidgetPrincipalOf(c)
+		if !ok {
+			c.JSON(http.StatusUnauthorized, errorResponse(c, "unauthorized", "widget credential required"))
+			return
+		}
+		result, err := service.WidgetSetPinned(c.Request.Context(), principal, siteID, commentID, pinned)
+		if err != nil {
+			writeError(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, CommentPinResponse{
+			CommentID: strconv.FormatInt(result.CommentID, 10),
+			IsPinned:  result.IsPinned,
+		})
+	}
+}
+
+// @Summary 取消一条根评论置顶
+// @Tags widget
+// @Produce json
+// @Param site_id path integer true "站点 ID（十进制字符串）"
+// @Param comment_id path integer true "评论 ID（十进制字符串）"
+// @Success 200 {object} CommentPinResponse "权威的置顶状态（幂等）"
+// @Failure 401 {object} httpx.ErrorResponse "缺少 widget 凭证"
+// @Failure 403 {object} httpx.ErrorResponse "凭证不是管理员、站点不匹配或 origin 不被允许"
+// @Failure 404 {object} httpx.ErrorResponse "评论不存在"
+// @Failure 409 {object} httpx.ErrorResponse "回复评论或评论状态不允许取消置顶"
+// @Router /api/v1/widget/sites/{site_id}/comments/{comment_id}/pin [delete]
+func widgetUnpinComment(service *comment.Service) gin.HandlerFunc {
+	return widgetPinComment(service, false)
 }
 
 // @Summary 列出站点最新公开评论
@@ -914,6 +986,50 @@ func adminCommentsGet(service *comment.Service) gin.HandlerFunc {
 		}
 		c.JSON(http.StatusOK, toAdminCommentResponse(*view))
 	}
+}
+
+// @Summary 设置或取消评论置顶
+// @Tags admin-comments
+// @Produce json
+// @Param comment_id path integer true "评论 ID（十进制字符串）"
+// @Success 200 {object} AdminCommentResponse "更新后的管理视图"
+// @Failure 400 {object} httpx.ErrorResponse "请求参数无效"
+// @Failure 401 {object} httpx.ErrorResponse "需要管理员登录"
+// @Failure 403 {object} httpx.ErrorResponse "权限不足"
+// @Failure 404 {object} httpx.ErrorResponse "评论不存在"
+// @Failure 409 {object} httpx.ErrorResponse "回复评论或评论状态不允许置顶"
+// @Param X-CSRF-Token header string true "CSRF token"
+// @Router /api/v1/admin/comments/{comment_id}/pin [put]
+func adminCommentsPin(service *comment.Service, pinned bool) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		commentID, err := httpx.ParseIDParam(c, "comment_id")
+		if err != nil {
+			writeError(c, err)
+			return
+		}
+		view, err := service.AdminSetPinned(c.Request.Context(), commentID, pinned)
+		if err != nil {
+			writeError(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, toAdminCommentResponse(*view))
+	}
+}
+
+// @Summary 取消评论置顶
+// @Tags admin-comments
+// @Produce json
+// @Param comment_id path integer true "评论 ID（十进制字符串）"
+// @Success 200 {object} AdminCommentResponse "更新后的管理视图"
+// @Failure 400 {object} httpx.ErrorResponse "请求参数无效"
+// @Failure 401 {object} httpx.ErrorResponse "需要管理员登录"
+// @Failure 403 {object} httpx.ErrorResponse "权限不足"
+// @Failure 404 {object} httpx.ErrorResponse "评论不存在"
+// @Failure 409 {object} httpx.ErrorResponse "回复评论不允许取消置顶"
+// @Param X-CSRF-Token header string true "CSRF token"
+// @Router /api/v1/admin/comments/{comment_id}/pin [delete]
+func adminCommentsUnpin(service *comment.Service) gin.HandlerFunc {
+	return adminCommentsPin(service, false)
 }
 
 // @Summary 编辑评论的 Markdown 正文

@@ -137,6 +137,7 @@ func TestWidgetPreflightRegistersEveryPath(t *testing.T) {
 		{name: "runtime config", path: "/api/v1/widget/sites/1/runtime-config"},
 		{name: "list comments", path: "/api/v1/widget/sites/1/comments"},
 		{name: "create comment", path: "/api/v1/widget/sites/1/comments"},
+		{name: "pin comment", path: "/api/v1/widget/sites/1/comments/1/pin"},
 		{name: "delete comment", path: "/api/v1/widget/comments/1"},
 		{name: "exchange", path: "/api/v1/widget/comment-authorizations/exchange"},
 		{name: "session", path: "/api/v1/widget/session"},

@@ -60,9 +60,9 @@ func (s *Service) ListPublic(ctx context.Context, siteID int64, pageKey, cursorR
 		last := rows[len(rows)-1]
 		var next string
 		if sort == domain.CommentSortHot {
-			next = encodeHotCursor(last.LikeCount, last.CreatedAt, last.ID)
+			next = encodeHotCursor(last.IsPinned, last.LikeCount, last.CreatedAt, last.ID)
 		} else {
-			next = encodeCursor(last.CreatedAt, last.ID)
+			next = encodeCursor(last.IsPinned, last.CreatedAt, last.ID)
 		}
 		view.NextCursor = &next
 	}
