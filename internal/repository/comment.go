@@ -348,6 +348,8 @@ const publicListCteStep = `
 
 // publicListProjection 只选择 published 行，把递归得到的 vis_parent_id/vis_root_id
 // 投影为公开响应的 parent_id/root_id，并 join 作者与回复目标资料。
+// like_count 是相关子查询，对 (site_id, comment_id) 前缀索引做计数；
+// liked_by_me 只在有已验证查看者时输出 EXISTS，否则输出常量 0。
 const publicListProjection = `
 SELECT visible.id, visible.site_id, visible.thread_id, visible.user_id,
        visible.vis_parent_id AS parent_id, visible.vis_root_id AS root_id,
@@ -359,14 +361,23 @@ SELECT visible.id, visible.site_id, visible.thread_id, visible.user_id,
        users.nickname AS author_nickname,
        users.website_url AS author_website,
        users.role AS author_role,
-       reply_users.nickname AS reply_to_nickname
+       reply_users.nickname AS reply_to_nickname,
+       (SELECT COUNT(*) FROM comment_likes AS cl WHERE cl.site_id = visible.site_id AND cl.comment_id = visible.id) AS like_count,
+       %s AS liked_by_me
   FROM visible
   JOIN users ON users.id = visible.user_id
   LEFT JOIN users AS reply_users ON reply_users.id = visible.reply_to_user_id
  WHERE visible.status = ?`
 
+// likeCountExpr 返回以 qualifier 为表前缀的 Like 计数相关子查询表达式，
+// 供投影、hot 排序与 hot keyset 谓词复用，保证三者使用同一索引与语义。
+func likeCountExpr(qualifier string) string {
+	return "(SELECT COUNT(*) FROM comment_likes AS cl WHERE cl.site_id = " + qualifier + ".site_id AND cl.comment_id = " + qualifier + ".id)"
+}
+
 // ListPublic 按受控排序方向返回某个线程中已发布的评论。
-// asc 使用 (created_at, id) 升序与 `>` keyset 谓词；desc 使用降序与 `<` 谓词。
+// asc 使用 (created_at, id) 升序与 `>` keyset 谓词；desc 使用降序与 `<` 谓词；
+// hot 使用 (like_count, created_at, id) 降序与镜像的 `<` keyset 谓词。
 // 排序方向必须先在服务层校验为受控枚举；仓储只根据该枚举构造固定 SQL 片段，
 // 绝不拼接未校验的请求值。
 // 软删除等非公开评论完全不进入响应，但其后代会被压缩到祖先链上最近的一个
@@ -374,10 +385,30 @@ SELECT visible.id, visible.site_id, visible.thread_id, visible.user_id,
 // root_id / depth 保持不变，查询输出的 parent_id/root_id 是压缩后的可见树关系，
 // depth 保留真实持久化值供回复深度校验使用。
 // 规范化邮箱只在仓储/服务边界读取，用于派生头像 URL，绝不进入 HTTP DTO。
-func (r *CommentRepo) ListPublic(ctx context.Context, siteID, threadID int64, sort domain.CommentSort, cursor *domain.Cursor, limit int) ([]domain.PublicComment, error) {
-	sql := "WITH RECURSIVE visible AS (" + publicListCteAnchor + publicListCteStep + ") " + publicListProjection
-	args := []any{siteID, threadID, siteID, threadID, string(domain.CommentStatusPublished)}
+// viewerID 非空时输出该查看者是否点赞；为空时 liked_by_me 恒为 false，读取保持公开。
+func (r *CommentRepo) ListPublic(ctx context.Context, siteID, threadID int64, sort domain.CommentSort, cursor *domain.Cursor, limit int, viewerID *int64) ([]domain.PublicComment, error) {
+	likedByMe := "0"
+	if viewerID != nil {
+		likedByMe = "EXISTS (SELECT 1 FROM comment_likes AS cl2 WHERE cl2.site_id = visible.site_id AND cl2.comment_id = visible.id AND cl2.user_id = ?)"
+	}
+	projection := fmt.Sprintf(publicListProjection, likedByMe)
+	sql := "WITH RECURSIVE visible AS (" + publicListCteAnchor + publicListCteStep + ") " + projection
+	// SQL 占位符顺序：锚点 site/thread → 步进 site/thread → 投影 SELECT 列表中的
+	// 查看者 EXISTS（若有）→ 投影 WHERE status → 追加的 keyset 谓词。
+	args := []any{siteID, threadID, siteID, threadID}
+	if viewerID != nil {
+		args = append(args, *viewerID)
+	}
+	args = append(args, string(domain.CommentStatusPublished))
+	qualifier := "visible"
 	switch sort {
+	case domain.CommentSortHot:
+		countExpr := likeCountExpr(qualifier)
+		if cursor != nil {
+			sql += " AND (" + countExpr + " < ? OR (" + countExpr + " = ? AND (visible.created_at < ? OR (visible.created_at = ? AND visible.id < ?))))"
+			args = append(args, cursor.LikeCount, cursor.LikeCount, cursor.CreatedAt, cursor.CreatedAt, cursor.ID)
+		}
+		sql += " ORDER BY " + countExpr + " DESC, visible.created_at DESC, visible.id DESC"
 	case domain.CommentSortDesc:
 		if cursor != nil {
 			sql += " AND (visible.created_at < ? OR (visible.created_at = ? AND visible.id < ?))"

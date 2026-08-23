@@ -201,6 +201,17 @@ type CommentResponse struct {
 	ReplyToNickname *string    `json:"reply_to_nickname"`
 	CreatedAt       time.Time  `json:"created_at"`
 	PublishedAt     *time.Time `json:"published_at"`
+	// LikeCount 是公开的 Like 计数，始终存在。
+	LikeCount int64 `json:"like_count"`
+	// LikedByMe 只反映已验证查看者是否点赞；匿名读取恒为 false。
+	LikedByMe bool `json:"liked_by_me"`
+}
+
+// LikeResponse 是 Like 添加/移除的权威结果。
+type LikeResponse struct {
+	CommentID string `json:"comment_id"`
+	LikeCount int64  `json:"like_count"`
+	Liked     bool   `json:"liked"`
 }
 
 // ThreadMetaResponse 是线程元数据。
@@ -455,6 +466,16 @@ func toCommentResponse(view comment.CommentView) CommentResponse {
 		ReplyToNickname: view.ReplyToNickname,
 		CreatedAt:       view.CreatedAt,
 		PublishedAt:     view.PublishedAt,
+		LikeCount:       view.LikeCount,
+		LikedByMe:       view.LikedByMe,
+	}
+}
+
+func toLikeResponse(result *comment.LikeResult) LikeResponse {
+	return LikeResponse{
+		CommentID: strconv.FormatInt(result.CommentID, 10),
+		LikeCount: result.LikeCount,
+		Liked:     result.Liked,
 	}
 }
 

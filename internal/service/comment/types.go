@@ -119,6 +119,10 @@ type CommentView struct {
 	CreatedAt          time.Time
 	PublishedAt        *time.Time
 	DeletedAt          *time.Time
+	// LikeCount 是该评论的公开 Like 计数，始终存在。
+	LikeCount int64
+	// LikedByMe 只反映已验证查看者是否点赞；匿名读取恒为 false。
+	LikedByMe bool
 }
 
 // ThreadView 是一个线程的扁平评论列表及其元数据。
@@ -279,10 +283,12 @@ type ProbeResult struct {
 	ExpiresAt      time.Time
 }
 
-// toCommentViewWithReply 与 toCommentView 相同，额外携带回复目标当前昵称。
-func toCommentViewWithReply(comment *domain.Comment, nickname string, website *string, role domain.Role, avatarURL string, replyNickname *string) CommentView {
+// toCommentViewWithReply 与 toCommentView 相同，额外携带回复目标当前昵称与 Like 状态。
+func toCommentViewWithReply(comment *domain.Comment, nickname string, website *string, role domain.Role, avatarURL string, replyNickname *string, likeCount int64, likedByMe bool) CommentView {
 	view := toCommentView(comment, nickname, website, role, avatarURL)
 	view.ReplyToNickname = replyNickname
+	view.LikeCount = likeCount
+	view.LikedByMe = likedByMe
 	return view
 }
 

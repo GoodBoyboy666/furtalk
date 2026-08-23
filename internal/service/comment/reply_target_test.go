@@ -29,7 +29,7 @@ func newReplyTargetTestDB(t *testing.T) *gorm.DB {
 			_ = sqlDB.Close()
 		}
 	})
-	if err := database.AutoMigrate(db, &model.User{}, &model.Site{}, &model.SiteOrigin{}, &model.Thread{}, &model.Comment{}); err != nil {
+	if err := database.AutoMigrate(db, &model.User{}, &model.Site{}, &model.SiteOrigin{}, &model.Thread{}, &model.Comment{}, &model.CommentLike{}); err != nil {
 		t.Fatalf("auto migrate: %v", err)
 	}
 	return db
@@ -207,7 +207,7 @@ func TestPublicListCarriesReplyToNickname(t *testing.T) {
 	if _, err := svc.CreateReplyFirstParty(ctx, fx.ReplyUser, domain.RoleUser, fx.ParentID, "reply body", "", nil, ""); err != nil {
 		t.Fatalf("create reply: %v", err)
 	}
-	view, err := svc.ListPublic(ctx, fx.SiteID, "page-key", "", "", 50)
+	view, err := svc.ListPublic(ctx, fx.SiteID, "page-key", "", "", 50, nil)
 	if err != nil {
 		t.Fatalf("list public: %v", err)
 	}

@@ -118,7 +118,7 @@ func TestPublicListBridgesSingleHiddenParent(t *testing.T) {
 		{key: "d", parent: "c", root: "a", status: domain.CommentStatusPublished, depth: 3},
 	})
 	svc := ownerService(db, domain.UserDeleteModeSoft)
-	view, err := svc.ListPublic(context.Background(), fx.SiteID, "page-key", "", "", 50)
+	view, err := svc.ListPublic(context.Background(), fx.SiteID, "page-key", "", "", 50, nil)
 	if err != nil {
 		t.Fatalf("list public: %v", err)
 	}
@@ -178,7 +178,7 @@ func TestPublicListPromotesHiddenRootChild(t *testing.T) {
 		{key: "c", parent: "b", root: "a", status: domain.CommentStatusPublished, depth: 2},
 	})
 	svc := ownerService(db, domain.UserDeleteModeSoft)
-	view, err := svc.ListPublic(context.Background(), fx.SiteID, "page-key", "", "", 50)
+	view, err := svc.ListPublic(context.Background(), fx.SiteID, "page-key", "", "", 50, nil)
 	if err != nil {
 		t.Fatalf("list public: %v", err)
 	}
@@ -220,7 +220,7 @@ func TestPublicListBridgesConsecutiveHiddenAncestors(t *testing.T) {
 		{key: "d", parent: "c", root: "a", status: domain.CommentStatusPublished, depth: 3},
 	})
 	svc := ownerService(db, domain.UserDeleteModeSoft)
-	view, err := svc.ListPublic(context.Background(), fx.SiteID, "page-key", "", "", 50)
+	view, err := svc.ListPublic(context.Background(), fx.SiteID, "page-key", "", "", 50, nil)
 	if err != nil {
 		t.Fatalf("list public: %v", err)
 	}
@@ -248,7 +248,7 @@ func TestPublicListKeepsSiblingBranchesNested(t *testing.T) {
 		{key: "e", parent: "c", root: "a", status: domain.CommentStatusPublished, depth: 2},
 	})
 	svc := ownerService(db, domain.UserDeleteModeSoft)
-	view, err := svc.ListPublic(context.Background(), fx.SiteID, "page-key", "", "", 50)
+	view, err := svc.ListPublic(context.Background(), fx.SiteID, "page-key", "", "", 50, nil)
 	if err != nil {
 		t.Fatalf("list public: %v", err)
 	}
@@ -299,7 +299,7 @@ func TestPublicListPaginationCountsVisibleOnly(t *testing.T) {
 	var all []CommentView
 	cursorRaw := ""
 	for page := 0; ; page++ {
-		view, err := svc.ListPublic(ctx, fx.SiteID, "page-key", cursorRaw, "", 2)
+		view, err := svc.ListPublic(ctx, fx.SiteID, "page-key", cursorRaw, "", 2, nil)
 		if err != nil {
 			t.Fatalf("list public page %d: %v", page, err)
 		}
@@ -349,7 +349,7 @@ func TestPublicListNeverExposesNonPublished(t *testing.T) {
 		{key: "d", parent: "a", root: "a", status: domain.CommentStatusSpam, depth: 1},
 	})
 	svc := ownerService(db, domain.UserDeleteModeSoft)
-	view, err := svc.ListPublic(context.Background(), fx.SiteID, "page-key", "", "", 50)
+	view, err := svc.ListPublic(context.Background(), fx.SiteID, "page-key", "", "", 50, nil)
 	if err != nil {
 		t.Fatalf("list public: %v", err)
 	}
@@ -381,7 +381,7 @@ func TestPublicListKeepsReplyTargetAfterParentDelete(t *testing.T) {
 	if _, err := svc.AdminDelete(ctx, fx.ParentID, false, false); err != nil {
 		t.Fatalf("soft delete parent: %v", err)
 	}
-	view, err := svc.ListPublic(ctx, fx.SiteID, "page-key", "", "", 50)
+	view, err := svc.ListPublic(ctx, fx.SiteID, "page-key", "", "", 50, nil)
 	if err != nil {
 		t.Fatalf("list public: %v", err)
 	}

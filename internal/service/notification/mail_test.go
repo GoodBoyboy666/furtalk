@@ -92,7 +92,7 @@ func newNotificationHarness(t *testing.T) (*gorm.DB, *Service, *captureMailer, *
 			_ = sqlDB.Close()
 		}
 	})
-	if err := database.AutoMigrate(db, &model.User{}, &model.Site{}, &model.SiteOrigin{}, &model.Thread{}, &model.Comment{}, &model.NotificationPreferences{}, &model.DynamicSetting{}); err != nil {
+	if err := database.AutoMigrate(db, &model.User{}, &model.Site{}, &model.SiteOrigin{}, &model.Thread{}, &model.Comment{}, &model.CommentLike{}, &model.NotificationPreferences{}, &model.DynamicSetting{}); err != nil {
 		t.Fatalf("auto migrate: %v", err)
 	}
 

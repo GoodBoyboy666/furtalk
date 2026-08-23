@@ -127,13 +127,34 @@
 | 方法 | 路径 | 鉴权 | 说明 |
 |---|---|---|---|
 | GET | /api/v1/widget/sites/{site_id}/runtime-config | 公开 | 站点运行时配置（含按 action 的公共 CAPTCHA 投影） |
-| GET | /api/v1/widget/sites/{site_id}/comments | 公开 | 评论列表（`page_key` 必填；`(created_at,id)` keyset 游标分页，响应含 `thread.comments_enabled` 与 `next_cursor`） |
+| GET | /api/v1/widget/sites/{site_id}/comments | 公开（可选 widget credential） | 评论列表（`page_key` 必填；`sort=asc|desc|hot`，缺省用实例策略；keyset 游标分页，hot 游标只能用于 hot；响应含 `thread.comments_enabled`、`next_cursor`、每条评论 `like_count` 与查看者 `liked_by_me`） |
 | GET | /api/v1/widget/sites/{site_id}/latest-comments | 公开 | 站点最新评论列表（默认 25，最大 25；按 `(created_at DESC, id DESC)` 排序，包含页面元数据） |
 | POST | /api/v1/widget/sites/{site_id}/comments | 可选 widget credential | 统一评论创建：匿名普通邮箱单次提交；管理员邮箱无凭据时返回受控 `need_auth_code`（线程关闭时 409 `thread_closed`） |
 | DELETE | /api/v1/widget/comments/{comment_id} | widget credential | 删除自己的评论 |
+| PUT | /api/v1/widget/sites/{site_id}/comments/{comment_id}/like | widget credential | 点赞已发布评论（幂等），返回 `{comment_id, like_count, liked}` |
+| DELETE | /api/v1/widget/sites/{site_id}/comments/{comment_id}/like | widget credential | 取消点赞已发布评论（幂等，计数不为负） |
 | POST | /api/v1/widget/comment-authorizations/exchange | 公开 | 把一次性授权码兑换为 `widget_authenticated` 并写入 CHIPS Cookie |
 | GET | /api/v1/widget/session | 公开（CHIPS cookie） | 会话探测 |
 | DELETE | /api/v1/widget/session | 公开 | 清除会话 |
+
+### 点赞（PUT/DELETE /widget/sites/{site_id}/comments/{comment_id}/like）
+
+- 只有带有效 `widget_authenticated` 凭据的读者可点赞/取消；Like 归属该账号 user ID，
+  绝不从请求 JSON 接受用户 ID。同一账号对同一评论最多一次（唯一约束兜底）。
+- 只有 `published` 评论可点赞；缺失、未发布或隐藏状态返回与缺失一致的 404，不披露存在性。
+- 重复添加/移除为幂等成功；返回权威 `{comment_id, like_count, liked}`。
+- 软删除保留 Like；硬删除评论/用户通过复合外键级联清理 Like 行。
+- 公开评论响应始终携带 `like_count`；`liked_by_me` 仅在有已验证查看者时反映其状态，
+  匿名读取恒为 false，且绝不返回邮箱/IP/UA 或投票者列表。
+- 匿名模式仅已有有效会话的管理员可点赞；普通访客只见只读计数。
+
+### hot 排序
+
+- `comment_sort` 动态设置与公开 `sort` 参数新增受控值 `hot`；管理/用户列表仍只接受
+  `asc|desc`。hot 仅按评论自身 Like 计数降序，同计数按 `(created_at DESC, id DESC)`
+  决胜，不聚合回复点赞、无时间衰减。
+- hot 游标为版本化 `(like_count, created_at, id)` 编码，只能用于 hot；切换排序时
+  丢弃旧游标与已加载行并重载第一页。
 
 ### 统一评论创建与管理员保护（POST /api/v1/widget/sites/{site_id}/comments）
 

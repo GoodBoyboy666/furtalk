@@ -104,11 +104,20 @@ const (
 	CommentSortAsc CommentSort = "asc"
 	// CommentSortDesc 表示按 (created_at, id) 降序。
 	CommentSortDesc CommentSort = "desc"
+	// CommentSortHot 表示按 (like_count, created_at, id) 降序（仅 Like 计数，无时间衰减）。
+	CommentSortHot CommentSort = "hot"
 )
 
 // ValidCommentSort 报告排序方向字符串是否为受控的 asc/desc。
+// 该校验只用于管理端/用户端列表，不包含 hot。
 func ValidCommentSort(sort string) bool {
 	return CommentSort(sort) == CommentSortAsc || CommentSort(sort) == CommentSortDesc
+}
+
+// ValidPublicCommentSort 报告公开 Widget 评论列表的受控排序值：
+// 兼容的 asc/desc 与新增的 hot。
+func ValidPublicCommentSort(sort string) bool {
+	return ValidCommentSort(sort) || CommentSort(sort) == CommentSortHot
 }
 
 // NormalizeAdminSort 解析管理列表的 sort 参数：空值归一化为 desc（最新优先），
@@ -279,15 +288,20 @@ type ThreadPatch struct {
 }
 
 // Cursor 是每个列表查询使用的 (created_at, id) 分页位置。
+// LikeCount 与 Hot 仅对 hot 排序游标有意义：hot 游标携带
+// (like_count, created_at, id) 且带版本/排序标记，方向游标不得用于 hot。
 type Cursor struct {
 	CreatedAt time.Time
 	ID        int64
+	LikeCount int64
+	Hot       bool
 }
 
 // PublicComment 是评论与作者当前公开资料的连接结果。
 // 公开读取时不会加载邮箱；AuthorEmailNormalized 只存在于 domain/service 边界，
 // 供服务层派生头像 URL，绝不进入 HTTP DTO。
 // ReplyToNickname 是回复目标作者的当前昵称；目标缺失或已注销时为 nil。
+// LikeCount 是该评论的公开 Like 计数；LikedByMe 仅在有已验证查看者时反映其状态。
 type PublicComment struct {
 	Comment
 	AuthorNickname        string
@@ -295,6 +309,8 @@ type PublicComment struct {
 	AuthorRole            Role
 	AuthorEmailNormalized string
 	ReplyToNickname       *string
+	LikeCount             int64
+	LikedByMe             bool
 }
 
 // LatestPublicComment 是站点公开最新评论与所属线程元数据及作者当前公开资料的连接结果。
@@ -429,7 +445,7 @@ type Settings struct {
 	EmailDomainBlacklist []string `json:"email_domain_blacklist"`
 	// GravatarBaseURL 是头像 URL 的基址，默认 Gravatar 官方地址。
 	GravatarBaseURL string `json:"gravatar_base_url"`
-	// CommentSort 是 widget 公开评论列表的默认排序方向，仅允许 asc/desc。
+	// CommentSort 是 widget 公开评论列表的默认排序，允许 asc/desc/hot。
 	CommentSort string `json:"comment_sort"`
 	// EmojiCatalogURL 是 widget 远程表情目录地址；空串表示不配置自定义目录。
 	EmojiCatalogURL string `json:"emoji_catalog_url"`

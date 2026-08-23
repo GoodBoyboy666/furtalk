@@ -49,7 +49,7 @@ func TestCommentRepoListPublicPostgresCteAnchorTypes(t *testing.T) {
 	// DryRun intentionally does not execute against the SQLite connection. The generated
 	// SQL is still passed through GORM's PostgreSQL dialect and captured by the logger.
 	_, _ = NewCommentRepo(postgresDB).ListPublic(
-		context.Background(), 1, 1, domain.CommentSortAsc, nil, 1,
+		context.Background(), 1, 1, domain.CommentSortAsc, nil, 1, nil,
 	)
 	if capture.sql == "" {
 		t.Fatal("expected ListPublic to generate PostgreSQL SQL")

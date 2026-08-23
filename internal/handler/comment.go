@@ -16,15 +16,15 @@ import (
 // RegisterWidget 挂载全部 widget 端点。
 func RegisterWidget(api *gin.RouterGroup, service *comment.Service, verifier comment.WidgetCredentialVerifier, settings comment.WidgetSettingsReader, authz middleware.PrincipalStore, origins httpx.OriginsProvider) {
 	widget := api.Group("/widget")
+	widgetCredential := middleware.WidgetPrincipalResolution(verifier, settings, authz)
+	widgetOptionalCredential := middleware.WidgetOptionalResolution(verifier, settings, authz)
 	widget.GET("/sites/:site_id/runtime-config", httpx.CORSForSiteParam("site_id", origins), widgetRuntimeConfig(service))
 	widget.OPTIONS("/sites/:site_id/runtime-config", httpx.CORSForSiteParam("site_id", origins))
-	widget.GET("/sites/:site_id/comments", httpx.CORSForSiteParam("site_id", origins), widgetListComments(service))
+	widget.GET("/sites/:site_id/comments", httpx.CORSForSiteParam("site_id", origins), widgetOptionalCredential, widgetListComments(service))
 	widget.OPTIONS("/sites/:site_id/comments", httpx.CORSForSiteParam("site_id", origins))
 	widget.GET("/sites/:site_id/latest-comments", httpx.CORSForSiteParam("site_id", origins), widgetListLatestComments(service))
 	widget.OPTIONS("/sites/:site_id/latest-comments", httpx.CORSForSiteParam("site_id", origins))
 
-	widgetCredential := middleware.WidgetPrincipalResolution(verifier, settings, authz)
-	widgetOptionalCredential := middleware.WidgetOptionalResolution(verifier, settings, authz)
 	widget.POST(
 		"/sites/:site_id/comments",
 		httpx.CORSForSiteParam("site_id", origins),
@@ -34,6 +34,21 @@ func RegisterWidget(api *gin.RouterGroup, service *comment.Service, verifier com
 	)
 	widget.DELETE("/comments/:comment_id", httpx.CORSForCredentialContext(), widgetCredential, httpx.RequireAllowedOrigin(origins, middleware.SiteIDFromCredential), widgetDeleteComment(service))
 	widget.OPTIONS("/comments/:comment_id", httpx.CORSForCredentialContext())
+	widget.PUT(
+		"/sites/:site_id/comments/:comment_id/like",
+		httpx.CORSForSiteParam("site_id", origins),
+		widgetCredential,
+		httpx.RequireAllowedOrigin(origins, httpx.SiteIDFromParam("site_id")),
+		widgetLikeComment(service),
+	)
+	widget.DELETE(
+		"/sites/:site_id/comments/:comment_id/like",
+		httpx.CORSForSiteParam("site_id", origins),
+		widgetCredential,
+		httpx.RequireAllowedOrigin(origins, httpx.SiteIDFromParam("site_id")),
+		widgetUnlikeComment(service),
+	)
+	widget.OPTIONS("/sites/:site_id/comments/:comment_id/like", httpx.CORSForSiteParam("site_id", origins))
 
 	widget.POST("/comment-authorizations/exchange", httpx.CORSForCredentialContext(), widgetExchange(service))
 	widget.OPTIONS("/comment-authorizations/exchange", httpx.CORSForCredentialContext())
@@ -372,8 +387,8 @@ func widgetRuntimeConfig(service *comment.Service) gin.HandlerFunc {
 // @Produce json
 // @Param site_id path integer true "站点 ID（十进制字符串）"
 // @Param page_key query string true "页面标识（必填）"
-// @Param sort query string false "排序方向：asc（默认，按 (created_at,id) 升序）或 desc"
-// @Param cursor query string false "不透明的 (created_at,id) 游标"
+// @Param sort query string false "排序：asc（按 (created_at,id) 升序）、desc（按 (created_at,id) 降序）或 hot（按 (like_count,created_at,id) 降序）"
+// @Param cursor query string false "不透明的排序游标（与 sort 对应，hot 游标只能用于 hot）"
 // @Param limit query integer false "每页数量（默认 50）"
 // @Success 200 {object} ThreadCommentsResponse "评论列表"
 // @Failure 400 {object} httpx.ErrorResponse "请求参数无效"
@@ -388,12 +403,90 @@ func widgetListComments(service *comment.Service) gin.HandlerFunc {
 			return
 		}
 		limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
-		view, err := service.ListPublic(c.Request.Context(), siteID, c.Query("page_key"), c.Query("cursor"), c.Query("sort"), limit)
+		var viewerID *int64
+		if cred, ok := middleware.WidgetCredentialOf(c); ok {
+			viewerID = comment.ViewerState(cred)
+		}
+		view, err := service.ListPublic(c.Request.Context(), siteID, c.Query("page_key"), c.Query("cursor"), c.Query("sort"), limit, viewerID)
 		if err != nil {
 			writeError(c, err)
 			return
 		}
 		c.JSON(http.StatusOK, toThreadCommentsResponse(view))
+	}
+}
+
+// @Summary 点赞一条已发布的评论
+// @Tags widget
+// @Produce json
+// @Param site_id path integer true "站点 ID（十进制字符串）"
+// @Param comment_id path integer true "评论 ID（十进制字符串）"
+// @Success 200 {object} LikeResponse "权威的点赞计数与状态（重复点赞幂等成功）"
+// @Failure 400 {object} httpx.ErrorResponse "请求参数无效"
+// @Failure 401 {object} httpx.ErrorResponse "缺少 widget 凭证"
+// @Failure 403 {object} httpx.ErrorResponse "凭证不再适用、站点不匹配或 origin 不被允许"
+// @Failure 404 {object} httpx.ErrorResponse "评论不存在或未发布"
+// @Router /api/v1/widget/sites/{site_id}/comments/{comment_id}/like [put]
+func widgetLikeComment(service *comment.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		siteID, err := httpx.ParseIDParam(c, "site_id")
+		if err != nil {
+			writeError(c, err)
+			return
+		}
+		commentID, err := httpx.ParseIDParam(c, "comment_id")
+		if err != nil {
+			writeError(c, err)
+			return
+		}
+		cred, ok := middleware.WidgetCredentialOf(c)
+		if !ok {
+			c.JSON(http.StatusUnauthorized, errorResponse(c, "unauthorized", "widget credential required"))
+			return
+		}
+		result, err := service.LikeComment(c.Request.Context(), siteID, commentID, cred.UserID())
+		if err != nil {
+			writeError(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, toLikeResponse(result))
+	}
+}
+
+// @Summary 取消点赞一条已发布的评论
+// @Tags widget
+// @Produce json
+// @Param site_id path integer true "站点 ID（十进制字符串）"
+// @Param comment_id path integer true "评论 ID（十进制字符串）"
+// @Success 200 {object} LikeResponse "权威的点赞计数与状态（重复取消幂等成功，计数不为负）"
+// @Failure 400 {object} httpx.ErrorResponse "请求参数无效"
+// @Failure 401 {object} httpx.ErrorResponse "缺少 widget 凭证"
+// @Failure 403 {object} httpx.ErrorResponse "凭证不再适用、站点不匹配或 origin 不被允许"
+// @Failure 404 {object} httpx.ErrorResponse "评论不存在或未发布"
+// @Router /api/v1/widget/sites/{site_id}/comments/{comment_id}/like [delete]
+func widgetUnlikeComment(service *comment.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		siteID, err := httpx.ParseIDParam(c, "site_id")
+		if err != nil {
+			writeError(c, err)
+			return
+		}
+		commentID, err := httpx.ParseIDParam(c, "comment_id")
+		if err != nil {
+			writeError(c, err)
+			return
+		}
+		cred, ok := middleware.WidgetCredentialOf(c)
+		if !ok {
+			c.JSON(http.StatusUnauthorized, errorResponse(c, "unauthorized", "widget credential required"))
+			return
+		}
+		result, err := service.UnlikeComment(c.Request.Context(), siteID, commentID, cred.UserID())
+		if err != nil {
+			writeError(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, toLikeResponse(result))
 	}
 }
 

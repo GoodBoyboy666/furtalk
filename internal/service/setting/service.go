@@ -40,7 +40,7 @@ const (
 	SettingKeyEmailDomainBlacklist = "email_domain_blacklist"
 	// SettingKeyGravatarBaseURL 是公开 string 设置：头像 URL 基址。
 	SettingKeyGravatarBaseURL = "gravatar_base_url"
-	// SettingKeyCommentSort 是公开 string 设置：widget 默认排序方向，仅允许 asc/desc。
+	// SettingKeyCommentSort 是公开 string 设置：widget 默认排序，允许 asc/desc/hot。
 	SettingKeyCommentSort = "comment_sort"
 	// SettingKeyEmojiCatalogURL 是公开 string 设置：widget 远程表情目录的绝对 HTTPS URL。
 	// 空串表示不配置；query 允许，userinfo 与 fragment 不允许。
@@ -160,8 +160,8 @@ func Validate(s domain.Settings) error {
 	if err := value.ValidateGravatarBaseURL(s.GravatarBaseURL); err != nil {
 		return fmt.Errorf("%w: %v", domain.ErrValidation, err)
 	}
-	if !domain.ValidCommentSort(s.CommentSort) {
-		return fmt.Errorf("%w: comment sort must be asc or desc", domain.ErrValidation)
+	if !domain.ValidPublicCommentSort(s.CommentSort) {
+		return fmt.Errorf("%w: comment sort must be asc, desc or hot", domain.ErrValidation)
 	}
 	if err := value.ValidateEmojiCatalogURL(s.EmojiCatalogURL); err != nil {
 		return fmt.Errorf("%w: %v", domain.ErrValidation, err)

@@ -31,7 +31,7 @@ func newCaptchaLoginDB(t *testing.T) *gorm.DB {
 			_ = sqlDB.Close()
 		}
 	})
-	if err := database.AutoMigrate(db, &model.User{}, &model.Site{}, &model.Thread{}, &model.Comment{}, &model.ExternalIdentity{}); err != nil {
+	if err := database.AutoMigrate(db, &model.User{}, &model.Site{}, &model.Thread{}, &model.Comment{}, &model.CommentLike{}, &model.ExternalIdentity{}); err != nil {
 		t.Fatalf("auto migrate: %v", err)
 	}
 	return db

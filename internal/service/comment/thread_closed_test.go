@@ -261,7 +261,7 @@ func TestListPublicLazilyCreatesOpenThread(t *testing.T) {
 	bus := &recordingEventBus{}
 	svc := newWidgetService(db, runner, bus, &replyCaptchaVerifier{})
 
-	first, err := svc.ListPublic(context.Background(), site.ID, "missing-page", "", "", 50)
+	first, err := svc.ListPublic(context.Background(), site.ID, "missing-page", "", "", 50, nil)
 	if err != nil {
 		t.Fatalf("first read: %v", err)
 	}
@@ -283,7 +283,7 @@ func TestListPublicLazilyCreatesOpenThread(t *testing.T) {
 	before := got.UpdatedAt
 
 	time.Sleep(20 * time.Millisecond)
-	second, err := svc.ListPublic(context.Background(), site.ID, "missing-page", "", "", 50)
+	second, err := svc.ListPublic(context.Background(), site.ID, "missing-page", "", "", 50, nil)
 	if err != nil {
 		t.Fatalf("second read: %v", err)
 	}
@@ -311,7 +311,7 @@ func TestListPublicClosedStillReadable(t *testing.T) {
 	bus := &recordingEventBus{}
 	svc := newWidgetService(db, runner, bus, &replyCaptchaVerifier{})
 
-	view, err := svc.ListPublic(context.Background(), fx.SiteID, "page-key", "", "", 50)
+	view, err := svc.ListPublic(context.Background(), fx.SiteID, "page-key", "", "", 50, nil)
 	if err != nil {
 		t.Fatalf("list public: %v", err)
 	}

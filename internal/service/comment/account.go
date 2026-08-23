@@ -72,7 +72,7 @@ func (s *Service) ListOwnerSites(ctx context.Context, ownerID int64) ([]OwnerSit
 func toOwnerCommentView(row *domain.OwnerComment, gravatarBase string) OwnerCommentView {
 	return OwnerCommentView{
 		CommentView: toCommentViewWithReply(&row.Comment, row.AuthorNickname, row.AuthorWebsite, row.AuthorRole,
-			value.GravatarURL(row.AuthorEmailNormalized, gravatarBase), row.ReplyToNickname),
+			value.GravatarURL(row.AuthorEmailNormalized, gravatarBase), row.ReplyToNickname, 0, false),
 		SiteName:  row.SiteName,
 		PageKey:   row.PageKey,
 		PageURL:   row.PageURL,

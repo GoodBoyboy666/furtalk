@@ -29,7 +29,7 @@ func ownerTestDB(t *testing.T) *gorm.DB {
 			_ = sqlDB.Close()
 		}
 	})
-	if err := database.AutoMigrate(db, &model.User{}, &model.Site{}, &model.SiteOrigin{}, &model.Thread{}, &model.Comment{}); err != nil {
+	if err := database.AutoMigrate(db, &model.User{}, &model.Site{}, &model.SiteOrigin{}, &model.Thread{}, &model.Comment{}, &model.CommentLike{}); err != nil {
 		t.Fatalf("auto migrate: %v", err)
 	}
 	return db
@@ -472,7 +472,7 @@ func TestPublicListExcludesDeleted(t *testing.T) {
 	svc := ownerService(db, domain.UserDeleteModeSoft)
 	ctx := context.Background()
 
-	view, err := svc.ListPublic(ctx, fx.SiteID, "page-key", "", "", 50)
+	view, err := svc.ListPublic(ctx, fx.SiteID, "page-key", "", "", 50, nil)
 	if err != nil {
 		t.Fatalf("list public: %v", err)
 	}

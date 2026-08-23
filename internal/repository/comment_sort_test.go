@@ -26,7 +26,7 @@ func newSortTestDB(t *testing.T) *gorm.DB {
 			_ = sqlDB.Close()
 		}
 	})
-	if err := database.AutoMigrate(db, &model.User{}, &model.Site{}, &model.SiteOrigin{}, &model.Thread{}, &model.Comment{}); err != nil {
+	if err := database.AutoMigrate(db, &model.User{}, &model.Site{}, &model.SiteOrigin{}, &model.Thread{}, &model.Comment{}, &model.CommentLike{}); err != nil {
 		t.Fatalf("auto migrate: %v", err)
 	}
 	return db
@@ -96,14 +96,14 @@ func TestCommentRepoListPublicDirectionalOrdering(t *testing.T) {
 	repo := NewCommentRepo(db)
 	ctx := context.Background()
 
-	asc, err := repo.ListPublic(ctx, siteID, threadID, domain.CommentSortAsc, nil, 50)
+	asc, err := repo.ListPublic(ctx, siteID, threadID, domain.CommentSortAsc, nil, 50, nil)
 	if err != nil {
 		t.Fatalf("list asc: %v", err)
 	}
 	wantAsc := []int64{ids["a"], ids["b"], ids["c"], ids["d"]}
 	assertOrder(t, asc, wantAsc)
 
-	desc, err := repo.ListPublic(ctx, siteID, threadID, domain.CommentSortDesc, nil, 50)
+	desc, err := repo.ListPublic(ctx, siteID, threadID, domain.CommentSortDesc, nil, 50, nil)
 	if err != nil {
 		t.Fatalf("list desc: %v", err)
 	}
@@ -133,7 +133,7 @@ func TestCommentRepoListPublicDirectionalPagination(t *testing.T) {
 			var all []int64
 			var cursor *domain.Cursor
 			for page := 0; ; page++ {
-				rows, err := repo.ListPublic(ctx, siteID, threadID, tt.sort, cursor, tt.limit)
+				rows, err := repo.ListPublic(ctx, siteID, threadID, tt.sort, cursor, tt.limit, nil)
 				if err != nil {
 					t.Fatalf("page %d: %v", page, err)
 				}

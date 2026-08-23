@@ -56,7 +56,7 @@ func TestPublicCommentRoleFlow(t *testing.T) {
 		t.Fatalf("create response role = %q, want user", userView.AuthorRole)
 	}
 
-	threadView, err := svc.ListPublic(ctx, fx.SiteID, "page-key", "", "", 10)
+	threadView, err := svc.ListPublic(ctx, fx.SiteID, "page-key", "", "", 10, nil)
 	if err != nil {
 		t.Fatalf("list public: %v", err)
 	}

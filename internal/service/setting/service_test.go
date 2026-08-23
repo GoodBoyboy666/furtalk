@@ -737,6 +737,48 @@ func TestPatchCommentSortRejectsInvalid(t *testing.T) {
 	}
 }
 
+// TestPatchCommentSortHotRoundTrip 验证 hot 作为 comment_sort 默认可保存并回读，
+// 且公开设置项与缓存投影一致；随后恢复 asc。
+func TestPatchCommentSortHotRoundTrip(t *testing.T) {
+	svc := newTestService(t)
+	ctx := context.Background()
+
+	if _, err := svc.Get(ctx); err != nil {
+		t.Fatalf("seed defaults: %v", err)
+	}
+	if _, err := svc.Patch(ctx, []SettingItem{
+		{Key: SettingKeyCommentSort, Type: SettingTypeString, Value: string(domain.CommentSortHot)},
+	}, 1); err != nil {
+		t.Fatalf("patch hot: %v", err)
+	}
+	view, err := svc.Get(ctx)
+	if err != nil {
+		t.Fatalf("get after hot patch: %v", err)
+	}
+	if view.Settings.CommentSort != string(domain.CommentSortHot) {
+		t.Fatalf("comment_sort = %q, want hot", view.Settings.CommentSort)
+	}
+	items, err := svc.PublicItems(ctx)
+	if err != nil {
+		t.Fatalf("public items: %v", err)
+	}
+	var seen string
+	for _, item := range items {
+		if item.Key == SettingKeyCommentSort {
+			seen, _ = item.Value.(string)
+		}
+	}
+	if seen != string(domain.CommentSortHot) {
+		t.Fatalf("public items comment_sort = %q, want hot", seen)
+	}
+	// 恢复 asc
+	if _, err := svc.Patch(ctx, []SettingItem{
+		{Key: SettingKeyCommentSort, Type: SettingTypeString, Value: string(domain.CommentSortAsc)},
+	}, 2); err != nil {
+		t.Fatalf("patch asc: %v", err)
+	}
+}
+
 // TestEmojiCatalogURLDefaultAndRoundTrip 验证 emoji_catalog_url 默认空串，
 // 保存 HTTPS 值后持久化，清空后恢复空串。
 func TestEmojiCatalogURLDefaultAndRoundTrip(t *testing.T) {

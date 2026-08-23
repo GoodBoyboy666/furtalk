@@ -22,6 +22,7 @@ func All() []any {
 		&SiteOrigin{},
 		&Thread{},
 		&Comment{},
+		&CommentLike{},
 		&DynamicSetting{},
 		&BootstrapState{},
 	}
@@ -273,6 +274,21 @@ func (r Comment) ToComment() domain.Comment {
 		PublishedAt:        r.PublishedAt,
 		DeletedAt:          r.DeletedAt,
 	}
+}
+
+// CommentLike 是 comment_likes 表的 GORM 行：一个账号对一条评论的一次 Like。
+// 唯一键 (site_id, comment_id, user_id) 让幂等依赖数据库约束而非应用竞态；
+// (site_id, comment_id) 前缀索引为计数/存在性查找服务。没有冗余计数列，
+// 评论/用户硬删除通过复合外键 ON DELETE CASCADE 自动清理。
+type CommentLike struct {
+	ID        int64     `gorm:"primaryKey;autoIncrement;generated:identity"`
+	SiteID    int64     `gorm:"column:site_id;not null;uniqueIndex:uq_comment_likes_site_comment_user,priority:1;index:idx_comment_likes_site_comment,priority:1"`
+	CommentID int64     `gorm:"column:comment_id;not null;uniqueIndex:uq_comment_likes_site_comment_user,priority:2;index:idx_comment_likes_site_comment,priority:2"`
+	UserID    int64     `gorm:"column:user_id;not null;uniqueIndex:uq_comment_likes_site_comment_user,priority:3;index:idx_comment_likes_user,priority:1"`
+	CreatedAt time.Time `gorm:"column:created_at;precision:6;autoCreateTime"`
+	Site      Site      `gorm:"foreignKey:SiteID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
+	Comment   Comment   `gorm:"foreignKey:SiteID,CommentID;references:SiteID,ID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
+	User      User      `gorm:"foreignKey:UserID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
 }
 
 // DynamicSetting 是 dynamic_settings 表的 GORM 行。

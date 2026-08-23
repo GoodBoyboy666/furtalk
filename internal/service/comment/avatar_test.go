@@ -29,7 +29,7 @@ func avatarTestDB(t *testing.T) *gorm.DB {
 			_ = sqlDB.Close()
 		}
 	})
-	if err := database.AutoMigrate(db, &model.User{}, &model.Site{}, &model.SiteOrigin{}, &model.Thread{}, &model.Comment{}); err != nil {
+	if err := database.AutoMigrate(db, &model.User{}, &model.Site{}, &model.SiteOrigin{}, &model.Thread{}, &model.Comment{}, &model.CommentLike{}); err != nil {
 		t.Fatalf("auto migrate: %v", err)
 	}
 	return db
@@ -79,7 +79,7 @@ func TestCommentViewsDeriveAvatarURL(t *testing.T) {
 		t.Fatalf("avatar = %q, want %q", view.AuthorAvatarURL, want)
 	}
 
-	threadView, err := svc.ListPublic(ctx, fx.SiteID, "page-key", "", "", 10)
+	threadView, err := svc.ListPublic(ctx, fx.SiteID, "page-key", "", "", 10, nil)
 	if err != nil {
 		t.Fatalf("list public: %v", err)
 	}
@@ -169,7 +169,7 @@ func TestAvatarChangesWithBaseSetting(t *testing.T) {
 		CommentSort:     string(domain.CommentSortAsc),
 	}, &recordingEventBus{}, &recordingTxRunner{inner: gormtx.NewRunner(db)})
 
-	first, err := svc.ListPublic(ctx, fx.SiteID, "page-key", "", "", 10)
+	first, err := svc.ListPublic(ctx, fx.SiteID, "page-key", "", "", 10, nil)
 	if err != nil {
 		t.Fatalf("list public: %v", err)
 	}
@@ -188,7 +188,7 @@ func TestAvatarChangesWithBaseSetting(t *testing.T) {
 		Privacy:         domain.PrivacyPolicy{IPMode: string(domain.PrivacyModeNone), UAMode: string(domain.PrivacyModeNone)},
 		CommentSort:     string(domain.CommentSortAsc),
 	}, &recordingEventBus{}, &recordingTxRunner{inner: gormtx.NewRunner(db)})
-	second, err := svc2.ListPublic(ctx, fx.SiteID, "page-key", "", "", 10)
+	second, err := svc2.ListPublic(ctx, fx.SiteID, "page-key", "", "", 10, nil)
 	if err != nil {
 		t.Fatalf("list public with new base: %v", err)
 	}

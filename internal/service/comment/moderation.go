@@ -64,7 +64,7 @@ func (s *Service) AdminList(ctx context.Context, filter domain.AdminFilter, page
 	for _, r := range rows {
 		result.Comments = append(result.Comments, AdminCommentView{
 			CommentView: toCommentViewWithReply(&r.Comment, r.AuthorNickname, r.AuthorWebsite, r.AuthorRole,
-				value.GravatarURL(r.AuthorEmailNormalized, gravatarBase), r.ReplyToNickname),
+				value.GravatarURL(r.AuthorEmailNormalized, gravatarBase), r.ReplyToNickname, 0, false),
 			Email:     r.AuthorEmail,
 			IPMode:    r.IPMode,
 			IPValue:   r.IPValue,

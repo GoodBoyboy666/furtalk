@@ -10,10 +10,12 @@ import (
 	"furtalk/internal/platform/value"
 )
 
-// ListPublic 返回线程的扁平评论列表，带稳定的 (created_at, id) 游标分页。
+// ListPublic 返回线程的扁平评论列表，带稳定的游标分页。
 // 缺省排序使用实例策略的 comment_sort；显式 sort 只影响本次浏览，不写设置。
+// hot 使用 (like_count, created_at, id) 降序；其游标带版本标记，只能用于 hot。
+// viewerID 非空时各评论携带该查看者是否点赞的观众状态，否则恒为 false。
 // 缺失的页面会惰性创建默认开启的唯一线程，使重复读取复用同一记录且不产生无意义的时间戳写入。
-func (s *Service) ListPublic(ctx context.Context, siteID int64, pageKey, cursorRaw, sortRaw string, limit int) (*ThreadView, error) {
+func (s *Service) ListPublic(ctx context.Context, siteID int64, pageKey, cursorRaw, sortRaw string, limit int, viewerID *int64) (*ThreadView, error) {
 	if err := s.validateSiteActive(ctx, siteID); err != nil {
 		return nil, err
 	}
@@ -29,7 +31,7 @@ func (s *Service) ListPublic(ctx context.Context, siteID int64, pageKey, cursorR
 	if err != nil {
 		return nil, err
 	}
-	cursor, err := decodeCursor(cursorRaw)
+	cursor, err := decodeCursor(cursorRaw, sort)
 	if err != nil {
 		return nil, err
 	}
@@ -37,7 +39,7 @@ func (s *Service) ListPublic(ctx context.Context, siteID int64, pageKey, cursorR
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.comments.ListPublic(ctx, siteID, thread.ID, sort, cursor, limit+1)
+	rows, err := s.comments.ListPublic(ctx, siteID, thread.ID, sort, cursor, limit+1, viewerID)
 	if err != nil {
 		return nil, err
 	}
@@ -52,11 +54,16 @@ func (s *Service) ListPublic(ctx context.Context, siteID int64, pageKey, cursorR
 	}
 	for i := range rows {
 		view.Comments = append(view.Comments, toCommentViewWithReply(&rows[i].Comment, rows[i].AuthorNickname, rows[i].AuthorWebsite, rows[i].AuthorRole,
-			value.GravatarURL(rows[i].AuthorEmailNormalized, pol.GravatarBaseURL), rows[i].ReplyToNickname))
+			value.GravatarURL(rows[i].AuthorEmailNormalized, pol.GravatarBaseURL), rows[i].ReplyToNickname, rows[i].LikeCount, rows[i].LikedByMe))
 	}
 	if hasMore && len(rows) > 0 {
 		last := rows[len(rows)-1]
-		next := encodeCursor(last.CreatedAt, last.ID)
+		var next string
+		if sort == domain.CommentSortHot {
+			next = encodeHotCursor(last.LikeCount, last.CreatedAt, last.ID)
+		} else {
+			next = encodeCursor(last.CreatedAt, last.ID)
+		}
 		view.NextCursor = &next
 	}
 	return view, nil
@@ -102,17 +109,17 @@ func (s *Service) ListLatestPublic(ctx context.Context, siteID int64, limit int)
 	return views, nil
 }
 
-// normalizeSort 解析公开 sort 参数并校验：空值回落到实例策略默认方向，
-// 显式值必须是受控的 asc/desc，非法值返回验证错误。
+// normalizeSort 解析公开 sort 参数并校验：空值回落到实例策略默认排序，
+// 显式值必须是受控的 asc/desc/hot，非法值返回验证错误。
 func normalizeSort(raw, defaultSort string) (domain.CommentSort, error) {
 	if raw == "" {
-		if !domain.ValidCommentSort(defaultSort) {
+		if !domain.ValidPublicCommentSort(defaultSort) {
 			return "", fmt.Errorf("%w: configured comment sort %q is invalid", domain.ErrValidation, defaultSort)
 		}
 		return domain.CommentSort(defaultSort), nil
 	}
-	if !domain.ValidCommentSort(raw) {
-		return "", fmt.Errorf("%w: comment sort must be asc or desc", domain.ErrValidation)
+	if !domain.ValidPublicCommentSort(raw) {
+		return "", fmt.Errorf("%w: comment sort must be asc, desc or hot", domain.ErrValidation)
 	}
 	return domain.CommentSort(raw), nil
 }

@@ -25,10 +25,29 @@ func TestNormalizeAdminSort(t *testing.T) {
 			t.Fatalf("NormalizeAdminSort(%q) = %q, want %q", tc.raw, got, tc.want)
 		}
 	}
-	for _, bad := range []string{"sideways", "DESC", "asc,desc", " asc"} {
+	for _, bad := range []string{"sideways", "DESC", "asc,desc", " asc", "hot"} {
 		if _, err := NormalizeAdminSort(bad); !errors.Is(err, ErrValidation) {
 			t.Fatalf("NormalizeAdminSort(%q) error = %v, want ErrValidation", bad, err)
 		}
+	}
+}
+
+// TestPublicSortValidators 验证公开排序契约与管理员排序契约分离：
+// asc/desc/hot 均通过公开校验，管理列表校验只接受 asc/desc。
+func TestPublicSortValidators(t *testing.T) {
+	for _, raw := range []string{"asc", "desc", "hot"} {
+		if !ValidPublicCommentSort(raw) {
+			t.Fatalf("ValidPublicCommentSort(%q) = false, want true", raw)
+		}
+	}
+	for _, bad := range []string{"sideways", "DESC", "asc,desc", ""} {
+		if ValidPublicCommentSort(bad) {
+			t.Fatalf("ValidPublicCommentSort(%q) = true, want false", bad)
+		}
+	}
+	// 管理列表校验绝不接受 hot，避免无关列表被静默当作 asc 处理。
+	if ValidCommentSort("hot") {
+		t.Fatal("ValidCommentSort(hot) = true, want false")
 	}
 }
 

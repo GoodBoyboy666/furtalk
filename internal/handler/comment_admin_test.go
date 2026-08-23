@@ -37,7 +37,7 @@ func newAdminCommentsRouter(t *testing.T) (*gin.Engine, *repository.CommentRepo,
 		}
 	})
 	if err := database.AutoMigrate(db,
-		&model.User{}, &model.Site{}, &model.SiteOrigin{}, &model.Thread{}, &model.Comment{}); err != nil {
+		&model.User{}, &model.Site{}, &model.SiteOrigin{}, &model.Thread{}, &model.Comment{}, &model.CommentLike{}); err != nil {
 		t.Fatalf("auto migrate: %v", err)
 	}
 	runner := gormtx.NewRunner(db)

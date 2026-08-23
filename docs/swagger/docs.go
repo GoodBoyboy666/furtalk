@@ -3745,13 +3745,13 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "排序方向：asc（默认，按 (created_at,id) 升序）或 desc",
+                        "description": "排序：asc（按 (created_at,id) 升序）、desc（按 (created_at,id) 降序）或 hot（按 (like_count,created_at,id) 降序）",
                         "name": "sort",
                         "in": "query"
                     },
                     {
                         "type": "string",
-                        "description": "不透明的 (created_at,id) 游标",
+                        "description": "不透明的排序游标（与 sort 对应，hot 游标只能用于 hot）",
                         "name": "cursor",
                         "in": "query"
                     },
@@ -3869,6 +3869,122 @@ const docTemplate = `{
                     },
                     "503": {
                         "description": "验证码服务暂不可用",
+                        "schema": {
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/widget/sites/{site_id}/comments/{comment_id}/like": {
+            "put": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "widget"
+                ],
+                "summary": "点赞一条已发布的评论",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "站点 ID（十进制字符串）",
+                        "name": "site_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "评论 ID（十进制字符串）",
+                        "name": "comment_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "权威的点赞计数与状态（重复点赞幂等成功）",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.LikeResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数无效",
+                        "schema": {
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "缺少 widget 凭证",
+                        "schema": {
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "凭证不再适用、站点不匹配或 origin 不被允许",
+                        "schema": {
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "评论不存在或未发布",
+                        "schema": {
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "widget"
+                ],
+                "summary": "取消点赞一条已发布的评论",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "站点 ID（十进制字符串）",
+                        "name": "site_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "评论 ID（十进制字符串）",
+                        "name": "comment_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "权威的点赞计数与状态（重复取消幂等成功，计数不为负）",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.LikeResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数无效",
+                        "schema": {
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "缺少 widget 凭证",
+                        "schema": {
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "凭证不再适用、站点不匹配或 origin 不被允许",
+                        "schema": {
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "评论不存在或未发布",
                         "schema": {
                             "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
@@ -4543,6 +4659,14 @@ const docTemplate = `{
                 "id": {
                     "type": "string"
                 },
+                "like_count": {
+                    "description": "LikeCount 是公开的 Like 计数，始终存在。",
+                    "type": "integer"
+                },
+                "liked_by_me": {
+                    "description": "LikedByMe 只反映已验证查看者是否点赞；匿名读取恒为 false。",
+                    "type": "boolean"
+                },
                 "parent_id": {
                     "type": "string"
                 },
@@ -4729,6 +4853,20 @@ const docTemplate = `{
                 },
                 "user_id": {
                     "type": "string"
+                }
+            }
+        },
+        "internal_handler.LikeResponse": {
+            "type": "object",
+            "properties": {
+                "comment_id": {
+                    "type": "string"
+                },
+                "like_count": {
+                    "type": "integer"
+                },
+                "liked": {
+                    "type": "boolean"
                 }
             }
         },

@@ -67,7 +67,7 @@ func TestPublicListSortAscOrdersOldestFirst(t *testing.T) {
 	fx := seedTiedTimestampComments(t, db)
 	svc := ownerService(db, domain.UserDeleteModeSoft)
 
-	view, err := svc.ListPublic(context.Background(), fx.SiteID, "page-key", "", "", 50)
+	view, err := svc.ListPublic(context.Background(), fx.SiteID, "page-key", "", "", 50, nil)
 	if err != nil {
 		t.Fatalf("list public asc: %v", err)
 	}
@@ -90,7 +90,7 @@ func TestPublicListSortDescOrdersNewestFirst(t *testing.T) {
 	fx := seedTiedTimestampComments(t, db)
 	svc := ownerService(db, domain.UserDeleteModeSoft)
 
-	view, err := svc.ListPublic(context.Background(), fx.SiteID, "page-key", "", "desc", 50)
+	view, err := svc.ListPublic(context.Background(), fx.SiteID, "page-key", "", "desc", 50, nil)
 	if err != nil {
 		t.Fatalf("list public desc: %v", err)
 	}
@@ -141,7 +141,7 @@ func TestPublicListSortDefaultUsesPolicy(t *testing.T) {
 	}
 
 	// 缺省走策略 desc。
-	view, err := svc.ListPublic(context.Background(), fx.SiteID, "page-key", "", "", 50)
+	view, err := svc.ListPublic(context.Background(), fx.SiteID, "page-key", "", "", 50, nil)
 	if err != nil {
 		t.Fatalf("list public default: %v", err)
 	}
@@ -150,7 +150,7 @@ func TestPublicListSortDefaultUsesPolicy(t *testing.T) {
 		t.Fatalf("default ids = %v, want %v (policy default desc)", got, want)
 	}
 	// 显式 asc 覆盖本次查询。
-	view, err = svc.ListPublic(context.Background(), fx.SiteID, "page-key", "", "asc", 50)
+	view, err = svc.ListPublic(context.Background(), fx.SiteID, "page-key", "", "asc", 50, nil)
 	if err != nil {
 		t.Fatalf("list public asc override: %v", err)
 	}
@@ -177,7 +177,7 @@ func TestPublicListSortDescPaginationNoDuplicates(t *testing.T) {
 	var all []CommentView
 	cursorRaw := ""
 	for page := 0; ; page++ {
-		view, err := svc.ListPublic(ctx, fx.SiteID, "page-key", cursorRaw, "desc", 2)
+		view, err := svc.ListPublic(ctx, fx.SiteID, "page-key", cursorRaw, "desc", 2, nil)
 		if err != nil {
 			t.Fatalf("list public desc page %d: %v", page, err)
 		}
@@ -227,7 +227,7 @@ func TestPublicListSortDescPreservesTreeCompression(t *testing.T) {
 		{key: "d", parent: "a", root: "a", status: domain.CommentStatusPublished, depth: 1},
 	})
 	svc := ownerService(db, domain.UserDeleteModeSoft)
-	view, err := svc.ListPublic(context.Background(), fx.SiteID, "page-key", "", "desc", 50)
+	view, err := svc.ListPublic(context.Background(), fx.SiteID, "page-key", "", "desc", 50, nil)
 	if err != nil {
 		t.Fatalf("list public desc: %v", err)
 	}
@@ -260,7 +260,7 @@ func TestPublicListSortInvalid(t *testing.T) {
 	})
 	svc := ownerService(db, domain.UserDeleteModeSoft)
 	for _, bad := range []string{"sideways", "DESC", "asc,desc", " asc"} {
-		_, err := svc.ListPublic(context.Background(), fx.SiteID, "page-key", "", bad, 50)
+		_, err := svc.ListPublic(context.Background(), fx.SiteID, "page-key", "", bad, 50, nil)
 		if !errors.Is(err, domain.ErrValidation) {
 			t.Fatalf("sort %q error = %v, want ErrValidation", bad, err)
 		}
