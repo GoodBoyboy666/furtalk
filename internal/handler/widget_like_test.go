@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -274,6 +275,9 @@ func TestWidgetPreflightRegistersLikePaths(t *testing.T) {
 	router.ServeHTTP(rec, req)
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("preflight status = %d, want 204; body=%s", rec.Code, rec.Body.String())
+	}
+	if methods := rec.Header().Get("Access-Control-Allow-Methods"); !strings.Contains(methods, "PUT") {
+		t.Fatalf("Access-Control-Allow-Methods = %q, want to include PUT", methods)
 	}
 }
 

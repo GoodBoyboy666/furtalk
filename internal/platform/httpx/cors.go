@@ -107,7 +107,7 @@ func allowOrigin(c *gin.Context, origin string) {
 		c.Next()
 		return
 	}
-	c.Header("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
+	c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 	if requested := c.Request.Header.Get("Access-Control-Request-Headers"); requested != "" {
 		c.Header("Access-Control-Allow-Headers", requested)
 	} else {
