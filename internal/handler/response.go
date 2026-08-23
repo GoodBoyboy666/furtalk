@@ -639,9 +639,10 @@ type SettingsResponse struct {
 }
 
 // ProviderMetadata 是提供商元数据的 HTTP 表示，不含机密。
-// Enabled 仅 OAuth/OIDC 返回；CAPTCHA 提供商省略该字段。
+// Enabled 仅 OAuth/OIDC 与 Spam 返回；CAPTCHA 提供商省略该字段。
 // PublicConfig 是自由表单的公开字段 map，字段集合与 ProviderUpsertRequest 的
-// 公开字段一致（client_id、instance_url、issuer_url、team_id、key_id、endpoint 等）；
+// 公开字段一致（client_id、instance_url、issuer_url、team_id、key_id、endpoint、
+// file_path、action、region 等）；
 // secret 字段永不出现，编辑留空即保留现有 envelope。
 type ProviderMetadata struct {
 	ProviderKey  string         `json:"provider_key"`

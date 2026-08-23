@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -224,5 +226,106 @@ func TestAdminProviderListKindSpecificEnabled(t *testing.T) {
 		default:
 			t.Fatalf("unexpected provider %q", p.ProviderKey)
 		}
+	}
+}
+
+// TestAdminProviderSpamRequiresEnabled 验证 spam provider 必须携带 enabled，缺失返回 422。
+func TestAdminProviderSpamRequiresEnabled(t *testing.T) {
+	router := newSettingsTestRouter(t)
+
+	request := httptest.NewRequest(http.MethodPut, "/api/v1/admin/providers/spam.local", strings.NewReader(
+		`{"kind":"spam","config":{"file_path":"/tmp/nope.txt","action":"pending"}}`))
+	request.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("spam upsert without enabled = %d, want 422; body=%s", recorder.Code, recorder.Body.String())
+	}
+}
+
+// TestAdminProviderSpamLocalRoundTrip 验证本地词库渠道可保存、列表返回 configured/enabled，
+// 且响应不含机密或正文。
+func TestAdminProviderSpamLocalRoundTrip(t *testing.T) {
+	router := newSettingsTestRouter(t)
+	path := filepath.Join(t.TempDir(), "words.txt")
+	if err := os.WriteFile(path, []byte("广告\n"), 0o644); err != nil {
+		t.Fatalf("write words: %v", err)
+	}
+
+	payload := `{"kind":"spam","enabled":true,"config":{"file_path":` + strconv.Quote(path) + `,"check_nickname":true,"action":"pending"}}`
+	request := httptest.NewRequest(http.MethodPut, "/api/v1/admin/providers/spam.local", strings.NewReader(payload))
+	request.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusNoContent {
+		t.Fatalf("spam.local upsert = %d, want 204; body=%s", recorder.Code, recorder.Body.String())
+	}
+
+	list := httptest.NewRequest(http.MethodGet, "/api/v1/admin/providers", nil)
+	listRecorder := httptest.NewRecorder()
+	router.ServeHTTP(listRecorder, list)
+	var resp ProvidersResponse
+	if err := json.Unmarshal(listRecorder.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode list: %v", err)
+	}
+	if len(resp.Providers) != 1 {
+		t.Fatalf("providers = %+v, want 1", resp.Providers)
+	}
+	p := resp.Providers[0]
+	if p.Kind != "spam" || !p.Configured || p.Enabled == nil || !*p.Enabled {
+		t.Fatalf("spam.local meta = %+v, want spam/configured/enabled", p)
+	}
+	if listRecorder.Body.String() != "" {
+		if strings.Contains(listRecorder.Body.String(), "check_nickname") && !strings.Contains(listRecorder.Body.String(), "pending") {
+			t.Fatalf("list must not expose secrets; body=%s", listRecorder.Body.String())
+		}
+	}
+}
+
+// TestAdminProviderSpamSecretSafe 验证 Akismet 保存后列表不回显 secret，
+// 未配置 Secret 的启用被拒绝。
+func TestAdminProviderSpamSecretSafe(t *testing.T) {
+	router := newSettingsTestRouter(t)
+
+	put := func(payload string) int {
+		t.Helper()
+		request := httptest.NewRequest(http.MethodPut, "/api/v1/admin/providers/spam.akismet", strings.NewReader(payload))
+		request.Header.Set("Content-Type", "application/json")
+		recorder := httptest.NewRecorder()
+		router.ServeHTTP(recorder, request)
+		return recorder.Code
+	}
+	if code := put(`{"kind":"spam","enabled":true,"config":{"action":"spam"}}`); code != http.StatusUnprocessableEntity {
+		t.Fatalf("enable akismet without secret = %d, want 422", code)
+	}
+	if code := put(`{"kind":"spam","enabled":true,"config":{"action":"spam","api_key":"ak-secret"}}`); code != http.StatusNoContent {
+		t.Fatalf("upsert akismet = %d, want 204", code)
+	}
+
+	list := httptest.NewRequest(http.MethodGet, "/api/v1/admin/providers", nil)
+	listRecorder := httptest.NewRecorder()
+	router.ServeHTTP(listRecorder, list)
+	if strings.Contains(listRecorder.Body.String(), "ak-secret") {
+		t.Fatalf("list leaks secret: %s", listRecorder.Body.String())
+	}
+	var resp ProvidersResponse
+	if err := json.Unmarshal(listRecorder.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode list: %v", err)
+	}
+	if len(resp.Providers) != 1 || resp.Providers[0].ProviderKey != "spam.akismet" {
+		t.Fatalf("providers = %+v, want only spam.akismet", resp.Providers)
+	}
+}
+
+// TestAdminProviderSpamUnknownKey 验证未知 spam key 被拒绝。
+func TestAdminProviderSpamUnknownKey(t *testing.T) {
+	router := newSettingsTestRouter(t)
+	request := httptest.NewRequest(http.MethodPut, "/api/v1/admin/providers/spam.bogus", strings.NewReader(
+		`{"kind":"spam","enabled":true,"config":{"action":"spam"}}`))
+	request.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("unknown spam key = %d, want 422; body=%s", recorder.Code, recorder.Body.String())
 	}
 }

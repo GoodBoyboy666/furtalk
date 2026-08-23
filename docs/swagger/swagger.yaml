@@ -1,21 +1,65 @@
 definitions:
-  comment.OptionalNullableString:
+  furtalk_internal_platform_httpx.ErrorBody:
+    properties:
+      code:
+        type: string
+      details:
+        additionalProperties: {}
+        type: object
+      message:
+        type: string
+      request_id:
+        type: string
+    type: object
+  furtalk_internal_platform_httpx.ErrorResponse:
+    properties:
+      error:
+        $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorBody'
+    type: object
+  furtalk_internal_service_comment.OptionalNullableString:
     properties:
       set:
         type: boolean
       value:
         type: string
     type: object
-  handler.AdminCommentListResponse:
+  furtalk_internal_service_identity.OptionalNullableString:
+    properties:
+      set:
+        type: boolean
+      value:
+        type: string
+    type: object
+  furtalk_internal_service_setting.SettingItem:
+    properties:
+      key:
+        type: string
+      type:
+        $ref: '#/definitions/furtalk_internal_service_setting.SettingType'
+      value: {}
+    type: object
+  furtalk_internal_service_setting.SettingType:
+    enum:
+    - string
+    - integer
+    - boolean
+    - json
+    type: string
+    x-enum-varnames:
+    - SettingTypeString
+    - SettingTypeInteger
+    - SettingTypeBoolean
+    - SettingTypeJSON
+  internal_handler.AdminCommentListResponse:
     properties:
       comments:
         items:
-          $ref: '#/definitions/handler.AdminCommentResponse'
+          $ref: '#/definitions/internal_handler.AdminCommentResponse'
         type: array
       total:
         type: integer
     type: object
-  handler.AdminCommentResponse:
+  internal_handler.AdminCommentResponse:
     properties:
       author_email:
         type: string
@@ -70,21 +114,21 @@ definitions:
       user_id:
         type: string
     type: object
-  handler.AdminCommentUpdateRequest:
+  internal_handler.AdminCommentUpdateRequest:
     properties:
       body:
         type: string
     type: object
-  handler.AdminThreadListResponse:
+  internal_handler.AdminThreadListResponse:
     properties:
       threads:
         items:
-          $ref: '#/definitions/handler.AdminThreadResponse'
+          $ref: '#/definitions/internal_handler.AdminThreadResponse'
         type: array
       total:
         type: integer
     type: object
-  handler.AdminThreadResponse:
+  internal_handler.AdminThreadResponse:
     properties:
       comments_enabled:
         type: boolean
@@ -105,18 +149,18 @@ definitions:
       updated_at:
         type: string
     type: object
-  handler.AdminThreadUpdateRequest:
+  internal_handler.AdminThreadUpdateRequest:
     properties:
       comments_enabled:
         type: boolean
       page_key:
         type: string
       page_title:
-        $ref: '#/definitions/comment.OptionalNullableString'
+        $ref: '#/definitions/furtalk_internal_service_comment.OptionalNullableString'
       page_url:
-        $ref: '#/definitions/comment.OptionalNullableString'
+        $ref: '#/definitions/furtalk_internal_service_comment.OptionalNullableString'
     type: object
-  handler.AdminUserCreateRequest:
+  internal_handler.AdminUserCreateRequest:
     properties:
       email:
         type: string
@@ -131,21 +175,21 @@ definitions:
       website_url:
         type: string
     type: object
-  handler.AdminUserListResponse:
+  internal_handler.AdminUserListResponse:
     properties:
       total:
         type: integer
       users:
         items:
-          $ref: '#/definitions/handler.AdminUserResponse'
+          $ref: '#/definitions/internal_handler.AdminUserResponse'
         type: array
     type: object
-  handler.AdminUserResetPasswordRequest:
+  internal_handler.AdminUserResetPasswordRequest:
     properties:
       password:
         type: string
     type: object
-  handler.AdminUserResponse:
+  internal_handler.AdminUserResponse:
     properties:
       avatar_url:
         type: string
@@ -172,7 +216,7 @@ definitions:
       website_url:
         type: string
     type: object
-  handler.AdminUserUpdateRequest:
+  internal_handler.AdminUserUpdateRequest:
     properties:
       email:
         type: string
@@ -185,9 +229,9 @@ definitions:
       status:
         type: string
       website_url:
-        $ref: '#/definitions/identity.OptionalNullableString'
+        $ref: '#/definitions/furtalk_internal_service_identity.OptionalNullableString'
     type: object
-  handler.AuthProviderMetadata:
+  internal_handler.AuthProviderMetadata:
     properties:
       key:
         type: string
@@ -196,14 +240,14 @@ definitions:
       name:
         type: string
     type: object
-  handler.AuthProvidersResponse:
+  internal_handler.AuthProvidersResponse:
     properties:
       providers:
         items:
-          $ref: '#/definitions/handler.AuthProviderMetadata'
+          $ref: '#/definitions/internal_handler.AuthProviderMetadata'
         type: array
     type: object
-  handler.AuthorizationContextResponse:
+  internal_handler.AuthorizationContextResponse:
     properties:
       origin:
         type: string
@@ -212,12 +256,12 @@ definitions:
       site_name:
         type: string
     type: object
-  handler.AuthorizationExchangeRequest:
+  internal_handler.AuthorizationExchangeRequest:
     properties:
       code:
         type: string
     type: object
-  handler.AuthorizationIssueRequest:
+  internal_handler.AuthorizationIssueRequest:
     properties:
       origin:
         type: string
@@ -226,7 +270,7 @@ definitions:
       site_id:
         type: string
     type: object
-  handler.AuthorizationIssueResponse:
+  internal_handler.AuthorizationIssueResponse:
     properties:
       code:
         type: string
@@ -235,7 +279,7 @@ definitions:
       request_id:
         type: string
     type: object
-  handler.BootstrapAdminRequest:
+  internal_handler.BootstrapAdminRequest:
     properties:
       email:
         type: string
@@ -246,12 +290,12 @@ definitions:
       setup_token:
         type: string
     type: object
-  handler.BootstrapStatusResponse:
+  internal_handler.BootstrapStatusResponse:
     properties:
       required:
         type: boolean
     type: object
-  handler.CaptchaActionResponse:
+  internal_handler.CaptchaActionResponse:
     properties:
       api_endpoint:
         type: string
@@ -262,21 +306,21 @@ definitions:
       site_key:
         type: string
     type: object
-  handler.CaptchaConfigResponse:
+  internal_handler.CaptchaConfigResponse:
     properties:
       captcha:
-        $ref: '#/definitions/handler.PublicCaptchaConfig'
+        $ref: '#/definitions/internal_handler.PublicCaptchaConfig'
       required:
         type: boolean
     type: object
-  handler.CommentDeleteResponse:
+  internal_handler.CommentDeleteResponse:
     properties:
       deleted_root_id:
         type: string
       hard:
         type: boolean
     type: object
-  handler.CommentResponse:
+  internal_handler.CommentResponse:
     properties:
       author_nickname:
         type: string
@@ -315,7 +359,7 @@ definitions:
       user_id:
         type: string
     type: object
-  handler.CreateCommentRequest:
+  internal_handler.CreateCommentRequest:
     properties:
       body_markdown:
         type: string
@@ -334,9 +378,9 @@ definitions:
       parent_id:
         type: string
       website_url:
-        $ref: '#/definitions/identity.OptionalNullableString'
+        $ref: '#/definitions/furtalk_internal_service_identity.OptionalNullableString'
     type: object
-  handler.EmailCodeLoginRequest:
+  internal_handler.EmailCodeLoginRequest:
     properties:
       captcha_token:
         type: string
@@ -345,21 +389,21 @@ definitions:
       email:
         type: string
     type: object
-  handler.EmailCodeRequest:
+  internal_handler.EmailCodeRequest:
     properties:
       captcha_token:
         type: string
       email:
         type: string
     type: object
-  handler.IdentitiesResponse:
+  internal_handler.IdentitiesResponse:
     properties:
       identities:
         items:
-          $ref: '#/definitions/handler.IdentityMetadata'
+          $ref: '#/definitions/internal_handler.IdentityMetadata'
         type: array
     type: object
-  handler.IdentityMetadata:
+  internal_handler.IdentityMetadata:
     properties:
       created_at:
         type: string
@@ -374,14 +418,14 @@ definitions:
       provider:
         type: string
     type: object
-  handler.LatestCommentListResponse:
+  internal_handler.LatestCommentListResponse:
     properties:
       comments:
         items:
-          $ref: '#/definitions/handler.LatestCommentResponse'
+          $ref: '#/definitions/internal_handler.LatestCommentResponse'
         type: array
     type: object
-  handler.LatestCommentResponse:
+  internal_handler.LatestCommentResponse:
     properties:
       author_nickname:
         type: string
@@ -418,7 +462,7 @@ definitions:
       user_id:
         type: string
     type: object
-  handler.MeCommentDetailResponse:
+  internal_handler.MeCommentDetailResponse:
     properties:
       author_nickname:
         type: string
@@ -467,18 +511,18 @@ definitions:
       user_id:
         type: string
     type: object
-  handler.MeCommentListResponse:
+  internal_handler.MeCommentListResponse:
     properties:
       comments:
         items:
-          $ref: '#/definitions/handler.MeCommentResponse'
+          $ref: '#/definitions/internal_handler.MeCommentResponse'
         type: array
       total:
         type: integer
       user_delete_mode:
         type: string
     type: object
-  handler.MeCommentResponse:
+  internal_handler.MeCommentResponse:
     properties:
       author_nickname:
         type: string
@@ -525,28 +569,28 @@ definitions:
       user_id:
         type: string
     type: object
-  handler.MeCommentSiteResponse:
+  internal_handler.MeCommentSiteResponse:
     properties:
       id:
         type: string
       name:
         type: string
     type: object
-  handler.MeCommentSitesResponse:
+  internal_handler.MeCommentSitesResponse:
     properties:
       sites:
         items:
-          $ref: '#/definitions/handler.MeCommentSiteResponse'
+          $ref: '#/definitions/internal_handler.MeCommentSiteResponse'
         type: array
     type: object
-  handler.MePasswordRequest:
+  internal_handler.MePasswordRequest:
     properties:
       current_password:
         type: string
       new_password:
         type: string
     type: object
-  handler.MeResponse:
+  internal_handler.MeResponse:
     properties:
       avatar_url:
         type: string
@@ -563,7 +607,7 @@ definitions:
       nickname:
         type: string
       notification_preferences:
-        $ref: '#/definitions/handler.NotificationPreferencesResponse'
+        $ref: '#/definitions/internal_handler.NotificationPreferencesResponse'
       role:
         type: string
       status:
@@ -573,28 +617,28 @@ definitions:
       website_url:
         type: string
     type: object
-  handler.MeUpdateRequest:
+  internal_handler.MeUpdateRequest:
     properties:
       nickname:
         type: string
       website_url:
         type: string
     type: object
-  handler.NotificationPreferencesRequest:
+  internal_handler.NotificationPreferencesRequest:
     properties:
       moderation_enabled:
         type: boolean
       reply_enabled:
         type: boolean
     type: object
-  handler.NotificationPreferencesResponse:
+  internal_handler.NotificationPreferencesResponse:
     properties:
       moderation_enabled:
         type: boolean
       reply_enabled:
         type: boolean
     type: object
-  handler.OAuthCompleteRequest:
+  internal_handler.OAuthCompleteRequest:
     properties:
       code:
         type: string
@@ -605,57 +649,57 @@ definitions:
       state:
         type: string
     type: object
-  handler.OAuthCompleteResponse:
+  internal_handler.OAuthCompleteResponse:
     properties:
       redirect:
         type: string
     type: object
-  handler.OAuthStartResponse:
+  internal_handler.OAuthStartResponse:
     properties:
       auth_url:
         type: string
     type: object
-  handler.OriginRequest:
+  internal_handler.OriginRequest:
     properties:
       origin:
         type: string
     type: object
-  handler.OriginResponse:
+  internal_handler.OriginResponse:
     properties:
       id:
         type: string
       origin:
         type: string
     type: object
-  handler.PasskeyFinishRequest:
+  internal_handler.PasskeyFinishRequest:
     properties:
       challenge:
         type: string
       response: {}
     type: object
-  handler.PasskeyLoginOptionsRequest:
+  internal_handler.PasskeyLoginOptionsRequest:
     properties:
       user_handle:
         type: string
     type: object
-  handler.PasskeyLoginOptionsResponse:
+  internal_handler.PasskeyLoginOptionsResponse:
     properties:
       challenge:
         type: string
       options: {}
     type: object
-  handler.PasskeyRegistrationOptionsResponse:
+  internal_handler.PasskeyRegistrationOptionsResponse:
     properties:
       challenge:
         type: string
       options: {}
     type: object
-  handler.PasskeyRenameRequest:
+  internal_handler.PasskeyRenameRequest:
     properties:
       name:
         type: string
     type: object
-  handler.PasswordLoginRequest:
+  internal_handler.PasswordLoginRequest:
     properties:
       captcha_token:
         type: string
@@ -664,14 +708,14 @@ definitions:
       password:
         type: string
     type: object
-  handler.PasswordResetCodeRequest:
+  internal_handler.PasswordResetCodeRequest:
     properties:
       captcha_token:
         type: string
       email:
         type: string
     type: object
-  handler.PasswordResetConfirmRequest:
+  internal_handler.PasswordResetConfirmRequest:
     properties:
       code:
         type: string
@@ -680,7 +724,7 @@ definitions:
       new_password:
         type: string
     type: object
-  handler.ProviderMetadata:
+  internal_handler.ProviderMetadata:
     properties:
       configured:
         type: boolean
@@ -694,7 +738,7 @@ definitions:
         additionalProperties: {}
         type: object
     type: object
-  handler.ProviderUpsertRequest:
+  internal_handler.ProviderUpsertRequest:
     properties:
       config:
         additionalProperties: {}
@@ -704,14 +748,14 @@ definitions:
       kind:
         type: string
     type: object
-  handler.ProvidersResponse:
+  internal_handler.ProvidersResponse:
     properties:
       providers:
         items:
-          $ref: '#/definitions/handler.ProviderMetadata'
+          $ref: '#/definitions/internal_handler.ProviderMetadata'
         type: array
     type: object
-  handler.PublicCaptchaConfig:
+  internal_handler.PublicCaptchaConfig:
     properties:
       api_endpoint:
         type: string
@@ -720,22 +764,22 @@ definitions:
       site_key:
         type: string
     type: object
-  handler.ReplyRequest:
+  internal_handler.ReplyRequest:
     properties:
       body:
         type: string
       captcha_token:
         type: string
     type: object
-  handler.RuntimeCaptchaResponse:
+  internal_handler.RuntimeCaptchaResponse:
     properties:
       comment:
-        $ref: '#/definitions/handler.CaptchaActionResponse'
+        $ref: '#/definitions/internal_handler.CaptchaActionResponse'
     type: object
-  handler.RuntimeConfigResponse:
+  internal_handler.RuntimeConfigResponse:
     properties:
       captcha:
-        $ref: '#/definitions/handler.RuntimeCaptchaResponse'
+        $ref: '#/definitions/internal_handler.RuntimeCaptchaResponse'
       comment_mode:
         type: string
       comment_sort:
@@ -754,35 +798,35 @@ definitions:
       user_delete_mode:
         type: string
     type: object
-  handler.SettingsPatchRequest:
+  internal_handler.SettingsPatchRequest:
     properties:
       settings:
         items:
-          $ref: '#/definitions/setting.SettingItem'
+          $ref: '#/definitions/furtalk_internal_service_setting.SettingItem'
         type: array
     type: object
-  handler.SettingsResponse:
+  internal_handler.SettingsResponse:
     properties:
       settings:
         items:
-          $ref: '#/definitions/setting.SettingItem'
+          $ref: '#/definitions/furtalk_internal_service_setting.SettingItem'
         type: array
     type: object
-  handler.SiteListResponse:
+  internal_handler.SiteListResponse:
     properties:
       sites:
         items:
-          $ref: '#/definitions/handler.SiteResponse'
+          $ref: '#/definitions/internal_handler.SiteResponse'
         type: array
     type: object
-  handler.SiteRequest:
+  internal_handler.SiteRequest:
     properties:
       canonical_url:
         type: string
       name:
         type: string
     type: object
-  handler.SiteResponse:
+  internal_handler.SiteResponse:
     properties:
       canonical_url:
         type: string
@@ -794,14 +838,14 @@ definitions:
         type: string
       origins:
         items:
-          $ref: '#/definitions/handler.OriginResponse'
+          $ref: '#/definitions/internal_handler.OriginResponse'
         type: array
       status:
         type: string
       updated_at:
         type: string
     type: object
-  handler.SiteUpdateRequest:
+  internal_handler.SiteUpdateRequest:
     properties:
       canonical_url:
         type: string
@@ -810,18 +854,18 @@ definitions:
       status:
         type: string
     type: object
-  handler.ThreadCommentsResponse:
+  internal_handler.ThreadCommentsResponse:
     properties:
       comments:
         items:
-          $ref: '#/definitions/handler.CommentResponse'
+          $ref: '#/definitions/internal_handler.CommentResponse'
         type: array
       next_cursor:
         type: string
       thread:
-        $ref: '#/definitions/handler.ThreadMetaResponse'
+        $ref: '#/definitions/internal_handler.ThreadMetaResponse'
     type: object
-  handler.ThreadMetaResponse:
+  internal_handler.ThreadMetaResponse:
     properties:
       comments_enabled:
         type: boolean
@@ -836,17 +880,17 @@ definitions:
       site_id:
         type: string
     type: object
-  handler.UnsubscribeRequest:
+  internal_handler.UnsubscribeRequest:
     properties:
       token:
         type: string
     type: object
-  handler.WidgetAuthorizationRequiredResponse:
+  internal_handler.WidgetAuthorizationRequiredResponse:
     properties:
       need_auth_code:
         type: boolean
     type: object
-  handler.WidgetSessionResponse:
+  internal_handler.WidgetSessionResponse:
     properties:
       credential_mode:
         type: string
@@ -861,50 +905,6 @@ definitions:
       valid:
         type: boolean
     type: object
-  httpx.ErrorBody:
-    properties:
-      code:
-        type: string
-      details:
-        additionalProperties: {}
-        type: object
-      message:
-        type: string
-      request_id:
-        type: string
-    type: object
-  httpx.ErrorResponse:
-    properties:
-      error:
-        $ref: '#/definitions/httpx.ErrorBody'
-    type: object
-  identity.OptionalNullableString:
-    properties:
-      set:
-        type: boolean
-      value:
-        type: string
-    type: object
-  setting.SettingItem:
-    properties:
-      key:
-        type: string
-      type:
-        $ref: '#/definitions/setting.SettingType'
-      value: {}
-    type: object
-  setting.SettingType:
-    enum:
-    - string
-    - integer
-    - boolean
-    - json
-    type: string
-    x-enum-varnames:
-    - SettingTypeString
-    - SettingTypeInteger
-    - SettingTypeBoolean
-    - SettingTypeJSON
 info:
   contact: {}
   description: |-
@@ -963,19 +963,19 @@ paths:
         "200":
           description: 一页评论与匹配总数
           schema:
-            $ref: '#/definitions/handler.AdminCommentListResponse'
+            $ref: '#/definitions/internal_handler.AdminCommentListResponse'
         "400":
           description: 请求参数无效
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "401":
           description: 需要管理员登录
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "403":
           description: 权限不足
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 使用过滤器与页码分页列出评论
       tags:
       - admin-comments
@@ -1006,27 +1006,27 @@ paths:
         "200":
           description: 删除结果
           schema:
-            $ref: '#/definitions/handler.CommentDeleteResponse'
+            $ref: '#/definitions/internal_handler.CommentDeleteResponse'
         "400":
           description: 请求参数无效
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "401":
           description: 需要管理员登录
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "404":
           description: 评论不存在
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "409":
           description: 评论状态冲突
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "422":
           description: 破坏性操作需要显式确认
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 删除评论（软删除或硬删除）
       tags:
       - admin-comments
@@ -1043,19 +1043,19 @@ paths:
         "200":
           description: 管理视图
           schema:
-            $ref: '#/definitions/handler.AdminCommentResponse'
+            $ref: '#/definitions/internal_handler.AdminCommentResponse'
         "400":
           description: 请求参数无效
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "401":
           description: 需要管理员登录
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "404":
           description: 评论不存在
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 获取单条评论的管理视图
       tags:
       - admin-comments
@@ -1073,7 +1073,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handler.AdminCommentUpdateRequest'
+          $ref: '#/definitions/internal_handler.AdminCommentUpdateRequest'
       - description: CSRF token
         in: header
         name: X-CSRF-Token
@@ -1085,19 +1085,19 @@ paths:
         "200":
           description: 更新后的管理视图
           schema:
-            $ref: '#/definitions/handler.AdminCommentResponse'
+            $ref: '#/definitions/internal_handler.AdminCommentResponse'
         "400":
           description: 请求参数无效
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "401":
           description: 需要管理员登录
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "404":
           description: 评论不存在
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 编辑评论的 Markdown 正文
       tags:
       - admin-comments
@@ -1120,23 +1120,23 @@ paths:
         "200":
           description: 移动后的管理视图
           schema:
-            $ref: '#/definitions/handler.AdminCommentResponse'
+            $ref: '#/definitions/internal_handler.AdminCommentResponse'
         "400":
           description: 请求参数无效
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "401":
           description: 需要管理员登录
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "404":
           description: 评论不存在
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "409":
           description: 评论状态冲突
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 把评论移入待审核
       tags:
       - admin-comments
@@ -1159,23 +1159,23 @@ paths:
         "200":
           description: 发布后的管理视图
           schema:
-            $ref: '#/definitions/handler.AdminCommentResponse'
+            $ref: '#/definitions/internal_handler.AdminCommentResponse'
         "400":
           description: 请求参数无效
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "401":
           description: 需要管理员登录
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "404":
           description: 评论不存在
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "409":
           description: 评论状态冲突
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 发布待审评论
       tags:
       - admin-comments
@@ -1198,23 +1198,23 @@ paths:
         "200":
           description: 恢复后的管理视图
           schema:
-            $ref: '#/definitions/handler.AdminCommentResponse'
+            $ref: '#/definitions/internal_handler.AdminCommentResponse'
         "400":
           description: 请求参数无效
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "401":
           description: 需要管理员登录
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "404":
           description: 评论不存在
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "409":
           description: 评论状态冲突
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 恢复已删除的评论
       tags:
       - admin-comments
@@ -1237,23 +1237,23 @@ paths:
         "200":
           description: 标记后的管理视图
           schema:
-            $ref: '#/definitions/handler.AdminCommentResponse'
+            $ref: '#/definitions/internal_handler.AdminCommentResponse'
         "400":
           description: 请求参数无效
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "401":
           description: 需要管理员登录
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "404":
           description: 评论不存在
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "409":
           description: 评论状态冲突
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 将评论标记为垃圾评论
       tags:
       - admin-comments
@@ -1263,17 +1263,17 @@ paths:
       - application/json
       responses:
         "200":
-          description: 提供商列表（不含机密；CAPTCHA 项无 enabled）
+          description: 提供商列表（不含机密；CAPTCHA 项无 enabled，OAuth/OIDC 与 Spam 项携带 enabled）
           schema:
-            $ref: '#/definitions/handler.ProvidersResponse'
+            $ref: '#/definitions/internal_handler.ProvidersResponse'
         "401":
           description: 需要管理员登录
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "403":
           description: 权限不足
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 列出提供商配置
       tags:
       - admin-providers
@@ -1296,15 +1296,15 @@ paths:
         "401":
           description: 需要管理员登录
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "403":
           description: 权限不足
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "404":
           description: 提供商不存在
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 删除提供商配置
       tags:
       - admin-providers
@@ -1317,12 +1317,12 @@ paths:
         name: provider_key
         required: true
         type: string
-      - description: 提供商配置（CAPTCHA 不允许携带 enabled）
+      - description: 提供商配置（CAPTCHA 不允许携带 enabled；Spam 必须携带 enabled）
         in: body
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handler.ProviderUpsertRequest'
+          $ref: '#/definitions/internal_handler.ProviderUpsertRequest'
       - description: CSRF token
         in: header
         name: X-CSRF-Token
@@ -1334,19 +1334,19 @@ paths:
         "400":
           description: 请求参数无效
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "401":
           description: 需要管理员登录
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "403":
           description: 权限不足
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "500":
           description: 提供商密钥数据损坏
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 新增或更新提供商
       tags:
       - admin-providers
@@ -1375,19 +1375,19 @@ paths:
         "401":
           description: 需要管理员登录
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "403":
           description: 权限不足
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "404":
           description: 提供商不存在
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "503":
           description: 服务暂不可用
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 测试提供商连通性
       tags:
       - admin-providers
@@ -1399,15 +1399,15 @@ paths:
         "200":
           description: 公开设置项列表
           schema:
-            $ref: '#/definitions/handler.SettingsResponse'
+            $ref: '#/definitions/internal_handler.SettingsResponse'
         "401":
           description: 需要管理员登录
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "403":
           description: 权限不足
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 读取系统设置
       tags:
       - admin-settings
@@ -1420,7 +1420,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handler.SettingsPatchRequest'
+          $ref: '#/definitions/internal_handler.SettingsPatchRequest'
       - description: CSRF token
         in: header
         name: X-CSRF-Token
@@ -1432,19 +1432,19 @@ paths:
         "200":
           description: 更新后的完整设置列表
           schema:
-            $ref: '#/definitions/handler.SettingsResponse'
+            $ref: '#/definitions/internal_handler.SettingsResponse'
         "400":
           description: 请求参数无效
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "401":
           description: 需要管理员登录
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "403":
           description: 权限不足
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 更新系统设置
       tags:
       - admin-settings
@@ -1456,15 +1456,15 @@ paths:
         "200":
           description: 站点列表
           schema:
-            $ref: '#/definitions/handler.SiteListResponse'
+            $ref: '#/definitions/internal_handler.SiteListResponse'
         "401":
           description: 需要管理员登录
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "403":
           description: 权限不足
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 列出站点
       tags:
       - admin-sites
@@ -1477,7 +1477,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handler.SiteRequest'
+          $ref: '#/definitions/internal_handler.SiteRequest'
       - description: CSRF token
         in: header
         name: X-CSRF-Token
@@ -1489,23 +1489,23 @@ paths:
         "201":
           description: 创建的站点
           schema:
-            $ref: '#/definitions/handler.SiteResponse'
+            $ref: '#/definitions/internal_handler.SiteResponse'
         "400":
           description: 请求参数无效
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "401":
           description: 需要管理员登录
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "403":
           description: 权限不足
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "409":
           description: 站点冲突
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 创建站点
       tags:
       - admin-sites
@@ -1532,27 +1532,27 @@ paths:
         "400":
           description: 请求参数无效
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "401":
           description: 需要管理员登录
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "403":
           description: 权限不足
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "404":
           description: 站点不存在
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "409":
           description: 资源状态冲突
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "422":
           description: 破坏性操作需要显式确认
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 删除站点
       tags:
       - admin-sites
@@ -1569,23 +1569,23 @@ paths:
         "200":
           description: 站点详情
           schema:
-            $ref: '#/definitions/handler.SiteResponse'
+            $ref: '#/definitions/internal_handler.SiteResponse'
         "400":
           description: 请求参数无效
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "401":
           description: 需要管理员登录
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "403":
           description: 权限不足
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "404":
           description: 站点不存在
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 获取站点详情
       tags:
       - admin-sites
@@ -1603,7 +1603,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handler.SiteUpdateRequest'
+          $ref: '#/definitions/internal_handler.SiteUpdateRequest'
       - description: CSRF token
         in: header
         name: X-CSRF-Token
@@ -1615,23 +1615,23 @@ paths:
         "200":
           description: 更新后的站点
           schema:
-            $ref: '#/definitions/handler.SiteResponse'
+            $ref: '#/definitions/internal_handler.SiteResponse'
         "400":
           description: 请求参数无效
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "401":
           description: 需要管理员登录
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "403":
           description: 权限不足
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "404":
           description: 站点不存在
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 更新站点
       tags:
       - admin-sites
@@ -1650,7 +1650,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handler.OriginRequest'
+          $ref: '#/definitions/internal_handler.OriginRequest'
       - description: CSRF token
         in: header
         name: X-CSRF-Token
@@ -1662,31 +1662,31 @@ paths:
         "201":
           description: 创建的 origin
           schema:
-            $ref: '#/definitions/handler.OriginResponse'
+            $ref: '#/definitions/internal_handler.OriginResponse'
         "400":
           description: 请求参数无效
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "401":
           description: 需要管理员登录
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "403":
           description: 权限不足
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "404":
           description: 站点不存在
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "409":
           description: 资源状态冲突
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "422":
           description: origin 格式非法
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 添加站点允许的 origin
       tags:
       - admin-sites
@@ -1714,19 +1714,19 @@ paths:
         "400":
           description: 请求参数无效
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "401":
           description: 需要管理员登录
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "403":
           description: 权限不足
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "404":
           description: 站点或 origin 不存在
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 移除站点允许的 origin
       tags:
       - admin-sites
@@ -1749,7 +1749,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handler.OriginRequest'
+          $ref: '#/definitions/internal_handler.OriginRequest'
       - description: CSRF token
         in: header
         name: X-CSRF-Token
@@ -1761,31 +1761,31 @@ paths:
         "200":
           description: 更新后的 origin
           schema:
-            $ref: '#/definitions/handler.OriginResponse'
+            $ref: '#/definitions/internal_handler.OriginResponse'
         "400":
           description: 请求参数无效
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "401":
           description: 需要管理员登录
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "403":
           description: 权限不足
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "404":
           description: 站点或 origin 不存在
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "409":
           description: 资源状态冲突
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "422":
           description: origin 格式非法
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 更新站点允许的 origin
       tags:
       - admin-sites
@@ -1823,19 +1823,19 @@ paths:
         "200":
           description: 一页线程与匹配总数
           schema:
-            $ref: '#/definitions/handler.AdminThreadListResponse'
+            $ref: '#/definitions/internal_handler.AdminThreadListResponse'
         "400":
           description: 请求参数无效
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "401":
           description: 需要管理员登录
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "403":
           description: 权限不足
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 按站点列出线程
       tags:
       - admin-threads
@@ -1870,23 +1870,23 @@ paths:
         "400":
           description: 请求参数无效
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "401":
           description: 需要管理员登录
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "403":
           description: 权限不足
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "404":
           description: 线程不存在或不属于该站点
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "422":
           description: 破坏性操作需要显式确认
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 硬删除线程及其全部评论
       tags:
       - admin-threads
@@ -1909,7 +1909,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handler.AdminThreadUpdateRequest'
+          $ref: '#/definitions/internal_handler.AdminThreadUpdateRequest'
       - description: CSRF token
         in: header
         name: X-CSRF-Token
@@ -1921,31 +1921,31 @@ paths:
         "200":
           description: 更新后的线程视图
           schema:
-            $ref: '#/definitions/handler.AdminThreadResponse'
+            $ref: '#/definitions/internal_handler.AdminThreadResponse'
         "400":
           description: 请求参数无效
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "401":
           description: 需要管理员登录
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "403":
           description: 权限不足
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "404":
           description: 线程不存在或不属于该站点
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "409":
           description: page_key 在站点内重复
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "422":
           description: 缺少任何更新字段或字段校验失败
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 更新线程元数据（page_key / page_title / comments_enabled）
       tags:
       - admin-threads
@@ -1969,15 +1969,15 @@ paths:
         "401":
           description: 需要管理员登录
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "403":
           description: 权限不足
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "503":
           description: 投递失败
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 测试 SMTP 投递配置
       tags:
       - smtp
@@ -2006,19 +2006,19 @@ paths:
         "200":
           description: 用户列表与真实总数
           schema:
-            $ref: '#/definitions/handler.AdminUserListResponse'
+            $ref: '#/definitions/internal_handler.AdminUserListResponse'
         "400":
           description: 请求参数无效
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "401":
           description: 需要管理员登录
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "403":
           description: 权限不足
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 按关键字分页列出用户
       tags:
       - admin-users
@@ -2031,7 +2031,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handler.AdminUserCreateRequest'
+          $ref: '#/definitions/internal_handler.AdminUserCreateRequest'
       - description: CSRF token
         in: header
         name: X-CSRF-Token
@@ -2043,23 +2043,23 @@ paths:
         "201":
           description: 创建的用户
           schema:
-            $ref: '#/definitions/handler.AdminUserResponse'
+            $ref: '#/definitions/internal_handler.AdminUserResponse'
         "400":
           description: 请求参数无效
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "401":
           description: 需要管理员登录
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "403":
           description: 权限不足
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "409":
           description: 邮箱已被注册
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 预创建用户
       tags:
       - admin-users
@@ -2091,27 +2091,27 @@ paths:
         "400":
           description: 请求参数无效
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "401":
           description: 需要管理员登录
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "403":
           description: 不能删除自己或权限不足
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "404":
           description: 用户不存在
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "409":
           description: 不能移除最后一个管理员
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "422":
           description: 破坏性操作需要显式确认
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 软删除或硬删除用户
       tags:
       - admin-users
@@ -2128,23 +2128,23 @@ paths:
         "200":
           description: 用户资料
           schema:
-            $ref: '#/definitions/handler.AdminUserResponse'
+            $ref: '#/definitions/internal_handler.AdminUserResponse'
         "400":
           description: 请求参数无效
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "401":
           description: 需要管理员登录
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "403":
           description: 权限不足
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "404":
           description: 用户不存在
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 获取用户资料
       tags:
       - admin-users
@@ -2162,7 +2162,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handler.AdminUserUpdateRequest'
+          $ref: '#/definitions/internal_handler.AdminUserUpdateRequest'
       - description: CSRF token
         in: header
         name: X-CSRF-Token
@@ -2174,27 +2174,27 @@ paths:
         "200":
           description: 更新后的用户
           schema:
-            $ref: '#/definitions/handler.AdminUserResponse'
+            $ref: '#/definitions/internal_handler.AdminUserResponse'
         "400":
           description: 请求参数无效
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "401":
           description: 需要管理员登录
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "403":
           description: 权限不足
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "404":
           description: 用户不存在
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "409":
           description: 不能移除最后一个管理员或邮箱冲突
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 修改用户资料与状态
       tags:
       - admin-users
@@ -2213,7 +2213,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handler.AdminUserResetPasswordRequest'
+          $ref: '#/definitions/internal_handler.AdminUserResetPasswordRequest'
       - description: CSRF token
         in: header
         name: X-CSRF-Token
@@ -2225,23 +2225,23 @@ paths:
         "400":
           description: 请求参数无效
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "401":
           description: 需要管理员登录
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "403":
           description: 权限不足
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "404":
           description: 用户不存在
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "422":
           description: 密码不符合要求
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 重置目标用户密码
       tags:
       - admin-users
@@ -2264,27 +2264,27 @@ paths:
         "200":
           description: 恢复后的用户
           schema:
-            $ref: '#/definitions/handler.AdminUserResponse'
+            $ref: '#/definitions/internal_handler.AdminUserResponse'
         "400":
           description: 请求参数无效
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "401":
           description: 需要管理员登录
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "403":
           description: 权限不足
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "404":
           description: 用户不存在
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "409":
           description: 用户未处于软删除状态
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 恢复被软删除的用户
       tags:
       - admin-users
@@ -2298,30 +2298,30 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handler.EmailCodeLoginRequest'
+          $ref: '#/definitions/internal_handler.EmailCodeLoginRequest'
       responses:
         "204":
           description: 已写入会话 Cookie
         "400":
           description: 请求参数无效
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "401":
           description: 验证码错误
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "403":
           description: 验证码验证失败
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "422":
           description: 缺少验证码
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "503":
           description: 验证码服务暂不可用
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 使用邮箱验证码登录
       tags:
       - auth
@@ -2335,26 +2335,26 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handler.EmailCodeRequest'
+          $ref: '#/definitions/internal_handler.EmailCodeRequest'
       responses:
         "204":
           description: 验证码已发送
         "400":
           description: 请求参数无效
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "403":
           description: 验证码验证失败
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "422":
           description: 请求参数无效或缺少验证码
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "503":
           description: 验证码服务或邮件服务暂不可用
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 请求发送邮箱验证码
       tags:
       - auth
@@ -2372,7 +2372,7 @@ paths:
         "401":
           description: 需要登录
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 退出登录
       tags:
       - auth
@@ -2391,18 +2391,18 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handler.OAuthCompleteRequest'
+          $ref: '#/definitions/internal_handler.OAuthCompleteRequest'
       produces:
       - application/json
       responses:
         "200":
           description: 已写入会话 Cookie，返回站内回跳地址
           schema:
-            $ref: '#/definitions/handler.OAuthCompleteResponse'
+            $ref: '#/definitions/internal_handler.OAuthCompleteResponse'
         "400":
           description: 回调参数无效、state/handoff 无效或授权码校验失败
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 完成 OAuth 登录
       tags:
       - auth
@@ -2428,19 +2428,19 @@ paths:
         "200":
           description: 授权 URL
           schema:
-            $ref: '#/definitions/handler.OAuthStartResponse'
+            $ref: '#/definitions/internal_handler.OAuthStartResponse'
         "400":
           description: 请求参数无效
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "401":
           description: bind 场景需要登录
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "404":
           description: 提供商不存在或未启用
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 开始 OAuth 授权流程
       tags:
       - auth
@@ -2454,22 +2454,22 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handler.PasskeyLoginOptionsRequest'
+          $ref: '#/definitions/internal_handler.PasskeyLoginOptionsRequest'
       produces:
       - application/json
       responses:
         "200":
           description: 断言选项
           schema:
-            $ref: '#/definitions/handler.PasskeyLoginOptionsResponse'
+            $ref: '#/definitions/internal_handler.PasskeyLoginOptionsResponse'
         "400":
           description: 请求参数无效
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "404":
           description: 用户不存在
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 开始 passkey 登录仪式
       tags:
       - auth
@@ -2483,18 +2483,18 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handler.PasskeyFinishRequest'
+          $ref: '#/definitions/internal_handler.PasskeyFinishRequest'
       responses:
         "204":
           description: 已写入会话 Cookie
         "400":
           description: 断言无效
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "401":
           description: 校验失败
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 校验 passkey 断言并登录
       tags:
       - auth
@@ -2508,30 +2508,30 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handler.PasswordLoginRequest'
+          $ref: '#/definitions/internal_handler.PasswordLoginRequest'
       responses:
         "204":
           description: 已写入会话 Cookie
         "400":
           description: 请求参数无效
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "401":
           description: 账号或密码错误
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "403":
           description: 账号已被禁用或验证码验证失败
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "422":
           description: 缺少验证码
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "503":
           description: 验证码服务暂不可用
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 使用邮箱密码登录
       tags:
       - auth
@@ -2545,22 +2545,22 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handler.PasswordResetConfirmRequest'
+          $ref: '#/definitions/internal_handler.PasswordResetConfirmRequest'
       responses:
         "204":
           description: 密码已重置（不签发会话 Cookie）
         "400":
           description: 请求参数无效
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "401":
           description: 验证码错误
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "422":
           description: 密码不符合要求
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 使用验证码与新密码完成密码重置
       tags:
       - auth
@@ -2574,26 +2574,26 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handler.PasswordResetCodeRequest'
+          $ref: '#/definitions/internal_handler.PasswordResetCodeRequest'
       responses:
         "204":
           description: 验证码已发送（未知邮箱也返回相同的公开成功）
         "400":
           description: 请求参数无效
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "403":
           description: 验证码验证失败
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "422":
           description: 请求参数无效或缺少验证码
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "503":
           description: 验证码服务暂不可用
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 请求发送密码重置验证码
       tags:
       - auth
@@ -2605,7 +2605,7 @@ paths:
         "200":
           description: 提供商列表
           schema:
-            $ref: '#/definitions/handler.AuthProvidersResponse'
+            $ref: '#/definitions/internal_handler.AuthProvidersResponse'
       summary: 列出可用的 OAuth/OIDC 提供商
       tags:
       - auth
@@ -2619,22 +2619,22 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handler.BootstrapAdminRequest'
+          $ref: '#/definitions/internal_handler.BootstrapAdminRequest'
       responses:
         "204":
           description: 初始化完成
         "400":
           description: 请求参数无效
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "409":
           description: 邮箱已被注册
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "410":
           description: 初始化已不可用
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 创建首位管理员
       tags:
       - bootstrap
@@ -2646,7 +2646,7 @@ paths:
         "200":
           description: 初始化状态
           schema:
-            $ref: '#/definitions/handler.BootstrapStatusResponse'
+            $ref: '#/definitions/internal_handler.BootstrapStatusResponse'
       summary: 查询系统是否完成初始化
       tags:
       - bootstrap
@@ -2664,7 +2664,7 @@ paths:
         "200":
           description: 公共 CAPTCHA 配置（不含机密）
           schema:
-            $ref: '#/definitions/handler.CaptchaConfigResponse'
+            $ref: '#/definitions/internal_handler.CaptchaConfigResponse'
         "422":
           description: action 缺失或超长
         "503":
@@ -2682,7 +2682,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handler.AuthorizationIssueRequest'
+          $ref: '#/definitions/internal_handler.AuthorizationIssueRequest'
       - description: CSRF token
         in: header
         name: X-CSRF-Token
@@ -2694,27 +2694,27 @@ paths:
         "201":
           description: 一次性授权码
           schema:
-            $ref: '#/definitions/handler.AuthorizationIssueResponse'
+            $ref: '#/definitions/internal_handler.AuthorizationIssueResponse'
         "400":
           description: 请求参数无效
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "401":
           description: 需要登录
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "403":
           description: CSRF token 无效
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "404":
           description: 站点不存在
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "422":
           description: origin 格式无效
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 为第一方页面签发一次性授权码
       tags:
       - first-party
@@ -2737,19 +2737,19 @@ paths:
         "200":
           description: 授权上下文
           schema:
-            $ref: '#/definitions/handler.AuthorizationContextResponse'
+            $ref: '#/definitions/internal_handler.AuthorizationContextResponse'
         "400":
           description: 请求参数无效
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "401":
           description: 需要登录
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "403":
           description: 站点不可用或 origin 不被允许
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 获取授权上下文（只读）
       tags:
       - first-party
@@ -2772,19 +2772,19 @@ paths:
         "200":
           description: 删除结果
           schema:
-            $ref: '#/definitions/handler.CommentDeleteResponse'
+            $ref: '#/definitions/internal_handler.CommentDeleteResponse'
         "400":
           description: 请求参数无效
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "401":
           description: 需要登录
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "404":
           description: 评论不存在
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 第一方删除自己的评论
       tags:
       - first-party
@@ -2803,7 +2803,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handler.ReplyRequest'
+          $ref: '#/definitions/internal_handler.ReplyRequest'
       - description: CSRF token
         in: header
         name: X-CSRF-Token
@@ -2815,35 +2815,35 @@ paths:
         "201":
           description: 创建的回复
           schema:
-            $ref: '#/definitions/handler.CommentResponse'
+            $ref: '#/definitions/internal_handler.CommentResponse'
         "400":
           description: 请求参数无效
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "401":
           description: 需要登录
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "403":
           description: 验证码验证失败
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "404":
           description: 父评论不存在
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "409":
           description: 父评论已删除或跨线程回复
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "422":
           description: 回复深度超过限制或缺少验证码
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "503":
           description: 验证码服务暂不可用
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 第一方回复评论
       tags:
       - first-party
@@ -2855,11 +2855,11 @@ paths:
         "200":
           description: 当前用户资料
           schema:
-            $ref: '#/definitions/handler.MeResponse'
+            $ref: '#/definitions/internal_handler.MeResponse'
         "401":
           description: 需要登录
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 获取当前用户资料
       tags:
       - me
@@ -2872,7 +2872,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handler.MeUpdateRequest'
+          $ref: '#/definitions/internal_handler.MeUpdateRequest'
       - description: CSRF token
         in: header
         name: X-CSRF-Token
@@ -2884,19 +2884,19 @@ paths:
         "200":
           description: 更新后的资料
           schema:
-            $ref: '#/definitions/handler.MeResponse'
+            $ref: '#/definitions/internal_handler.MeResponse'
         "400":
           description: 请求参数无效
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "401":
           description: 需要登录
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "409":
           description: 邮箱冲突
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 更新当前用户资料
       tags:
       - me
@@ -2925,15 +2925,15 @@ paths:
         "200":
           description: 本人评论一页与匹配总数
           schema:
-            $ref: '#/definitions/handler.MeCommentListResponse'
+            $ref: '#/definitions/internal_handler.MeCommentListResponse'
         "400":
           description: 请求参数无效
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "401":
           description: 需要登录
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 分页列出本人评论
       tags:
       - me
@@ -2951,15 +2951,15 @@ paths:
         "200":
           description: 本人评论详情
           schema:
-            $ref: '#/definitions/handler.MeCommentDetailResponse'
+            $ref: '#/definitions/internal_handler.MeCommentDetailResponse'
         "401":
           description: 需要登录
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "404":
           description: 评论不存在或不属于当前用户
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 获取本人单条评论详情
       tags:
       - me
@@ -2971,11 +2971,11 @@ paths:
         "200":
           description: 本人发表过评论的站点
           schema:
-            $ref: '#/definitions/handler.MeCommentSitesResponse'
+            $ref: '#/definitions/internal_handler.MeCommentSitesResponse'
         "401":
           description: 需要登录
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 列出本人评论的站点选项
       tags:
       - me
@@ -2987,11 +2987,11 @@ paths:
         "200":
           description: 登录方式列表
           schema:
-            $ref: '#/definitions/handler.IdentitiesResponse'
+            $ref: '#/definitions/internal_handler.IdentitiesResponse'
         "401":
           description: 需要登录
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 列出当前用户的登录方式
       tags:
       - me
@@ -3014,19 +3014,19 @@ paths:
         "400":
           description: 请求参数无效
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "401":
           description: 需要登录
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "404":
           description: 登录方式不存在
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "409":
           description: 不能移除最后一个登录方式
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 解绑外部登录方式
       tags:
       - me
@@ -3040,7 +3040,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handler.NotificationPreferencesRequest'
+          $ref: '#/definitions/internal_handler.NotificationPreferencesRequest'
       - description: CSRF token
         in: header
         name: X-CSRF-Token
@@ -3052,15 +3052,15 @@ paths:
         "200":
           description: 更新后的偏好
           schema:
-            $ref: '#/definitions/handler.NotificationPreferencesResponse'
+            $ref: '#/definitions/internal_handler.NotificationPreferencesResponse'
         "400":
           description: 请求参数无效
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "401":
           description: 需要登录
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 更新当前用户通知偏好
       tags:
       - me
@@ -3074,7 +3074,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handler.PasskeyFinishRequest'
+          $ref: '#/definitions/internal_handler.PasskeyFinishRequest'
       - description: CSRF token
         in: header
         name: X-CSRF-Token
@@ -3086,15 +3086,15 @@ paths:
         "400":
           description: 请求参数无效
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "401":
           description: 需要登录
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "409":
           description: 凭证冲突
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 完成 passkey 注册
       tags:
       - me
@@ -3117,19 +3117,19 @@ paths:
         "400":
           description: 请求参数无效
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "401":
           description: 需要登录
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "404":
           description: passkey 不存在
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "409":
           description: 不能移除最后一个登录方式
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 删除自己的 passkey
       tags:
       - me
@@ -3147,7 +3147,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handler.PasskeyRenameRequest'
+          $ref: '#/definitions/internal_handler.PasskeyRenameRequest'
       - description: CSRF token
         in: header
         name: X-CSRF-Token
@@ -3159,19 +3159,19 @@ paths:
         "400":
           description: 请求参数无效
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "401":
           description: 需要登录
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "404":
           description: passkey 不存在
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "422":
           description: 名称不符合要求
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 重命名自己的 passkey
       tags:
       - me
@@ -3189,11 +3189,11 @@ paths:
         "200":
           description: 注册选项
           schema:
-            $ref: '#/definitions/handler.PasskeyRegistrationOptionsResponse'
+            $ref: '#/definitions/internal_handler.PasskeyRegistrationOptionsResponse'
         "401":
           description: 需要登录
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 获取 passkey 注册选项
       tags:
       - me
@@ -3207,7 +3207,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handler.MePasswordRequest'
+          $ref: '#/definitions/internal_handler.MePasswordRequest'
       - description: CSRF token
         in: header
         name: X-CSRF-Token
@@ -3219,15 +3219,15 @@ paths:
         "400":
           description: 请求参数无效
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "401":
           description: 需要登录或当前密码错误
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "422":
           description: 密码不符合要求
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 设置或修改当前用户密码
       tags:
       - me
@@ -3245,7 +3245,7 @@ paths:
         "401":
           description: 需要登录
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 注销当前用户全部设备
       tags:
       - me
@@ -3259,14 +3259,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handler.UnsubscribeRequest'
+          $ref: '#/definitions/internal_handler.UnsubscribeRequest'
       responses:
         "204":
           description: 退订完成
         "400":
           description: 退订令牌无效
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 退订通知邮件
       tags:
       - notification
@@ -3280,18 +3280,18 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handler.AuthorizationExchangeRequest'
+          $ref: '#/definitions/internal_handler.AuthorizationExchangeRequest'
       responses:
         "204":
           description: 已写入 widget 会话 Cookie
         "400":
           description: 授权码无效
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "403":
           description: origin 不被允许
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 用授权码交换 widget 会话凭证
       tags:
       - widget
@@ -3309,23 +3309,23 @@ paths:
         "200":
           description: 删除结果
           schema:
-            $ref: '#/definitions/handler.CommentDeleteResponse'
+            $ref: '#/definitions/internal_handler.CommentDeleteResponse'
         "400":
           description: 请求参数无效
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "401":
           description: 缺少 widget 凭证
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "403":
           description: origin 不被允许
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "404":
           description: 评论不存在
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 删除自己的 widget 评论
       tags:
       - widget
@@ -3344,7 +3344,7 @@ paths:
         "200":
           description: 会话状态
           schema:
-            $ref: '#/definitions/handler.WidgetSessionResponse'
+            $ref: '#/definitions/internal_handler.WidgetSessionResponse'
       summary: 探测当前 widget 会话
       tags:
       - widget
@@ -3379,19 +3379,19 @@ paths:
         "200":
           description: 评论列表
           schema:
-            $ref: '#/definitions/handler.ThreadCommentsResponse'
+            $ref: '#/definitions/internal_handler.ThreadCommentsResponse'
         "400":
           description: 请求参数无效
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "403":
           description: 站点已停用
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "404":
           description: 线程不存在
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 列出 widget 线程评论
       tags:
       - widget
@@ -3409,46 +3409,46 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handler.CreateCommentRequest'
+          $ref: '#/definitions/internal_handler.CreateCommentRequest'
       produces:
       - application/json
       responses:
         "200":
           description: 提交邮箱对应管理员，需要先经第一方显式授权
           schema:
-            $ref: '#/definitions/handler.WidgetAuthorizationRequiredResponse'
+            $ref: '#/definitions/internal_handler.WidgetAuthorizationRequiredResponse'
         "201":
           description: 创建的评论
           schema:
-            $ref: '#/definitions/handler.CommentResponse'
+            $ref: '#/definitions/internal_handler.CommentResponse'
         "400":
           description: 请求参数无效
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "401":
           description: 缺少 widget 凭证或凭证无效
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "403":
           description: origin 不被允许或验证码失败
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "404":
           description: 站点或父评论不存在
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "409":
           description: 父评论已删除或跨线程回复
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "422":
           description: 需要验证码或回复深度超限
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "503":
           description: 验证码服务暂不可用
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 创建 widget 评论
       tags:
       - widget
@@ -3470,19 +3470,19 @@ paths:
         "200":
           description: 最新评论列表
           schema:
-            $ref: '#/definitions/handler.LatestCommentListResponse'
+            $ref: '#/definitions/internal_handler.LatestCommentListResponse'
         "400":
           description: 请求参数无效
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "403":
           description: 站点已停用
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "404":
           description: 站点不存在
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 列出站点最新公开评论
       tags:
       - widget
@@ -3500,19 +3500,19 @@ paths:
         "200":
           description: 运行时配置
           schema:
-            $ref: '#/definitions/handler.RuntimeConfigResponse'
+            $ref: '#/definitions/internal_handler.RuntimeConfigResponse'
         "400":
           description: 请求参数无效
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "403":
           description: 站点已停用
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "404":
           description: 站点不存在
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 获取 widget 运行时配置
       tags:
       - widget
@@ -3544,7 +3544,7 @@ paths:
         "503":
           description: 服务未就绪
           schema:
-            $ref: '#/definitions/httpx.ErrorResponse'
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 就绪探针
       tags:
       - health

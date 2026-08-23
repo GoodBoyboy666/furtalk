@@ -117,6 +117,7 @@ func newServices(
 	}
 
 	authCodeStore := comment.NewAuthCodeStore(store)
+	spamGateway := comment.NewSpamGateway(spamProviderReader{svc: providerService}, logger)
 	commentService := comment.NewService(comment.Dependencies{
 		TxRunner:  repos.txRunner,
 		Threads:   repos.threads,
@@ -131,6 +132,7 @@ func newServices(
 		Signer:    widgetSigner,
 		Codes:     authCodeStore,
 		Verifier:  widgetJWTVerifier,
+		Spam:      spamGateway,
 		Bus:       bus,
 		Logger:    logger,
 	})

@@ -147,6 +147,8 @@ const (
 	ProviderKindOAuth ProviderKind = "oauth"
 	// ProviderKindOIDC 表示 OIDC 提供商。
 	ProviderKindOIDC ProviderKind = "oidc"
+	// ProviderKindSpam 表示垃圾检测提供商。
+	ProviderKindSpam ProviderKind = "spam"
 )
 
 // CommentEventType 标识一种评论事件类型。

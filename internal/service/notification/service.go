@@ -93,15 +93,15 @@ func (s *Service) handleCreated(ctx context.Context, ev domain.CommentEvent) {
 		return
 	}
 	if current.Settings.Notifications.Moderation {
-		s.sendModerationMails(ctx, current.Settings, comment, author, ev)
+		s.sendModerationMails(ctx, comment, author, ev)
 	}
 	if comment.Status == domain.CommentStatusPublished {
 		s.sendReplyNotification(ctx, comment, author)
 	}
 }
 
-// sendModerationMails 向全部活跃管理员发送新评论/待审核通知。
-func (s *Service) sendModerationMails(ctx context.Context, current domain.Settings, comment *domain.Comment, author *domain.User, ev domain.CommentEvent) {
+// sendModerationMails 向全部活跃管理员发送新评论/待审核/垃圾通知。
+func (s *Service) sendModerationMails(ctx context.Context, comment *domain.Comment, author *domain.User, ev domain.CommentEvent) {
 	admins, err := s.users.ListActiveAdmins(ctx)
 	if err != nil {
 		s.log.Warn("notifications: list admins", logging.ID("site_id", ev.SiteID), logging.Error(err))
@@ -115,7 +115,7 @@ func (s *Service) sendModerationMails(ctx context.Context, current domain.Settin
 		if strings.TrimSpace(admin.Email) == "" {
 			continue
 		}
-		msg, err := s.moderationMail(s.templates, current, admin.Email, comment, author.Nickname, pageTitle, pageURL)
+		msg, err := s.moderationMail(s.templates, admin.Email, comment, author.Nickname, pageTitle, pageURL)
 		if err != nil {
 			s.log.Warn("notifications: render moderation mail", logging.ID("site_id", ev.SiteID), logging.ID("comment_id", ev.CommentID), logging.Error(err))
 			continue
@@ -251,15 +251,22 @@ func (s *Service) threadPage(ctx context.Context, comment *domain.Comment) (titl
 }
 
 // moderationMail 构建管理员审核通知。
-// HTML 正文由模板渲染器生成；主题按审核状态在代码中设置。
-func (s *Service) moderationMail(templates mailer.TemplateRenderer, current domain.Settings, to string, comment *domain.Comment, authorNickname, pageTitle, pageURL string) (mailer.Message, error) {
-	subject := "新评论"
-	pending := "有新评论发表。"
+// 主题按评论的实际持久化状态区分已发布、待审核与垃圾评论，不再用全局审核策略推断。
+// HTML 正文由模板渲染器生成；主题按状态在代码中设置。
+func (s *Service) moderationMail(templates mailer.TemplateRenderer, to string, comment *domain.Comment, authorNickname, pageTitle, pageURL string) (mailer.Message, error) {
+	var subject, pending string
 	awaiting := false
-	if current.Moderation == domain.ModerationReview {
+	switch comment.Status {
+	case domain.CommentStatusPending:
 		subject = "评论待审核"
 		pending = "有一条新评论等待审核。"
 		awaiting = true
+	case domain.CommentStatusSpam:
+		subject = "评论被标记为垃圾"
+		pending = "有一条评论被自动标记为垃圾。"
+	default:
+		subject = "新评论"
+		pending = "有新评论发表。"
 	}
 	body := comment.BodyMarkdown
 	if trimmed := strings.TrimSpace(body); trimmed == "" {

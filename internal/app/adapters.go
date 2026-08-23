@@ -125,3 +125,36 @@ func (a captchaGatewayReader) SelectedCaptcha(ctx context.Context) (*comment.Cap
 	}
 	return &comment.CaptchaConfig{Provider: cfg.Provider, SiteKey: cfg.SiteKey, SecretKey: cfg.SecretKey, Endpoint: cfg.Endpoint}, nil
 }
+
+// spamProviderReader 把 setting.ProviderService 的垃圾检测 provider 解密配置
+// 投影为 comment.SpamProviderConfig。
+type spamProviderReader struct {
+	svc *setting.ProviderService
+}
+
+// EnabledSpamProviders 返回全部已启用垃圾检测 provider 的解密配置。
+func (a spamProviderReader) EnabledSpamProviders(ctx context.Context) ([]comment.SpamProviderConfig, error) {
+	providers, err := a.svc.EnabledSpamProviders(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]comment.SpamProviderConfig, 0, len(providers))
+	for _, p := range providers {
+		out = append(out, comment.SpamProviderConfig{
+			ProviderKey:     p.ProviderKey,
+			Enabled:         p.Enabled,
+			Configured:      p.Configured,
+			FilePath:        p.Config.FilePath,
+			CheckNickname:   p.Config.CheckNickname,
+			Action:          p.Config.Action,
+			APIKey:          p.Config.APIKey,
+			Region:          p.Config.Region,
+			BizType:         p.Config.BizType,
+			AccessKeyID:     p.Config.AccessKeyID,
+			AccessKeySecret: p.Config.AccessKeySecret,
+			SecretID:        p.Config.SecretID,
+			SecretKey:       p.Config.SecretKey,
+		})
+	}
+	return out, nil
+}

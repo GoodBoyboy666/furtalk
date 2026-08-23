@@ -61,7 +61,10 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (*CommentView, 
 
 	// 凭证/模式规则的实时判定与 actor 解析发生在 CAPTCHA 之前，
 	// 使管理员授权路径与注册关闭路径不消耗 CAPTCHA、零写入。
+	// 同时保留 actor 角色与作者网址，供事务外的垃圾检测使用。
 	var credentialActor *int64
+	actorIsAdmin := false
+	var authorWebsite *string
 	if input.Credential != nil {
 		cred := input.Credential
 		if cred.Epoch() != pol.Epoch {
@@ -81,6 +84,8 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (*CommentView, 
 		if subject.EmailNormalized != normalized {
 			return nil, domain.ErrInvalidCredentials
 		}
+		actorIsAdmin = principal.Role == domain.RoleAdmin
+		authorWebsite = subject.WebsiteURL
 		actor := cred.UserID()
 		credentialActor = &actor
 	} else {
@@ -95,6 +100,7 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (*CommentView, 
 			if user.Status != domain.UserStatusActive {
 				return nil, domain.ErrInvalidCredentials
 			}
+			authorWebsite = user.WebsiteURL
 		} else if !errors.Is(err, domain.ErrNotFound) {
 			return nil, err
 		} else if !pol.PublicRegistration {
@@ -104,6 +110,24 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (*CommentView, 
 
 	if err := s.checkCaptcha(ctx, pol.CaptchaPolicy, CommentAction, input.CaptchaToken); err != nil {
 		return nil, err
+	}
+
+	// 垃圾检测：管理员作者跳过全部检测器；普通作者在事务外串行执行固定检测链，
+	// 得到显式初始状态作为本次创建命令的输入。
+	initialStatus := commentInitialStatus(pol.Moderation, nil)
+	if s.spam != nil && !actorIsAdmin {
+		override := s.spam.Check(ctx, SpamInput{
+			BlogURL:     s.siteCanonicalURL(ctx, input.SiteID),
+			Permalink:   optionalString(input.PageURL),
+			CommentType: "comment",
+			Body:        input.BodyMarkdown,
+			Nickname:    nickname,
+			Email:       input.Email,
+			AuthorURL:   optionalString(authorWebsite),
+			IP:          input.IP,
+			UserAgent:   input.UA,
+		})
+		initialStatus = commentInitialStatus(pol.Moderation, override)
 	}
 
 	var created *domain.Comment
@@ -123,7 +147,7 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (*CommentView, 
 		if err != nil {
 			return err
 		}
-		comment, err := s.createComment(ctx, pol, input.SiteID, thread.ID, actorID, input.ParentID, input.BodyMarkdown, input.IP, input.UA)
+		comment, err := s.createComment(ctx, pol, input.SiteID, thread.ID, actorID, input.ParentID, input.BodyMarkdown, input.IP, input.UA, initialStatus)
 		if err != nil {
 			return err
 		}
@@ -259,6 +283,32 @@ func (s *Service) CreateReplyFirstParty(ctx context.Context, actorID int64, acto
 		return nil, domain.ErrDepthExceeded
 	}
 
+	// 垃圾检测：管理员作者跳过全部检测器；普通用户在事务外执行同一固定检测链。
+	// 补齐全套送检上下文：站点 CanonicalURL、线程 permalink 与作者网址。
+	initialStatus := commentInitialStatus(pol.Moderation, nil)
+	if s.spam != nil && actorRole != domain.RoleAdmin {
+		var permalink string
+		if thread, err := s.threads.GetBySiteAndID(ctx, parent.SiteID, parent.ThreadID); err == nil && thread.PageURL != nil {
+			permalink = *thread.PageURL
+		}
+		author := &domain.User{}
+		if user, err := s.users.FindByID(ctx, actorID); err == nil {
+			author = user
+		}
+		override := s.spam.Check(ctx, SpamInput{
+			BlogURL:     s.siteCanonicalURL(ctx, parent.SiteID),
+			Permalink:   permalink,
+			CommentType: "comment",
+			Body:        body,
+			Nickname:    author.Nickname,
+			Email:       author.Email,
+			AuthorURL:   optionalString(author.WebsiteURL),
+			IP:          ip,
+			UserAgent:   rawUA,
+		})
+		initialStatus = commentInitialStatus(pol.Moderation, override)
+	}
+
 	var created *domain.Comment
 	err = s.txRunner.RunInTx(ctx, func(ctx context.Context) error {
 		thread, err := s.threads.GetBySiteAndIDLocked(ctx, parent.SiteID, parent.ThreadID)
@@ -268,7 +318,7 @@ func (s *Service) CreateReplyFirstParty(ctx context.Context, actorID int64, acto
 		if !thread.CommentsEnabled {
 			return domain.ErrThreadClosed
 		}
-		comment, err := s.createComment(ctx, pol, parent.SiteID, parent.ThreadID, actorID, &parent.ID, body, ip, rawUA)
+		comment, err := s.createComment(ctx, pol, parent.SiteID, parent.ThreadID, actorID, &parent.ID, body, ip, rawUA, initialStatus)
 		if err != nil {
 			return err
 		}
@@ -284,7 +334,9 @@ func (s *Service) CreateReplyFirstParty(ctx context.Context, actorID int64, acto
 }
 
 // createComment 在打开的事务内插入评论。
-func (s *Service) createComment(ctx context.Context, cfg domain.CommentPolicy, siteID, threadID, actorID int64, parentID *int64, body string, ip net.IP, rawUA string) (*domain.Comment, error) {
+// initialStatus 是调用方在事务外按“垃圾检测覆盖 → 全局审核策略”计算好的显式初始状态；
+// published_at 只在状态为 published 时写入。
+func (s *Service) createComment(ctx context.Context, cfg domain.CommentPolicy, siteID, threadID, actorID int64, parentID *int64, body string, ip net.IP, rawUA string, initialStatus domain.CommentStatus) (*domain.Comment, error) {
 	var parentRef, rootID *int64
 	var replyToUserID *int64
 	depth := 0
@@ -315,10 +367,7 @@ func (s *Service) createComment(ctx context.Context, cfg domain.CommentPolicy, s
 		}
 	}
 
-	status := domain.CommentStatusPublished
-	if cfg.Moderation == domain.ModerationReview {
-		status = domain.CommentStatusPending
-	}
+	status := initialStatus
 	now := s.now().UTC()
 	var publishedAt *time.Time
 	if status == domain.CommentStatusPublished {

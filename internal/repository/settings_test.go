@@ -610,3 +610,123 @@ func TestSettingsAllJSONTypesRoundTrip(t *testing.T) {
 		t.Fatalf("list count = %d, want %d", len(list), len(testCases))
 	}
 }
+
+// TestSettingsSpamProviderRoundTrip 验证垃圾检测 provider 保留 kind=enabled 语义并可按类型读写。
+func TestSettingsSpamProviderRoundTrip(t *testing.T) {
+	db := newSettingsTestDB(t)
+	repo := NewSettingsRepo(db)
+	ctx := context.Background()
+
+	if err := repo.UpsertSpamProvider(ctx, &SpamProviderRow{
+		ProviderKey:      "spam.akismet",
+		Enabled:          true,
+		PublicConfig:     []byte(`{"action":"spam"}`),
+		SecretKeyVersion: 1,
+		SecretNonce:      []byte("0123456789ab"),
+		SecretCiphertext: []byte{1, 2, 3, 4},
+	}); err != nil {
+		t.Fatalf("upsert spam provider: %v", err)
+	}
+
+	rows, err := repo.ListSpamProviders(ctx)
+	if err != nil {
+		t.Fatalf("list spam providers: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("spam provider row count = %d, want 1", len(rows))
+	}
+	if rows[0].ProviderKey != "spam.akismet" || !rows[0].Enabled {
+		t.Fatalf("spam provider row mismatch: %+v", rows[0])
+	}
+
+	got, err := repo.GetSpamProvider(ctx, "spam.akismet")
+	if err != nil {
+		t.Fatalf("get spam provider: %v", err)
+	}
+	if got.ProviderKey != "spam.akismet" || !got.Enabled {
+		t.Fatalf("get mismatch: %+v", got)
+	}
+	if _, err := repo.GetSpamProvider(ctx, "missing"); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("get missing error = %v, want ErrNotFound", err)
+	}
+
+	// 类型不符：auth 读取不得返回 spam 行。
+	if _, err := repo.GetAuthProvider(ctx, "spam.akismet"); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("get spam row via auth reader error = %v, want ErrNotFound", err)
+	}
+
+	if err := repo.DeleteSpamProvider(ctx, "spam.akismet"); err != nil {
+		t.Fatalf("delete spam provider: %v", err)
+	}
+	if _, err := repo.GetSpamProvider(ctx, "spam.akismet"); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("get after delete error = %v, want ErrNotFound", err)
+	}
+}
+
+// TestSettingsSpamRowStoredWithEnabled 验证垃圾检测行保留 kind=spam 与 enabled 字段。
+func TestSettingsSpamRowStoredWithEnabled(t *testing.T) {
+	db := newSettingsTestDB(t)
+	repo := NewSettingsRepo(db)
+	ctx := context.Background()
+
+	if err := repo.UpsertSpamProvider(ctx, &SpamProviderRow{
+		ProviderKey:      "spam.local",
+		Enabled:          true,
+		PublicConfig:     []byte(`{"file_path":"/tmp/words.txt","check_nickname":true,"action":"pending"}`),
+		SecretKeyVersion: 0,
+	}); err != nil {
+		t.Fatalf("upsert spam provider: %v", err)
+	}
+
+	var stored model.DynamicSetting
+	if err := gormtx.DB(ctx, db).Where("key = ?", "spam.local_provider").First(&stored).Error; err != nil {
+		t.Fatalf("query stored row: %v", err)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(stored.Value), &raw); err != nil {
+		t.Fatalf("value is not a JSON object: %v", err)
+	}
+	if raw["kind"] != "spam" {
+		t.Fatalf("spam discriminator = %v, want spam", raw["kind"])
+	}
+	if raw["enabled"] != true {
+		t.Fatalf("spam enabled = %v, want true", raw["enabled"])
+	}
+}
+
+// TestSettingsSpamAndAuthProvidersCoexist 验证 spam 与 auth provider 行可同时解码，
+// 类型化列表互不干扰。
+func TestSettingsSpamAndAuthProvidersCoexist(t *testing.T) {
+	db := newSettingsTestDB(t)
+	repo := NewSettingsRepo(db)
+	ctx := context.Background()
+
+	if err := repo.UpsertAuthProvider(ctx, &AuthProviderRow{
+		ProviderKey: "github", Kind: domain.ProviderKindOAuth, Enabled: true,
+	}); err != nil {
+		t.Fatalf("upsert auth provider: %v", err)
+	}
+	if err := repo.UpsertSpamProvider(ctx, &SpamProviderRow{
+		ProviderKey:  "spam.tencent",
+		Enabled:      true,
+		PublicConfig: []byte(`{"region":"ap-guangzhou"}`),
+	}); err != nil {
+		t.Fatalf("upsert spam provider: %v", err)
+	}
+
+	auths, err := repo.ListAuthProviders(ctx)
+	if err != nil {
+		t.Fatalf("list auth providers: %v", err)
+	}
+	if len(auths) != 1 || auths[0].ProviderKey != "github" {
+		t.Fatalf("auth list = %+v, want only github", auths)
+	}
+
+	spams, err := repo.ListSpamProviders(ctx)
+	if err != nil {
+		t.Fatalf("list spam providers: %v", err)
+	}
+	if len(spams) != 1 || spams[0].ProviderKey != "spam.tencent" {
+		t.Fatalf("spam list = %+v, want only spam.tencent", spams)
+	}
+}

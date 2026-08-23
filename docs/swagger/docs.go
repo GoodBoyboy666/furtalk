@@ -90,25 +90,25 @@ const docTemplate = `{
                     "200": {
                         "description": "一页评论与匹配总数",
                         "schema": {
-                            "$ref": "#/definitions/handler.AdminCommentListResponse"
+                            "$ref": "#/definitions/internal_handler.AdminCommentListResponse"
                         }
                     },
                     "400": {
                         "description": "请求参数无效",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "需要管理员登录",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "权限不足",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -136,25 +136,25 @@ const docTemplate = `{
                     "200": {
                         "description": "管理视图",
                         "schema": {
-                            "$ref": "#/definitions/handler.AdminCommentResponse"
+                            "$ref": "#/definitions/internal_handler.AdminCommentResponse"
                         }
                     },
                     "400": {
                         "description": "请求参数无效",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "需要管理员登录",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "评论不存在",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -199,37 +199,37 @@ const docTemplate = `{
                     "200": {
                         "description": "删除结果",
                         "schema": {
-                            "$ref": "#/definitions/handler.CommentDeleteResponse"
+                            "$ref": "#/definitions/internal_handler.CommentDeleteResponse"
                         }
                     },
                     "400": {
                         "description": "请求参数无效",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "需要管理员登录",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "评论不存在",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "评论状态冲突",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "422": {
                         "description": "破坏性操作需要显式确认",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -259,7 +259,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.AdminCommentUpdateRequest"
+                            "$ref": "#/definitions/internal_handler.AdminCommentUpdateRequest"
                         }
                     },
                     {
@@ -274,25 +274,25 @@ const docTemplate = `{
                     "200": {
                         "description": "更新后的管理视图",
                         "schema": {
-                            "$ref": "#/definitions/handler.AdminCommentResponse"
+                            "$ref": "#/definitions/internal_handler.AdminCommentResponse"
                         }
                     },
                     "400": {
                         "description": "请求参数无效",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "需要管理员登录",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "评论不存在",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -327,31 +327,31 @@ const docTemplate = `{
                     "200": {
                         "description": "移动后的管理视图",
                         "schema": {
-                            "$ref": "#/definitions/handler.AdminCommentResponse"
+                            "$ref": "#/definitions/internal_handler.AdminCommentResponse"
                         }
                     },
                     "400": {
                         "description": "请求参数无效",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "需要管理员登录",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "评论不存在",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "评论状态冲突",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -386,31 +386,31 @@ const docTemplate = `{
                     "200": {
                         "description": "发布后的管理视图",
                         "schema": {
-                            "$ref": "#/definitions/handler.AdminCommentResponse"
+                            "$ref": "#/definitions/internal_handler.AdminCommentResponse"
                         }
                     },
                     "400": {
                         "description": "请求参数无效",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "需要管理员登录",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "评论不存在",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "评论状态冲突",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -445,31 +445,31 @@ const docTemplate = `{
                     "200": {
                         "description": "恢复后的管理视图",
                         "schema": {
-                            "$ref": "#/definitions/handler.AdminCommentResponse"
+                            "$ref": "#/definitions/internal_handler.AdminCommentResponse"
                         }
                     },
                     "400": {
                         "description": "请求参数无效",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "需要管理员登录",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "评论不存在",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "评论状态冲突",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -504,31 +504,31 @@ const docTemplate = `{
                     "200": {
                         "description": "标记后的管理视图",
                         "schema": {
-                            "$ref": "#/definitions/handler.AdminCommentResponse"
+                            "$ref": "#/definitions/internal_handler.AdminCommentResponse"
                         }
                     },
                     "400": {
                         "description": "请求参数无效",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "需要管理员登录",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "评论不存在",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "评论状态冲突",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -545,21 +545,21 @@ const docTemplate = `{
                 "summary": "列出提供商配置",
                 "responses": {
                     "200": {
-                        "description": "提供商列表（不含机密；CAPTCHA 项无 enabled）",
+                        "description": "提供商列表（不含机密；CAPTCHA 项无 enabled，OAuth/OIDC 与 Spam 项携带 enabled）",
                         "schema": {
-                            "$ref": "#/definitions/handler.ProvidersResponse"
+                            "$ref": "#/definitions/internal_handler.ProvidersResponse"
                         }
                     },
                     "401": {
                         "description": "需要管理员登录",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "权限不足",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -583,12 +583,12 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "提供商配置（CAPTCHA 不允许携带 enabled）",
+                        "description": "提供商配置（CAPTCHA 不允许携带 enabled；Spam 必须携带 enabled）",
                         "name": "body",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.ProviderUpsertRequest"
+                            "$ref": "#/definitions/internal_handler.ProviderUpsertRequest"
                         }
                     },
                     {
@@ -606,25 +606,25 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数无效",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "需要管理员登录",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "权限不足",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "提供商密钥数据损坏",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -657,19 +657,19 @@ const docTemplate = `{
                     "401": {
                         "description": "需要管理员登录",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "权限不足",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "提供商不存在",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -713,25 +713,25 @@ const docTemplate = `{
                     "401": {
                         "description": "需要管理员登录",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "权限不足",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "提供商不存在",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "503": {
                         "description": "服务暂不可用",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -750,19 +750,19 @@ const docTemplate = `{
                     "200": {
                         "description": "公开设置项列表",
                         "schema": {
-                            "$ref": "#/definitions/handler.SettingsResponse"
+                            "$ref": "#/definitions/internal_handler.SettingsResponse"
                         }
                     },
                     "401": {
                         "description": "需要管理员登录",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "权限不足",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -785,7 +785,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.SettingsPatchRequest"
+                            "$ref": "#/definitions/internal_handler.SettingsPatchRequest"
                         }
                     },
                     {
@@ -800,25 +800,25 @@ const docTemplate = `{
                     "200": {
                         "description": "更新后的完整设置列表",
                         "schema": {
-                            "$ref": "#/definitions/handler.SettingsResponse"
+                            "$ref": "#/definitions/internal_handler.SettingsResponse"
                         }
                     },
                     "400": {
                         "description": "请求参数无效",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "需要管理员登录",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "权限不足",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -837,19 +837,19 @@ const docTemplate = `{
                     "200": {
                         "description": "站点列表",
                         "schema": {
-                            "$ref": "#/definitions/handler.SiteListResponse"
+                            "$ref": "#/definitions/internal_handler.SiteListResponse"
                         }
                     },
                     "401": {
                         "description": "需要管理员登录",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "权限不足",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -872,7 +872,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.SiteRequest"
+                            "$ref": "#/definitions/internal_handler.SiteRequest"
                         }
                     },
                     {
@@ -887,31 +887,31 @@ const docTemplate = `{
                     "201": {
                         "description": "创建的站点",
                         "schema": {
-                            "$ref": "#/definitions/handler.SiteResponse"
+                            "$ref": "#/definitions/internal_handler.SiteResponse"
                         }
                     },
                     "400": {
                         "description": "请求参数无效",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "需要管理员登录",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "权限不足",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "站点冲突",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -939,31 +939,31 @@ const docTemplate = `{
                     "200": {
                         "description": "站点详情",
                         "schema": {
-                            "$ref": "#/definitions/handler.SiteResponse"
+                            "$ref": "#/definitions/internal_handler.SiteResponse"
                         }
                     },
                     "400": {
                         "description": "请求参数无效",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "需要管理员登录",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "权限不足",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "站点不存在",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -1002,37 +1002,37 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数无效",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "需要管理员登录",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "权限不足",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "站点不存在",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "资源状态冲突",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "422": {
                         "description": "破坏性操作需要显式确认",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -1062,7 +1062,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.SiteUpdateRequest"
+                            "$ref": "#/definitions/internal_handler.SiteUpdateRequest"
                         }
                     },
                     {
@@ -1077,31 +1077,31 @@ const docTemplate = `{
                     "200": {
                         "description": "更新后的站点",
                         "schema": {
-                            "$ref": "#/definitions/handler.SiteResponse"
+                            "$ref": "#/definitions/internal_handler.SiteResponse"
                         }
                     },
                     "400": {
                         "description": "请求参数无效",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "需要管理员登录",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "权限不足",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "站点不存在",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -1133,7 +1133,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.OriginRequest"
+                            "$ref": "#/definitions/internal_handler.OriginRequest"
                         }
                     },
                     {
@@ -1148,43 +1148,43 @@ const docTemplate = `{
                     "201": {
                         "description": "创建的 origin",
                         "schema": {
-                            "$ref": "#/definitions/handler.OriginResponse"
+                            "$ref": "#/definitions/internal_handler.OriginResponse"
                         }
                     },
                     "400": {
                         "description": "请求参数无效",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "需要管理员登录",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "权限不足",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "站点不存在",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "资源状态冲突",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "422": {
                         "description": "origin 格式非法",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -1226,25 +1226,25 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数无效",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "需要管理员登录",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "权限不足",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "站点或 origin 不存在",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -1281,7 +1281,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.OriginRequest"
+                            "$ref": "#/definitions/internal_handler.OriginRequest"
                         }
                     },
                     {
@@ -1296,43 +1296,43 @@ const docTemplate = `{
                     "200": {
                         "description": "更新后的 origin",
                         "schema": {
-                            "$ref": "#/definitions/handler.OriginResponse"
+                            "$ref": "#/definitions/internal_handler.OriginResponse"
                         }
                     },
                     "400": {
                         "description": "请求参数无效",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "需要管理员登录",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "权限不足",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "站点或 origin 不存在",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "资源状态冲突",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "422": {
                         "description": "origin 格式非法",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -1390,25 +1390,25 @@ const docTemplate = `{
                     "200": {
                         "description": "一页线程与匹配总数",
                         "schema": {
-                            "$ref": "#/definitions/handler.AdminThreadListResponse"
+                            "$ref": "#/definitions/internal_handler.AdminThreadListResponse"
                         }
                     },
                     "400": {
                         "description": "请求参数无效",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "需要管理员登录",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "权限不足",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -1460,31 +1460,31 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数无效",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "需要管理员登录",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "权限不足",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "线程不存在或不属于该站点",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "422": {
                         "description": "破坏性操作需要显式确认",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -1521,7 +1521,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.AdminThreadUpdateRequest"
+                            "$ref": "#/definitions/internal_handler.AdminThreadUpdateRequest"
                         }
                     },
                     {
@@ -1536,43 +1536,43 @@ const docTemplate = `{
                     "200": {
                         "description": "更新后的线程视图",
                         "schema": {
-                            "$ref": "#/definitions/handler.AdminThreadResponse"
+                            "$ref": "#/definitions/internal_handler.AdminThreadResponse"
                         }
                     },
                     "400": {
                         "description": "请求参数无效",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "需要管理员登录",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "权限不足",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "线程不存在或不属于该站点",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "page_key 在站点内重复",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "422": {
                         "description": "缺少任何更新字段或字段校验失败",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -1609,19 +1609,19 @@ const docTemplate = `{
                     "401": {
                         "description": "需要管理员登录",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "权限不足",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "503": {
                         "description": "投递失败",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -1666,25 +1666,25 @@ const docTemplate = `{
                     "200": {
                         "description": "用户列表与真实总数",
                         "schema": {
-                            "$ref": "#/definitions/handler.AdminUserListResponse"
+                            "$ref": "#/definitions/internal_handler.AdminUserListResponse"
                         }
                     },
                     "400": {
                         "description": "请求参数无效",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "需要管理员登录",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "权限不足",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -1707,7 +1707,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.AdminUserCreateRequest"
+                            "$ref": "#/definitions/internal_handler.AdminUserCreateRequest"
                         }
                     },
                     {
@@ -1722,31 +1722,31 @@ const docTemplate = `{
                     "201": {
                         "description": "创建的用户",
                         "schema": {
-                            "$ref": "#/definitions/handler.AdminUserResponse"
+                            "$ref": "#/definitions/internal_handler.AdminUserResponse"
                         }
                     },
                     "400": {
                         "description": "请求参数无效",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "需要管理员登录",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "权限不足",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "邮箱已被注册",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -1774,31 +1774,31 @@ const docTemplate = `{
                     "200": {
                         "description": "用户资料",
                         "schema": {
-                            "$ref": "#/definitions/handler.AdminUserResponse"
+                            "$ref": "#/definitions/internal_handler.AdminUserResponse"
                         }
                     },
                     "400": {
                         "description": "请求参数无效",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "需要管理员登录",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "权限不足",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "用户不存在",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -1844,37 +1844,37 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数无效",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "需要管理员登录",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "不能删除自己或权限不足",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "用户不存在",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "不能移除最后一个管理员",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "422": {
                         "description": "破坏性操作需要显式确认",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -1904,7 +1904,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.AdminUserUpdateRequest"
+                            "$ref": "#/definitions/internal_handler.AdminUserUpdateRequest"
                         }
                     },
                     {
@@ -1919,37 +1919,37 @@ const docTemplate = `{
                     "200": {
                         "description": "更新后的用户",
                         "schema": {
-                            "$ref": "#/definitions/handler.AdminUserResponse"
+                            "$ref": "#/definitions/internal_handler.AdminUserResponse"
                         }
                     },
                     "400": {
                         "description": "请求参数无效",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "需要管理员登录",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "权限不足",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "用户不存在",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "不能移除最后一个管理员或邮箱冲突",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -1978,7 +1978,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.AdminUserResetPasswordRequest"
+                            "$ref": "#/definitions/internal_handler.AdminUserResetPasswordRequest"
                         }
                     },
                     {
@@ -1996,31 +1996,31 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数无效",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "需要管理员登录",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "权限不足",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "用户不存在",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "422": {
                         "description": "密码不符合要求",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -2055,37 +2055,37 @@ const docTemplate = `{
                     "200": {
                         "description": "恢复后的用户",
                         "schema": {
-                            "$ref": "#/definitions/handler.AdminUserResponse"
+                            "$ref": "#/definitions/internal_handler.AdminUserResponse"
                         }
                     },
                     "400": {
                         "description": "请求参数无效",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "需要管理员登录",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "权限不足",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "用户不存在",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "用户未处于软删除状态",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -2107,7 +2107,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.EmailCodeLoginRequest"
+                            "$ref": "#/definitions/internal_handler.EmailCodeLoginRequest"
                         }
                     }
                 ],
@@ -2118,31 +2118,31 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数无效",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "验证码错误",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "验证码验证失败",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "422": {
                         "description": "缺少验证码",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "503": {
                         "description": "验证码服务暂不可用",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -2164,7 +2164,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.EmailCodeRequest"
+                            "$ref": "#/definitions/internal_handler.EmailCodeRequest"
                         }
                     }
                 ],
@@ -2175,25 +2175,25 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数无效",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "验证码验证失败",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "422": {
                         "description": "请求参数无效或缺少验证码",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "503": {
                         "description": "验证码服务或邮件服务暂不可用",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -2221,7 +2221,7 @@ const docTemplate = `{
                     "401": {
                         "description": "需要登录",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -2253,7 +2253,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.OAuthCompleteRequest"
+                            "$ref": "#/definitions/internal_handler.OAuthCompleteRequest"
                         }
                     }
                 ],
@@ -2261,13 +2261,13 @@ const docTemplate = `{
                     "200": {
                         "description": "已写入会话 Cookie，返回站内回跳地址",
                         "schema": {
-                            "$ref": "#/definitions/handler.OAuthCompleteResponse"
+                            "$ref": "#/definitions/internal_handler.OAuthCompleteResponse"
                         }
                     },
                     "400": {
                         "description": "回调参数无效、state/handoff 无效或授权码校验失败",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -2307,25 +2307,25 @@ const docTemplate = `{
                     "200": {
                         "description": "授权 URL",
                         "schema": {
-                            "$ref": "#/definitions/handler.OAuthStartResponse"
+                            "$ref": "#/definitions/internal_handler.OAuthStartResponse"
                         }
                     },
                     "400": {
                         "description": "请求参数无效",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "bind 场景需要登录",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "提供商不存在或未启用",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -2350,7 +2350,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.PasskeyLoginOptionsRequest"
+                            "$ref": "#/definitions/internal_handler.PasskeyLoginOptionsRequest"
                         }
                     }
                 ],
@@ -2358,19 +2358,19 @@ const docTemplate = `{
                     "200": {
                         "description": "断言选项",
                         "schema": {
-                            "$ref": "#/definitions/handler.PasskeyLoginOptionsResponse"
+                            "$ref": "#/definitions/internal_handler.PasskeyLoginOptionsResponse"
                         }
                     },
                     "400": {
                         "description": "请求参数无效",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "用户不存在",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -2392,7 +2392,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.PasskeyFinishRequest"
+                            "$ref": "#/definitions/internal_handler.PasskeyFinishRequest"
                         }
                     }
                 ],
@@ -2403,13 +2403,13 @@ const docTemplate = `{
                     "400": {
                         "description": "断言无效",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "校验失败",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -2431,7 +2431,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.PasswordLoginRequest"
+                            "$ref": "#/definitions/internal_handler.PasswordLoginRequest"
                         }
                     }
                 ],
@@ -2442,31 +2442,31 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数无效",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "账号或密码错误",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "账号已被禁用或验证码验证失败",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "422": {
                         "description": "缺少验证码",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "503": {
                         "description": "验证码服务暂不可用",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -2488,7 +2488,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.PasswordResetConfirmRequest"
+                            "$ref": "#/definitions/internal_handler.PasswordResetConfirmRequest"
                         }
                     }
                 ],
@@ -2499,19 +2499,19 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数无效",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "验证码错误",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "422": {
                         "description": "密码不符合要求",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -2533,7 +2533,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.PasswordResetCodeRequest"
+                            "$ref": "#/definitions/internal_handler.PasswordResetCodeRequest"
                         }
                     }
                 ],
@@ -2544,25 +2544,25 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数无效",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "验证码验证失败",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "422": {
                         "description": "请求参数无效或缺少验证码",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "503": {
                         "description": "验证码服务暂不可用",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -2581,7 +2581,7 @@ const docTemplate = `{
                     "200": {
                         "description": "提供商列表",
                         "schema": {
-                            "$ref": "#/definitions/handler.AuthProvidersResponse"
+                            "$ref": "#/definitions/internal_handler.AuthProvidersResponse"
                         }
                     }
                 }
@@ -2603,7 +2603,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.BootstrapAdminRequest"
+                            "$ref": "#/definitions/internal_handler.BootstrapAdminRequest"
                         }
                     }
                 ],
@@ -2614,19 +2614,19 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数无效",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "邮箱已被注册",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "410": {
                         "description": "初始化已不可用",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -2645,7 +2645,7 @@ const docTemplate = `{
                     "200": {
                         "description": "初始化状态",
                         "schema": {
-                            "$ref": "#/definitions/handler.BootstrapStatusResponse"
+                            "$ref": "#/definitions/internal_handler.BootstrapStatusResponse"
                         }
                     }
                 }
@@ -2673,7 +2673,7 @@ const docTemplate = `{
                     "200": {
                         "description": "公共 CAPTCHA 配置（不含机密）",
                         "schema": {
-                            "$ref": "#/definitions/handler.CaptchaConfigResponse"
+                            "$ref": "#/definitions/internal_handler.CaptchaConfigResponse"
                         }
                     },
                     "422": {
@@ -2704,7 +2704,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.AuthorizationIssueRequest"
+                            "$ref": "#/definitions/internal_handler.AuthorizationIssueRequest"
                         }
                     },
                     {
@@ -2719,37 +2719,37 @@ const docTemplate = `{
                     "201": {
                         "description": "一次性授权码",
                         "schema": {
-                            "$ref": "#/definitions/handler.AuthorizationIssueResponse"
+                            "$ref": "#/definitions/internal_handler.AuthorizationIssueResponse"
                         }
                     },
                     "400": {
                         "description": "请求参数无效",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "需要登录",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "CSRF token 无效",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "站点不存在",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "422": {
                         "description": "origin 格式无效",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -2784,25 +2784,25 @@ const docTemplate = `{
                     "200": {
                         "description": "授权上下文",
                         "schema": {
-                            "$ref": "#/definitions/handler.AuthorizationContextResponse"
+                            "$ref": "#/definitions/internal_handler.AuthorizationContextResponse"
                         }
                     },
                     "400": {
                         "description": "请求参数无效",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "需要登录",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "站点不可用或 origin 不被允许",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -2837,25 +2837,25 @@ const docTemplate = `{
                     "200": {
                         "description": "删除结果",
                         "schema": {
-                            "$ref": "#/definitions/handler.CommentDeleteResponse"
+                            "$ref": "#/definitions/internal_handler.CommentDeleteResponse"
                         }
                     },
                     "400": {
                         "description": "请求参数无效",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "需要登录",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "评论不存在",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -2887,7 +2887,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.ReplyRequest"
+                            "$ref": "#/definitions/internal_handler.ReplyRequest"
                         }
                     },
                     {
@@ -2902,49 +2902,49 @@ const docTemplate = `{
                     "201": {
                         "description": "创建的回复",
                         "schema": {
-                            "$ref": "#/definitions/handler.CommentResponse"
+                            "$ref": "#/definitions/internal_handler.CommentResponse"
                         }
                     },
                     "400": {
                         "description": "请求参数无效",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "需要登录",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "验证码验证失败",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "父评论不存在",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "父评论已删除或跨线程回复",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "422": {
                         "description": "回复深度超过限制或缺少验证码",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "503": {
                         "description": "验证码服务暂不可用",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -2963,13 +2963,13 @@ const docTemplate = `{
                     "200": {
                         "description": "当前用户资料",
                         "schema": {
-                            "$ref": "#/definitions/handler.MeResponse"
+                            "$ref": "#/definitions/internal_handler.MeResponse"
                         }
                     },
                     "401": {
                         "description": "需要登录",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -2992,7 +2992,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.MeUpdateRequest"
+                            "$ref": "#/definitions/internal_handler.MeUpdateRequest"
                         }
                     },
                     {
@@ -3007,25 +3007,25 @@ const docTemplate = `{
                     "200": {
                         "description": "更新后的资料",
                         "schema": {
-                            "$ref": "#/definitions/handler.MeResponse"
+                            "$ref": "#/definitions/internal_handler.MeResponse"
                         }
                     },
                     "400": {
                         "description": "请求参数无效",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "需要登录",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "邮箱冲突",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -3070,19 +3070,19 @@ const docTemplate = `{
                     "200": {
                         "description": "本人评论一页与匹配总数",
                         "schema": {
-                            "$ref": "#/definitions/handler.MeCommentListResponse"
+                            "$ref": "#/definitions/internal_handler.MeCommentListResponse"
                         }
                     },
                     "400": {
                         "description": "请求参数无效",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "需要登录",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -3101,13 +3101,13 @@ const docTemplate = `{
                     "200": {
                         "description": "本人发表过评论的站点",
                         "schema": {
-                            "$ref": "#/definitions/handler.MeCommentSitesResponse"
+                            "$ref": "#/definitions/internal_handler.MeCommentSitesResponse"
                         }
                     },
                     "401": {
                         "description": "需要登录",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -3135,19 +3135,19 @@ const docTemplate = `{
                     "200": {
                         "description": "本人评论详情",
                         "schema": {
-                            "$ref": "#/definitions/handler.MeCommentDetailResponse"
+                            "$ref": "#/definitions/internal_handler.MeCommentDetailResponse"
                         }
                     },
                     "401": {
                         "description": "需要登录",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "评论不存在或不属于当前用户",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -3166,13 +3166,13 @@ const docTemplate = `{
                     "200": {
                         "description": "登录方式列表",
                         "schema": {
-                            "$ref": "#/definitions/handler.IdentitiesResponse"
+                            "$ref": "#/definitions/internal_handler.IdentitiesResponse"
                         }
                     },
                     "401": {
                         "description": "需要登录",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -3207,25 +3207,25 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数无效",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "需要登录",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "登录方式不存在",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "不能移除最后一个登录方式",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -3250,7 +3250,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.NotificationPreferencesRequest"
+                            "$ref": "#/definitions/internal_handler.NotificationPreferencesRequest"
                         }
                     },
                     {
@@ -3265,19 +3265,19 @@ const docTemplate = `{
                     "200": {
                         "description": "更新后的偏好",
                         "schema": {
-                            "$ref": "#/definitions/handler.NotificationPreferencesResponse"
+                            "$ref": "#/definitions/internal_handler.NotificationPreferencesResponse"
                         }
                     },
                     "400": {
                         "description": "请求参数无效",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "需要登录",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -3299,7 +3299,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.PasskeyFinishRequest"
+                            "$ref": "#/definitions/internal_handler.PasskeyFinishRequest"
                         }
                     },
                     {
@@ -3317,19 +3317,19 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数无效",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "需要登录",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "凭证冲突",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -3357,13 +3357,13 @@ const docTemplate = `{
                     "200": {
                         "description": "注册选项",
                         "schema": {
-                            "$ref": "#/definitions/handler.PasskeyRegistrationOptionsResponse"
+                            "$ref": "#/definitions/internal_handler.PasskeyRegistrationOptionsResponse"
                         }
                     },
                     "401": {
                         "description": "需要登录",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -3398,25 +3398,25 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数无效",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "需要登录",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "passkey 不存在",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "不能移除最后一个登录方式",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -3443,7 +3443,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.PasskeyRenameRequest"
+                            "$ref": "#/definitions/internal_handler.PasskeyRenameRequest"
                         }
                     },
                     {
@@ -3461,25 +3461,25 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数无效",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "需要登录",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "passkey 不存在",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "422": {
                         "description": "名称不符合要求",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -3501,7 +3501,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.MePasswordRequest"
+                            "$ref": "#/definitions/internal_handler.MePasswordRequest"
                         }
                     },
                     {
@@ -3519,19 +3519,19 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数无效",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "需要登录或当前密码错误",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "422": {
                         "description": "密码不符合要求",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -3559,7 +3559,7 @@ const docTemplate = `{
                     "401": {
                         "description": "需要登录",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -3581,7 +3581,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.UnsubscribeRequest"
+                            "$ref": "#/definitions/internal_handler.UnsubscribeRequest"
                         }
                     }
                 ],
@@ -3592,7 +3592,7 @@ const docTemplate = `{
                     "400": {
                         "description": "退订令牌无效",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -3614,7 +3614,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.AuthorizationExchangeRequest"
+                            "$ref": "#/definitions/internal_handler.AuthorizationExchangeRequest"
                         }
                     }
                 ],
@@ -3625,13 +3625,13 @@ const docTemplate = `{
                     "400": {
                         "description": "授权码无效",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "origin 不被允许",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -3659,31 +3659,31 @@ const docTemplate = `{
                     "200": {
                         "description": "删除结果",
                         "schema": {
-                            "$ref": "#/definitions/handler.CommentDeleteResponse"
+                            "$ref": "#/definitions/internal_handler.CommentDeleteResponse"
                         }
                     },
                     "400": {
                         "description": "请求参数无效",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "缺少 widget 凭证",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "origin 不被允许",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "评论不存在",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -3702,7 +3702,7 @@ const docTemplate = `{
                     "200": {
                         "description": "会话状态",
                         "schema": {
-                            "$ref": "#/definitions/handler.WidgetSessionResponse"
+                            "$ref": "#/definitions/internal_handler.WidgetSessionResponse"
                         }
                     }
                 }
@@ -3766,25 +3766,25 @@ const docTemplate = `{
                     "200": {
                         "description": "评论列表",
                         "schema": {
-                            "$ref": "#/definitions/handler.ThreadCommentsResponse"
+                            "$ref": "#/definitions/internal_handler.ThreadCommentsResponse"
                         }
                     },
                     "400": {
                         "description": "请求参数无效",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "站点已停用",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "线程不存在",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -3814,7 +3814,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.CreateCommentRequest"
+                            "$ref": "#/definitions/internal_handler.CreateCommentRequest"
                         }
                     }
                 ],
@@ -3822,55 +3822,55 @@ const docTemplate = `{
                     "200": {
                         "description": "提交邮箱对应管理员，需要先经第一方显式授权",
                         "schema": {
-                            "$ref": "#/definitions/handler.WidgetAuthorizationRequiredResponse"
+                            "$ref": "#/definitions/internal_handler.WidgetAuthorizationRequiredResponse"
                         }
                     },
                     "201": {
                         "description": "创建的评论",
                         "schema": {
-                            "$ref": "#/definitions/handler.CommentResponse"
+                            "$ref": "#/definitions/internal_handler.CommentResponse"
                         }
                     },
                     "400": {
                         "description": "请求参数无效",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "缺少 widget 凭证或凭证无效",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "origin 不被允许或验证码失败",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "站点或父评论不存在",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "父评论已删除或跨线程回复",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "422": {
                         "description": "需要验证码或回复深度超限",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "503": {
                         "description": "验证码服务暂不可用",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -3904,25 +3904,25 @@ const docTemplate = `{
                     "200": {
                         "description": "最新评论列表",
                         "schema": {
-                            "$ref": "#/definitions/handler.LatestCommentListResponse"
+                            "$ref": "#/definitions/internal_handler.LatestCommentListResponse"
                         }
                     },
                     "400": {
                         "description": "请求参数无效",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "站点已停用",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "站点不存在",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -3950,25 +3950,25 @@ const docTemplate = `{
                     "200": {
                         "description": "运行时配置",
                         "schema": {
-                            "$ref": "#/definitions/handler.RuntimeConfigResponse"
+                            "$ref": "#/definitions/internal_handler.RuntimeConfigResponse"
                         }
                     },
                     "400": {
                         "description": "请求参数无效",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "站点已停用",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "站点不存在",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -4018,7 +4018,7 @@ const docTemplate = `{
                     "503": {
                         "description": "服务未就绪",
                         "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
                     }
                 }
@@ -4026,7 +4026,33 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "comment.OptionalNullableString": {
+        "furtalk_internal_platform_httpx.ErrorBody": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "details": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "message": {
+                    "type": "string"
+                },
+                "request_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "furtalk_internal_platform_httpx.ErrorResponse": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorBody"
+                }
+            }
+        },
+        "furtalk_internal_service_comment.OptionalNullableString": {
             "type": "object",
             "properties": {
                 "set": {
@@ -4037,13 +4063,51 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.AdminCommentListResponse": {
+        "furtalk_internal_service_identity.OptionalNullableString": {
+            "type": "object",
+            "properties": {
+                "set": {
+                    "type": "boolean"
+                },
+                "value": {
+                    "type": "string"
+                }
+            }
+        },
+        "furtalk_internal_service_setting.SettingItem": {
+            "type": "object",
+            "properties": {
+                "key": {
+                    "type": "string"
+                },
+                "type": {
+                    "$ref": "#/definitions/furtalk_internal_service_setting.SettingType"
+                },
+                "value": {}
+            }
+        },
+        "furtalk_internal_service_setting.SettingType": {
+            "type": "string",
+            "enum": [
+                "string",
+                "integer",
+                "boolean",
+                "json"
+            ],
+            "x-enum-varnames": [
+                "SettingTypeString",
+                "SettingTypeInteger",
+                "SettingTypeBoolean",
+                "SettingTypeJSON"
+            ]
+        },
+        "internal_handler.AdminCommentListResponse": {
             "type": "object",
             "properties": {
                 "comments": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/handler.AdminCommentResponse"
+                        "$ref": "#/definitions/internal_handler.AdminCommentResponse"
                     }
                 },
                 "total": {
@@ -4051,7 +4115,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.AdminCommentResponse": {
+        "internal_handler.AdminCommentResponse": {
             "type": "object",
             "properties": {
                 "author_email": {
@@ -4133,7 +4197,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.AdminCommentUpdateRequest": {
+        "internal_handler.AdminCommentUpdateRequest": {
             "type": "object",
             "properties": {
                 "body": {
@@ -4141,13 +4205,13 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.AdminThreadListResponse": {
+        "internal_handler.AdminThreadListResponse": {
             "type": "object",
             "properties": {
                 "threads": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/handler.AdminThreadResponse"
+                        "$ref": "#/definitions/internal_handler.AdminThreadResponse"
                     }
                 },
                 "total": {
@@ -4155,7 +4219,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.AdminThreadResponse": {
+        "internal_handler.AdminThreadResponse": {
             "type": "object",
             "properties": {
                 "comments_enabled": {
@@ -4187,7 +4251,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.AdminThreadUpdateRequest": {
+        "internal_handler.AdminThreadUpdateRequest": {
             "type": "object",
             "properties": {
                 "comments_enabled": {
@@ -4197,14 +4261,14 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "page_title": {
-                    "$ref": "#/definitions/comment.OptionalNullableString"
+                    "$ref": "#/definitions/furtalk_internal_service_comment.OptionalNullableString"
                 },
                 "page_url": {
-                    "$ref": "#/definitions/comment.OptionalNullableString"
+                    "$ref": "#/definitions/furtalk_internal_service_comment.OptionalNullableString"
                 }
             }
         },
-        "handler.AdminUserCreateRequest": {
+        "internal_handler.AdminUserCreateRequest": {
             "type": "object",
             "properties": {
                 "email": {
@@ -4227,7 +4291,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.AdminUserListResponse": {
+        "internal_handler.AdminUserListResponse": {
             "type": "object",
             "properties": {
                 "total": {
@@ -4236,12 +4300,12 @@ const docTemplate = `{
                 "users": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/handler.AdminUserResponse"
+                        "$ref": "#/definitions/internal_handler.AdminUserResponse"
                     }
                 }
             }
         },
-        "handler.AdminUserResetPasswordRequest": {
+        "internal_handler.AdminUserResetPasswordRequest": {
             "type": "object",
             "properties": {
                 "password": {
@@ -4249,7 +4313,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.AdminUserResponse": {
+        "internal_handler.AdminUserResponse": {
             "type": "object",
             "properties": {
                 "avatar_url": {
@@ -4290,7 +4354,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.AdminUserUpdateRequest": {
+        "internal_handler.AdminUserUpdateRequest": {
             "type": "object",
             "properties": {
                 "email": {
@@ -4309,11 +4373,11 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "website_url": {
-                    "$ref": "#/definitions/identity.OptionalNullableString"
+                    "$ref": "#/definitions/furtalk_internal_service_identity.OptionalNullableString"
                 }
             }
         },
-        "handler.AuthProviderMetadata": {
+        "internal_handler.AuthProviderMetadata": {
             "type": "object",
             "properties": {
                 "key": {
@@ -4327,18 +4391,18 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.AuthProvidersResponse": {
+        "internal_handler.AuthProvidersResponse": {
             "type": "object",
             "properties": {
                 "providers": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/handler.AuthProviderMetadata"
+                        "$ref": "#/definitions/internal_handler.AuthProviderMetadata"
                     }
                 }
             }
         },
-        "handler.AuthorizationContextResponse": {
+        "internal_handler.AuthorizationContextResponse": {
             "type": "object",
             "properties": {
                 "origin": {
@@ -4352,7 +4416,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.AuthorizationExchangeRequest": {
+        "internal_handler.AuthorizationExchangeRequest": {
             "type": "object",
             "properties": {
                 "code": {
@@ -4360,7 +4424,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.AuthorizationIssueRequest": {
+        "internal_handler.AuthorizationIssueRequest": {
             "type": "object",
             "properties": {
                 "origin": {
@@ -4374,7 +4438,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.AuthorizationIssueResponse": {
+        "internal_handler.AuthorizationIssueResponse": {
             "type": "object",
             "properties": {
                 "code": {
@@ -4388,7 +4452,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.BootstrapAdminRequest": {
+        "internal_handler.BootstrapAdminRequest": {
             "type": "object",
             "properties": {
                 "email": {
@@ -4405,7 +4469,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.BootstrapStatusResponse": {
+        "internal_handler.BootstrapStatusResponse": {
             "type": "object",
             "properties": {
                 "required": {
@@ -4413,7 +4477,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.CaptchaActionResponse": {
+        "internal_handler.CaptchaActionResponse": {
             "type": "object",
             "properties": {
                 "api_endpoint": {
@@ -4430,18 +4494,18 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.CaptchaConfigResponse": {
+        "internal_handler.CaptchaConfigResponse": {
             "type": "object",
             "properties": {
                 "captcha": {
-                    "$ref": "#/definitions/handler.PublicCaptchaConfig"
+                    "$ref": "#/definitions/internal_handler.PublicCaptchaConfig"
                 },
                 "required": {
                     "type": "boolean"
                 }
             }
         },
-        "handler.CommentDeleteResponse": {
+        "internal_handler.CommentDeleteResponse": {
             "type": "object",
             "properties": {
                 "deleted_root_id": {
@@ -4452,7 +4516,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.CommentResponse": {
+        "internal_handler.CommentResponse": {
             "type": "object",
             "properties": {
                 "author_nickname": {
@@ -4510,7 +4574,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.CreateCommentRequest": {
+        "internal_handler.CreateCommentRequest": {
             "type": "object",
             "properties": {
                 "body_markdown": {
@@ -4538,11 +4602,11 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "website_url": {
-                    "$ref": "#/definitions/identity.OptionalNullableString"
+                    "$ref": "#/definitions/furtalk_internal_service_identity.OptionalNullableString"
                 }
             }
         },
-        "handler.EmailCodeLoginRequest": {
+        "internal_handler.EmailCodeLoginRequest": {
             "type": "object",
             "properties": {
                 "captcha_token": {
@@ -4556,7 +4620,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.EmailCodeRequest": {
+        "internal_handler.EmailCodeRequest": {
             "type": "object",
             "properties": {
                 "captcha_token": {
@@ -4567,18 +4631,18 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.IdentitiesResponse": {
+        "internal_handler.IdentitiesResponse": {
             "type": "object",
             "properties": {
                 "identities": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/handler.IdentityMetadata"
+                        "$ref": "#/definitions/internal_handler.IdentityMetadata"
                     }
                 }
             }
         },
-        "handler.IdentityMetadata": {
+        "internal_handler.IdentityMetadata": {
             "type": "object",
             "properties": {
                 "created_at": {
@@ -4601,18 +4665,18 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.LatestCommentListResponse": {
+        "internal_handler.LatestCommentListResponse": {
             "type": "object",
             "properties": {
                 "comments": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/handler.LatestCommentResponse"
+                        "$ref": "#/definitions/internal_handler.LatestCommentResponse"
                     }
                 }
             }
         },
-        "handler.LatestCommentResponse": {
+        "internal_handler.LatestCommentResponse": {
             "type": "object",
             "properties": {
                 "author_nickname": {
@@ -4668,7 +4732,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.MeCommentDetailResponse": {
+        "internal_handler.MeCommentDetailResponse": {
             "type": "object",
             "properties": {
                 "author_nickname": {
@@ -4741,13 +4805,13 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.MeCommentListResponse": {
+        "internal_handler.MeCommentListResponse": {
             "type": "object",
             "properties": {
                 "comments": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/handler.MeCommentResponse"
+                        "$ref": "#/definitions/internal_handler.MeCommentResponse"
                     }
                 },
                 "total": {
@@ -4758,7 +4822,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.MeCommentResponse": {
+        "internal_handler.MeCommentResponse": {
             "type": "object",
             "properties": {
                 "author_nickname": {
@@ -4828,7 +4892,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.MeCommentSiteResponse": {
+        "internal_handler.MeCommentSiteResponse": {
             "type": "object",
             "properties": {
                 "id": {
@@ -4839,18 +4903,18 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.MeCommentSitesResponse": {
+        "internal_handler.MeCommentSitesResponse": {
             "type": "object",
             "properties": {
                 "sites": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/handler.MeCommentSiteResponse"
+                        "$ref": "#/definitions/internal_handler.MeCommentSiteResponse"
                     }
                 }
             }
         },
-        "handler.MePasswordRequest": {
+        "internal_handler.MePasswordRequest": {
             "type": "object",
             "properties": {
                 "current_password": {
@@ -4861,7 +4925,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.MeResponse": {
+        "internal_handler.MeResponse": {
             "type": "object",
             "properties": {
                 "avatar_url": {
@@ -4886,7 +4950,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "notification_preferences": {
-                    "$ref": "#/definitions/handler.NotificationPreferencesResponse"
+                    "$ref": "#/definitions/internal_handler.NotificationPreferencesResponse"
                 },
                 "role": {
                     "type": "string"
@@ -4902,7 +4966,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.MeUpdateRequest": {
+        "internal_handler.MeUpdateRequest": {
             "type": "object",
             "properties": {
                 "nickname": {
@@ -4913,7 +4977,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.NotificationPreferencesRequest": {
+        "internal_handler.NotificationPreferencesRequest": {
             "type": "object",
             "properties": {
                 "moderation_enabled": {
@@ -4924,7 +4988,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.NotificationPreferencesResponse": {
+        "internal_handler.NotificationPreferencesResponse": {
             "type": "object",
             "properties": {
                 "moderation_enabled": {
@@ -4935,7 +4999,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.OAuthCompleteRequest": {
+        "internal_handler.OAuthCompleteRequest": {
             "type": "object",
             "properties": {
                 "code": {
@@ -4952,7 +5016,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.OAuthCompleteResponse": {
+        "internal_handler.OAuthCompleteResponse": {
             "type": "object",
             "properties": {
                 "redirect": {
@@ -4960,7 +5024,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.OAuthStartResponse": {
+        "internal_handler.OAuthStartResponse": {
             "type": "object",
             "properties": {
                 "auth_url": {
@@ -4968,7 +5032,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.OriginRequest": {
+        "internal_handler.OriginRequest": {
             "type": "object",
             "properties": {
                 "origin": {
@@ -4976,7 +5040,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.OriginResponse": {
+        "internal_handler.OriginResponse": {
             "type": "object",
             "properties": {
                 "id": {
@@ -4987,7 +5051,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.PasskeyFinishRequest": {
+        "internal_handler.PasskeyFinishRequest": {
             "type": "object",
             "properties": {
                 "challenge": {
@@ -4996,7 +5060,7 @@ const docTemplate = `{
                 "response": {}
             }
         },
-        "handler.PasskeyLoginOptionsRequest": {
+        "internal_handler.PasskeyLoginOptionsRequest": {
             "type": "object",
             "properties": {
                 "user_handle": {
@@ -5004,7 +5068,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.PasskeyLoginOptionsResponse": {
+        "internal_handler.PasskeyLoginOptionsResponse": {
             "type": "object",
             "properties": {
                 "challenge": {
@@ -5013,7 +5077,7 @@ const docTemplate = `{
                 "options": {}
             }
         },
-        "handler.PasskeyRegistrationOptionsResponse": {
+        "internal_handler.PasskeyRegistrationOptionsResponse": {
             "type": "object",
             "properties": {
                 "challenge": {
@@ -5022,7 +5086,7 @@ const docTemplate = `{
                 "options": {}
             }
         },
-        "handler.PasskeyRenameRequest": {
+        "internal_handler.PasskeyRenameRequest": {
             "type": "object",
             "properties": {
                 "name": {
@@ -5030,7 +5094,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.PasswordLoginRequest": {
+        "internal_handler.PasswordLoginRequest": {
             "type": "object",
             "properties": {
                 "captcha_token": {
@@ -5044,7 +5108,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.PasswordResetCodeRequest": {
+        "internal_handler.PasswordResetCodeRequest": {
             "type": "object",
             "properties": {
                 "captcha_token": {
@@ -5055,7 +5119,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.PasswordResetConfirmRequest": {
+        "internal_handler.PasswordResetConfirmRequest": {
             "type": "object",
             "properties": {
                 "code": {
@@ -5069,7 +5133,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.ProviderMetadata": {
+        "internal_handler.ProviderMetadata": {
             "type": "object",
             "properties": {
                 "configured": {
@@ -5090,7 +5154,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.ProviderUpsertRequest": {
+        "internal_handler.ProviderUpsertRequest": {
             "type": "object",
             "properties": {
                 "config": {
@@ -5105,18 +5169,18 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.ProvidersResponse": {
+        "internal_handler.ProvidersResponse": {
             "type": "object",
             "properties": {
                 "providers": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/handler.ProviderMetadata"
+                        "$ref": "#/definitions/internal_handler.ProviderMetadata"
                     }
                 }
             }
         },
-        "handler.PublicCaptchaConfig": {
+        "internal_handler.PublicCaptchaConfig": {
             "type": "object",
             "properties": {
                 "api_endpoint": {
@@ -5130,7 +5194,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.ReplyRequest": {
+        "internal_handler.ReplyRequest": {
             "type": "object",
             "properties": {
                 "body": {
@@ -5141,19 +5205,19 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.RuntimeCaptchaResponse": {
+        "internal_handler.RuntimeCaptchaResponse": {
             "type": "object",
             "properties": {
                 "comment": {
-                    "$ref": "#/definitions/handler.CaptchaActionResponse"
+                    "$ref": "#/definitions/internal_handler.CaptchaActionResponse"
                 }
             }
         },
-        "handler.RuntimeConfigResponse": {
+        "internal_handler.RuntimeConfigResponse": {
             "type": "object",
             "properties": {
                 "captcha": {
-                    "$ref": "#/definitions/handler.RuntimeCaptchaResponse"
+                    "$ref": "#/definitions/internal_handler.RuntimeCaptchaResponse"
                 },
                 "comment_mode": {
                     "type": "string"
@@ -5182,40 +5246,40 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.SettingsPatchRequest": {
+        "internal_handler.SettingsPatchRequest": {
             "type": "object",
             "properties": {
                 "settings": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/setting.SettingItem"
+                        "$ref": "#/definitions/furtalk_internal_service_setting.SettingItem"
                     }
                 }
             }
         },
-        "handler.SettingsResponse": {
+        "internal_handler.SettingsResponse": {
             "type": "object",
             "properties": {
                 "settings": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/setting.SettingItem"
+                        "$ref": "#/definitions/furtalk_internal_service_setting.SettingItem"
                     }
                 }
             }
         },
-        "handler.SiteListResponse": {
+        "internal_handler.SiteListResponse": {
             "type": "object",
             "properties": {
                 "sites": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/handler.SiteResponse"
+                        "$ref": "#/definitions/internal_handler.SiteResponse"
                     }
                 }
             }
         },
-        "handler.SiteRequest": {
+        "internal_handler.SiteRequest": {
             "type": "object",
             "properties": {
                 "canonical_url": {
@@ -5226,7 +5290,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.SiteResponse": {
+        "internal_handler.SiteResponse": {
             "type": "object",
             "properties": {
                 "canonical_url": {
@@ -5244,7 +5308,7 @@ const docTemplate = `{
                 "origins": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/handler.OriginResponse"
+                        "$ref": "#/definitions/internal_handler.OriginResponse"
                     }
                 },
                 "status": {
@@ -5255,7 +5319,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.SiteUpdateRequest": {
+        "internal_handler.SiteUpdateRequest": {
             "type": "object",
             "properties": {
                 "canonical_url": {
@@ -5269,24 +5333,24 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.ThreadCommentsResponse": {
+        "internal_handler.ThreadCommentsResponse": {
             "type": "object",
             "properties": {
                 "comments": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/handler.CommentResponse"
+                        "$ref": "#/definitions/internal_handler.CommentResponse"
                     }
                 },
                 "next_cursor": {
                     "type": "string"
                 },
                 "thread": {
-                    "$ref": "#/definitions/handler.ThreadMetaResponse"
+                    "$ref": "#/definitions/internal_handler.ThreadMetaResponse"
                 }
             }
         },
-        "handler.ThreadMetaResponse": {
+        "internal_handler.ThreadMetaResponse": {
             "type": "object",
             "properties": {
                 "comments_enabled": {
@@ -5309,7 +5373,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.UnsubscribeRequest": {
+        "internal_handler.UnsubscribeRequest": {
             "type": "object",
             "properties": {
                 "token": {
@@ -5317,7 +5381,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.WidgetAuthorizationRequiredResponse": {
+        "internal_handler.WidgetAuthorizationRequiredResponse": {
             "type": "object",
             "properties": {
                 "need_auth_code": {
@@ -5325,7 +5389,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.WidgetSessionResponse": {
+        "internal_handler.WidgetSessionResponse": {
             "type": "object",
             "properties": {
                 "credential_mode": {
@@ -5347,70 +5411,6 @@ const docTemplate = `{
                     "type": "boolean"
                 }
             }
-        },
-        "httpx.ErrorBody": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "type": "string"
-                },
-                "details": {
-                    "type": "object",
-                    "additionalProperties": {}
-                },
-                "message": {
-                    "type": "string"
-                },
-                "request_id": {
-                    "type": "string"
-                }
-            }
-        },
-        "httpx.ErrorResponse": {
-            "type": "object",
-            "properties": {
-                "error": {
-                    "$ref": "#/definitions/httpx.ErrorBody"
-                }
-            }
-        },
-        "identity.OptionalNullableString": {
-            "type": "object",
-            "properties": {
-                "set": {
-                    "type": "boolean"
-                },
-                "value": {
-                    "type": "string"
-                }
-            }
-        },
-        "setting.SettingItem": {
-            "type": "object",
-            "properties": {
-                "key": {
-                    "type": "string"
-                },
-                "type": {
-                    "$ref": "#/definitions/setting.SettingType"
-                },
-                "value": {}
-            }
-        },
-        "setting.SettingType": {
-            "type": "string",
-            "enum": [
-                "string",
-                "integer",
-                "boolean",
-                "json"
-            ],
-            "x-enum-varnames": [
-                "SettingTypeString",
-                "SettingTypeInteger",
-                "SettingTypeBoolean",
-                "SettingTypeJSON"
-            ]
         }
     }
 }`

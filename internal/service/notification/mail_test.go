@@ -470,6 +470,38 @@ func TestHandleCreatedAwaitingModeration(t *testing.T) {
 	}
 }
 
+// TestHandleCreatedSpamWording 证明垃圾检测标记的评论按实际状态发送“垃圾”审核邮件，
+// 不产生回复通知，AwaitingModeration 为 false。
+func TestHandleCreatedSpamWording(t *testing.T) {
+	db, svc, mailer, renderer, _ := newNotificationHarness(t)
+	fx := seedNotificationData(t, db)
+	comments := repository.NewCommentRepo(db)
+	if err := comments.UpdateStatus(context.Background(), fx.SiteID, fx.CommentID, domain.CommentStatusSpam, nil, nil, nil); err != nil {
+		t.Fatalf("set spam: %v", err)
+	}
+
+	svc.handle(context.Background(), domain.CommentEvent{
+		Type:      domain.TypeCommentCreated,
+		SiteID:    fx.SiteID,
+		ThreadID:  fx.ThreadID,
+		CommentID: fx.CommentID,
+		UserID:    fx.AuthorID,
+	})
+
+	if len(mailer.messages) != 1 {
+		t.Fatalf("messages = %d, want 1 (spam moderation only, no reply)", len(mailer.messages))
+	}
+	if mailer.messages[0].Subject != "评论被标记为垃圾" {
+		t.Fatalf("subject = %q, want 评论被标记为垃圾", mailer.messages[0].Subject)
+	}
+	if renderer.moderation == nil || renderer.moderation.AwaitingModeration {
+		t.Fatal("AwaitingModeration must be false for spam")
+	}
+	if renderer.reply != nil {
+		t.Fatal("spam comment must not trigger reply notification")
+	}
+}
+
 // TestHandleCreatedSkipsModerationMailsButKeepsReplyNotifications 证明关闭
 // 管理员审核通知开关只跳过审核邮件，direct 发布的回复通知仍经创建路径发送。
 func TestHandleCreatedSkipsModerationMailsButKeepsReplyNotifications(t *testing.T) {

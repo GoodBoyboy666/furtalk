@@ -291,6 +291,41 @@
 
 ### 邮箱域名名单与 Gravatar 头像（/api/v1/admin/settings）
 
+### 自动垃圾评论检测（spam provider）
+
+- 垃圾检测在输入、权限、站点/线程与 CAPTCHA 门禁通过后、写事务开始前执行；
+  外部网络调用与词库文件 IO 绝不进入数据库事务。
+- 固定四个渠道与执行顺序，管理端不可排序：
+  `spam.local` → `spam.akismet` → `spam.aliyun` → `spam.tencent`；渠道串行执行，
+  首个 `pending`/`spam` 结果立即短路，后续渠道零调用。
+- 渠道通过 `PUT /api/v1/admin/providers/{key}` 写入，请求体 `kind:"spam"` 且**必须
+  携带 `enabled`**（缺失返回 422）。配置矩阵：
+
+| Key | 公开配置 | 加密机密 | 判定 |
+|---|---|---|---|
+| `spam.local` | `file_path`（必填、可读词库文件）、`check_nickname`、`action` | 无 | 命中 → 按 `action` |
+| `spam.akismet` | `action` | `api_key` | true → 按 `action`；false → 继续 |
+| `spam.aliyun` | `region`（必填）、`biz_type` | `access_key_id`、`access_key_secret` | review → pending；block → spam |
+| `spam.tencent` | `region`（必填）、`biz_type` | `secret_id`、`secret_key` | Review → pending；Block → spam |
+
+- `action` 只允许 `pending`/`spam`，只出现在本地/Akismet 二元渠道。
+- 外部渠道 Secret 组必须完整提交或整组留空：部分提交拒绝，整组空白保留现有
+  envelope；`enabled=true` 必须同时满足公开配置与 Secret 完整。
+- 本地词库只存绝对路径，不在数据库或管理 API 中传输完整词库；文件按行解析、
+  忽略空行、去空白去重、Unicode 大小写不敏感匹配，`check_nickname` 开启时昵称
+  也参与匹配；运行期按 size/mtime 热重载，失败保留最近成功快照。
+- 作者当前角色为管理员时跳过全部检测器（根评论与回复均适用）；普通用户与匿名
+  作者完整执行检测链。
+- 单渠道失败、超时或返回未知结果按 unknown 降级并继续后续渠道；全部渠道通过或
+  unknown 时沿用全局审核策略（`direct` → `published`、`review` → `pending`）。
+- 数据外发边界：Akismet 送检完整评论上下文（站点 URL、IP、UA、页面链接、类型、
+  昵称、邮箱、作者网址、正文）；阿里云/腾讯云只接收 Markdown 正文。启用 Akismet
+  的控件旁持续显示敏感数据外发提示。
+- `GET /admin/providers` 对 spam 项保留 `enabled` 与 `configured`；任何读取/日志
+  不含 secret、nonce、密文或送检正文。
+
+
+
 - 公开设置 `email_domain_whitelist` / `email_domain_blacklist`（json 数组，默认
   `[]`）与 `gravatar_base_url`（string，默认 `https://www.gravatar.com/avatar`）。
 - 域名项忽略首尾空白与大小写，按规范化邮箱中 `@` 后的完整域名精确匹配；

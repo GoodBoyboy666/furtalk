@@ -40,6 +40,7 @@ type Service struct {
 	signer    TokenSigner
 	codes     AuthCodeStore
 	verifier  WidgetCredentialVerifier
+	spam      *SpamGateway
 	bus       EventPublisher
 	log       *slog.Logger
 	now       func() time.Time
@@ -61,6 +62,7 @@ type Dependencies struct {
 	Signer    TokenSigner
 	Codes     AuthCodeStore
 	Verifier  WidgetCredentialVerifier
+	Spam      *SpamGateway
 	Bus       EventPublisher
 	Logger    *slog.Logger
 }
@@ -82,6 +84,7 @@ func NewService(deps Dependencies) *Service {
 		signer:    deps.Signer,
 		codes:     deps.Codes,
 		verifier:  deps.Verifier,
+		spam:      deps.Spam,
 		bus:       deps.Bus,
 		log:       deps.Logger,
 		now:       func() time.Time { return time.Now().UTC().Truncate(time.Microsecond) },

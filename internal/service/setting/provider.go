@@ -18,6 +18,7 @@ import (
 	"furtalk/internal/platform/mailer"
 	"furtalk/internal/platform/netprobe"
 	"furtalk/internal/platform/oauth"
+	"furtalk/internal/platform/spam"
 	"furtalk/internal/repository"
 )
 
@@ -46,6 +47,83 @@ type AuthConfig struct {
 	TeamID       string `json:"team_id"`
 	KeyID        string `json:"key_id"`
 	PrivateKey   string `json:"private_key"`
+}
+
+// SpamConfig 是垃圾检测 provider 的通用类型化配置，含机密。
+// 固定 provider key 决定哪些字段公开、哪些字段加密（见 spamProviderSpec）。
+type SpamConfig struct {
+	// FilePath 与 CheckNickname 是本地词库渠道字段；CheckNickname 开启时昵称也参与匹配。
+	FilePath      string `json:"file_path"`
+	CheckNickname bool   `json:"check_nickname"`
+	// Action 是本地/Akismet 二元检测器的命中动作，仅允许 pending 或 spam。
+	Action string `json:"action"`
+	// APIKey 是 Akismet 的 API key，加密保存。
+	APIKey string `json:"api_key"`
+	// Region 与 BizType 是阿里云/腾讯云渠道字段；BizType 可选。
+	Region  string `json:"region"`
+	BizType string `json:"biz_type"`
+	// AccessKeyID 与 AccessKeySecret 是阿里云凭据，加密保存。
+	AccessKeyID     string `json:"access_key_id"`
+	AccessKeySecret string `json:"access_key_secret"`
+	// SecretID 与 SecretKey 是腾讯云凭据，加密保存。
+	SecretID  string `json:"secret_id"`
+	SecretKey string `json:"secret_key"`
+}
+
+// spamProviderSpec 描述一个固定垃圾检测 provider key 的配置模式。
+// binary 表示二元检测器（本地/Akismet），携带 action；云检测器为三元且无 action。
+type spamProviderSpec struct {
+	key          string
+	publicFields []string
+	secretFields []string
+	binary       bool
+}
+
+// spamProviderKeys 是固定的垃圾检测 provider key 顺序（执行顺序）。
+var spamProviderKeys = []string{"spam.local", "spam.akismet", "spam.aliyun", "spam.tencent"}
+
+// spamProviderSpecs 是固定垃圾检测 provider 的配置矩阵。
+var spamProviderSpecs = map[string]spamProviderSpec{
+	"spam.local": {
+		key:          "spam.local",
+		publicFields: []string{"file_path", "check_nickname", "action"},
+		binary:       true,
+	},
+	"spam.akismet": {
+		key:          "spam.akismet",
+		publicFields: []string{"action"},
+		secretFields: []string{"api_key"},
+		binary:       true,
+	},
+	"spam.aliyun": {
+		key:          "spam.aliyun",
+		publicFields: []string{"region", "biz_type"},
+		secretFields: []string{"access_key_id", "access_key_secret"},
+	},
+	"spam.tencent": {
+		key:          "spam.tencent",
+		publicFields: []string{"region", "biz_type"},
+		secretFields: []string{"secret_id", "secret_key"},
+	},
+}
+
+// ValidSpamProviderKey 报告 key 是否为固定垃圾检测 provider key。
+func ValidSpamProviderKey(providerKey string) bool {
+	_, ok := spamProviderSpecs[providerKey]
+	return ok
+}
+
+// isSpamProviderKey 报告 key 是否属于保留的 spam.* 命名空间。
+func isSpamProviderKey(providerKey string) bool {
+	return strings.HasPrefix(providerKey, "spam.")
+}
+
+// validateSpamAction 校验二元检测器的命中动作只能是 pending 或 spam。
+func validateSpamAction(action string) error {
+	if action != "pending" && action != "spam" {
+		return fmt.Errorf("%w: spam hit action must be pending or spam", domain.ErrValidation)
+	}
+	return nil
 }
 
 // ProviderMeta 是提供商配置的只读管理表示（异类列表投影），不含 nonce、密文或明文机密。
@@ -113,7 +191,7 @@ func (s *ProviderService) SetSettingsInvalidator(fn func()) {
 }
 
 // List 返回全部提供商的只读管理表示（异类投影），按 provider key 升序。
-// CAPTCHA 项无启用语义；OAuth/OIDC 项携带 enabled。
+// CAPTCHA 项无启用语义；OAuth/OIDC 与垃圾检测项携带 enabled。
 func (s *ProviderService) List(ctx context.Context) ([]ProviderMeta, error) {
 	captchas, err := s.settings.ListCaptchaProviders(ctx)
 	if err != nil {
@@ -123,7 +201,11 @@ func (s *ProviderService) List(ctx context.Context) ([]ProviderMeta, error) {
 	if err != nil {
 		return nil, err
 	}
-	metas := make([]ProviderMeta, 0, len(captchas)+len(auths))
+	spams, err := s.settings.ListSpamProviders(ctx)
+	if err != nil {
+		return nil, err
+	}
+	metas := make([]ProviderMeta, 0, len(captchas)+len(auths)+len(spams))
 	for _, row := range captchas {
 		metas = append(metas, ProviderMeta{
 			ProviderKey:  row.ProviderKey,
@@ -141,8 +223,41 @@ func (s *ProviderService) List(ctx context.Context) ([]ProviderMeta, error) {
 			PublicConfig: publicRaw(row.PublicConfig),
 		})
 	}
+	for _, row := range spams {
+		metas = append(metas, ProviderMeta{
+			ProviderKey:  row.ProviderKey,
+			Kind:         domain.ProviderKindSpam,
+			Enabled:      row.Enabled,
+			Configured:   spamConfigured(row),
+			PublicConfig: publicRaw(row.PublicConfig),
+		})
+	}
 	sort.Slice(metas, func(i, j int) bool { return metas[i].ProviderKey < metas[j].ProviderKey })
 	return metas, nil
+}
+
+// spamConfigured 判定垃圾检测 provider 的已配置状态。
+// 本地词库渠道由合法 file_path 决定（其信封允许无 Secret）；
+// 外部渠道必须有非空密文。
+func spamConfigured(row repository.SpamProviderRow) bool {
+	if row.ProviderKey == "spam.local" {
+		return spamLocalFilePath(row.PublicConfig) != ""
+	}
+	return len(row.SecretCiphertext) > 0
+}
+
+// spamLocalFilePath 返回本地词库公开配置中的 file_path；解析失败时返回空串。
+func spamLocalFilePath(raw []byte) string {
+	var public struct {
+		FilePath string `json:"file_path"`
+	}
+	if len(raw) == 0 {
+		return ""
+	}
+	if err := json.Unmarshal(raw, &public); err != nil {
+		return ""
+	}
+	return public.FilePath
 }
 
 // publicRaw 返回公开配置原始 JSON；空值归一化为空对象。
@@ -153,13 +268,17 @@ func publicRaw(raw []byte) json.RawMessage {
 	return json.RawMessage(raw)
 }
 
-// validateProviderKey 校验 provider key 非空且不与公开选择设置行 key 冲突。
+// validateProviderKey 校验 provider key 非空、不与公开选择设置行 key 冲突，
+// 且不占用保留的 spam.* 命名空间（垃圾检测 key 只允许 spam 类型的 upsert）。
 func validateProviderKey(providerKey string) error {
 	if strings.TrimSpace(providerKey) == "" {
 		return fmt.Errorf("%w: provider key must not be empty", domain.ErrValidation)
 	}
 	if repository.ProviderSettingKey(providerKey) == repository.CaptchaProviderSettingKey {
 		return fmt.Errorf("%w: provider key %q conflicts with the captcha selector setting", domain.ErrValidation, providerKey)
+	}
+	if isSpamProviderKey(providerKey) {
+		return fmt.Errorf("%w: provider key %q is reserved for spam providers", domain.ErrValidation, providerKey)
 	}
 	return nil
 }
@@ -258,6 +377,281 @@ func validateAuthKeyKind(providerKey string, kind domain.ProviderKind) error {
 	return nil
 }
 
+// UpsertSpam 校验并写入垃圾检测 provider 配置；enabled 独立启用并允许多个渠道同时启用。
+// 只接受固定 key：spam.local、spam.akismet、spam.aliyun、spam.tencent。
+// Secret 更新契约：本地渠道无机密；外部渠道新建必须提供完整 Secret 组，编辑时整组
+// 为空表示原样保留，部分提交拒绝，完整非空组才替换信封。
+// enabled=true 必须同时满足公开配置与 Secret 完整，不能保存看似启用但不可运行的渠道。
+func (s *ProviderService) UpsertSpam(ctx context.Context, providerKey string, enabled bool, config json.RawMessage) error {
+	if !ValidSpamProviderKey(providerKey) {
+		return fmt.Errorf("%w: unknown spam provider key %q", domain.ErrValidation, providerKey)
+	}
+	public, newSecret, err := s.splitSpamConfig(providerKey, config)
+	if err != nil {
+		return err
+	}
+	existing, getErr := s.settings.GetSpamProvider(ctx, providerKey)
+	if getErr != nil && !errors.Is(getErr, domain.ErrNotFound) {
+		return getErr
+	}
+	row := &repository.SpamProviderRow{
+		ProviderKey:  providerKey,
+		Enabled:      enabled,
+		PublicConfig: public,
+	}
+	if len(newSecret) > 0 {
+		secretEnvelope, err := cryptox.Encrypt(s.key, masterKeyVersion, newSecret)
+		if err != nil {
+			return fmt.Errorf("setting: encrypt provider secret: %w", err)
+		}
+		row.SecretKeyVersion = int(masterKeyVersion)
+		row.SecretNonce = secretEnvelope[1 : 1+12]
+		row.SecretCiphertext = secretEnvelope[1+12:]
+	} else if existing != nil && len(existing.SecretCiphertext) > 0 {
+		row.SecretKeyVersion = existing.SecretKeyVersion
+		row.SecretNonce = existing.SecretNonce
+		row.SecretCiphertext = existing.SecretCiphertext
+	}
+	if enabled {
+		if err := validateSpamRunnable(providerKey, row); err != nil {
+			return err
+		}
+	}
+	return s.txRunner.RunInTx(ctx, func(ctx context.Context) error {
+		return s.settings.UpsertSpamProvider(ctx, row)
+	})
+}
+
+// validateSpamRunnable 校验 enabled=true 的渠道确实具备运行条件：
+// 本地渠道必须有合法 file_path；外部渠道必须有可用 Secret 信封。
+func validateSpamRunnable(providerKey string, row *repository.SpamProviderRow) error {
+	if providerKey == "spam.local" {
+		if spamLocalFilePath(row.PublicConfig) == "" {
+			return fmt.Errorf("%w: local keyword file path is required", domain.ErrValidation)
+		}
+		return nil
+	}
+	if len(row.SecretCiphertext) == 0 {
+		return fmt.Errorf("%w: provider secret is required when enabling %q", domain.ErrValidation, providerKey)
+	}
+	return nil
+}
+
+// SpamProvider 是返回给消费者的类型化、解密后的垃圾检测配置。
+type SpamProvider struct {
+	ProviderKey string
+	Enabled     bool
+	Configured  bool
+	Config      SpamConfig
+}
+
+// SpamProvider 返回一个垃圾检测 provider 的解密配置。
+// provider 缺失、类型不符或未配置时返回 domain.ErrProviderNotFound；密钥损坏时返回 domain.ErrSecretCorrupt。
+func (s *ProviderService) SpamProvider(ctx context.Context, providerKey string) (*SpamProvider, error) {
+	row, err := s.settings.GetSpamProvider(ctx, providerKey)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			return nil, domain.ErrProviderNotFound
+		}
+		return nil, err
+	}
+	return s.spamProvider(row)
+}
+
+// EnabledSpamProviders 返回全部已启用且已配置的垃圾检测 provider 解密配置，按固定执行顺序。
+func (s *ProviderService) EnabledSpamProviders(ctx context.Context) ([]SpamProvider, error) {
+	rows, err := s.settings.ListSpamProviders(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]SpamProvider, 0, len(rows))
+	for _, key := range spamProviderKeys {
+		for _, row := range rows {
+			if row.ProviderKey != key || !row.Enabled {
+				continue
+			}
+			provider, err := s.spamProvider(&row)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, *provider)
+			break
+		}
+	}
+	return out, nil
+}
+
+// spamProvider 合并公开字段与解密后的机密字段为类型化配置。
+// 只合并该渠道声明的机密字段，防止字段串位；本地渠道无信封直接返回公开配置。
+func (s *ProviderService) spamProvider(row *repository.SpamProviderRow) (*SpamProvider, error) {
+	provider := &SpamProvider{ProviderKey: row.ProviderKey, Enabled: row.Enabled, Configured: spamConfigured(*row)}
+	if err := decodeConfigFields(row.PublicConfig, &provider.Config); err != nil {
+		return nil, err
+	}
+	if len(row.SecretCiphertext) == 0 {
+		return provider, nil
+	}
+	secret, err := s.decryptSecretEnvelope(row.SecretKeyVersion, row.SecretNonce, row.SecretCiphertext, row.ProviderKey)
+	if err != nil {
+		return nil, err
+	}
+	var secretCfg SpamConfig
+	if err := json.Unmarshal(secret, &secretCfg); err != nil {
+		return nil, fmt.Errorf("%w: provider secret for %q is corrupt", domain.ErrSecretCorrupt, row.ProviderKey)
+	}
+	switch row.ProviderKey {
+	case "spam.akismet":
+		provider.Config.APIKey = secretCfg.APIKey
+	case "spam.aliyun":
+		provider.Config.AccessKeyID = secretCfg.AccessKeyID
+		provider.Config.AccessKeySecret = secretCfg.AccessKeySecret
+	case "spam.tencent":
+		provider.Config.SecretID = secretCfg.SecretID
+		provider.Config.SecretKey = secretCfg.SecretKey
+	}
+	return provider, nil
+}
+
+// splitSpamConfig 解析并校验垃圾检测 provider 配置，返回公共 JSON 与待加密的机密 JSON。
+func (s *ProviderService) splitSpamConfig(providerKey string, raw json.RawMessage) ([]byte, []byte, error) {
+	spec, ok := spamProviderSpecs[providerKey]
+	if !ok {
+		return nil, nil, fmt.Errorf("%w: unknown spam provider key %q", domain.ErrValidation, providerKey)
+	}
+	var cfg SpamConfig
+	if err := decodeSpam(raw, &cfg); err != nil {
+		return nil, nil, err
+	}
+	if err := validateSpamConfig(providerKey, spec, &cfg); err != nil {
+		return nil, nil, err
+	}
+	public, err := publicSpamConfig(cfg, spec)
+	if err != nil {
+		return nil, nil, err
+	}
+	secret, err := secretSpamConfig(cfg, spec)
+	if err != nil {
+		return nil, nil, err
+	}
+	return public, secret, nil
+}
+
+// validateSpamConfig 校验垃圾检测 provider 的字段：二元渠道的 action、本地词库路径
+// 与云渠道的 region 必填。
+func validateSpamConfig(providerKey string, spec spamProviderSpec, cfg *SpamConfig) error {
+	if spec.binary {
+		if err := validateSpamAction(cfg.Action); err != nil {
+			return err
+		}
+	}
+	if providerKey == "spam.local" {
+		path := strings.TrimSpace(cfg.FilePath)
+		if path == "" {
+			return fmt.Errorf("%w: local keyword file path is required", domain.ErrValidation)
+		}
+		if err := spam.ValidateKeywordFile(path); err != nil {
+			if errors.Is(err, spam.ErrInvalidFile) {
+				return fmt.Errorf("%w: %v", domain.ErrValidation, err)
+			}
+			return err
+		}
+		cfg.FilePath = path
+	}
+	if providerKey == "spam.aliyun" || providerKey == "spam.tencent" {
+		if strings.TrimSpace(cfg.Region) == "" {
+			return fmt.Errorf("%w: %s region is required", domain.ErrValidation, providerKey)
+		}
+	}
+	return nil
+}
+
+// publicSpamConfig 构建存储到 public_config 的 JSON，只包含该渠道声明的公开字段。
+func publicSpamConfig(cfg SpamConfig, spec spamProviderSpec) ([]byte, error) {
+	values := map[string]any{}
+	for _, field := range spec.publicFields {
+		switch field {
+		case "file_path":
+			if cfg.FilePath != "" {
+				values[field] = cfg.FilePath
+			}
+		case "check_nickname":
+			values[field] = cfg.CheckNickname
+		case "action":
+			if cfg.Action != "" {
+				values[field] = cfg.Action
+			}
+		case "region":
+			if cfg.Region != "" {
+				values[field] = cfg.Region
+			}
+		case "biz_type":
+			if cfg.BizType != "" {
+				values[field] = cfg.BizType
+			}
+		default:
+			return nil, fmt.Errorf("setting: unsupported spam public field %q", field)
+		}
+	}
+	return json.Marshal(values)
+}
+
+// secretSpamConfig 构建待加密的 Secret JSON。
+// 外部渠道 Secret 组必须全部为空或全部非空：部分提交拒绝，整组为空返回 nil（保留现有 envelope）。
+func secretSpamConfig(cfg SpamConfig, spec spamProviderSpec) ([]byte, error) {
+	if len(spec.secretFields) == 0 {
+		return nil, nil
+	}
+	values := map[string]string{}
+	for _, field := range spec.secretFields {
+		switch field {
+		case "api_key":
+			values[field] = cfg.APIKey
+		case "access_key_id":
+			values[field] = cfg.AccessKeyID
+		case "access_key_secret":
+			values[field] = cfg.AccessKeySecret
+		case "secret_id":
+			values[field] = cfg.SecretID
+		case "secret_key":
+			values[field] = cfg.SecretKey
+		default:
+			return nil, fmt.Errorf("setting: unsupported spam secret field %q", field)
+		}
+	}
+	hasAny := false
+	hasBlank := false
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			hasAny = true
+		} else {
+			hasBlank = true
+		}
+	}
+	if hasAny && hasBlank {
+		return nil, fmt.Errorf("%w: %s secret group must be provided completely or left blank", domain.ErrValidation, spec.key)
+	}
+	if !hasAny {
+		return nil, nil
+	}
+	return json.Marshal(values)
+}
+
+// decodeSpam 严格解析垃圾检测 provider 配置：拒绝未知字段与尾随数据。
+func decodeSpam(raw json.RawMessage, into *SpamConfig) error {
+	if len(raw) == 0 {
+		return fmt.Errorf("%w: provider config is required", domain.ErrValidation)
+	}
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(into); err != nil {
+		return fmt.Errorf("%w: malformed provider config", domain.ErrValidation)
+	}
+	if err := dec.Decode(&struct{}{}); err != io.EOF {
+		return fmt.Errorf("%w: malformed provider config", domain.ErrValidation)
+	}
+	return nil
+}
+
 // Delete 删除提供商配置；删除当前选中的 CAPTCHA provider 时在同一事务清空选择设置，
 // 删除未选中的 provider 不影响当前选择。
 func (s *ProviderService) Delete(ctx context.Context, providerKey string) error {
@@ -303,6 +697,11 @@ func (s *ProviderService) deleteProviderRow(ctx context.Context, providerKey str
 		return err
 	}
 	if err := s.settings.DeleteAuthProvider(ctx, providerKey); err == nil {
+		return nil
+	} else if !errors.Is(err, domain.ErrNotFound) {
+		return err
+	}
+	if err := s.settings.DeleteSpamProvider(ctx, providerKey); err == nil {
 		return nil
 	} else if !errors.Is(err, domain.ErrNotFound) {
 		return err
