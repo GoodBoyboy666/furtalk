@@ -101,15 +101,21 @@ func (s *Service) handleCreated(ctx context.Context, ev domain.CommentEvent) {
 }
 
 // sendModerationMails 向全部活跃管理员发送新评论/待审核/垃圾通知。
+// 评论作者本人与已发布回复的父评论作者被排除在收件人之外，其他活跃管理员
+// 仍各自接收通知；父评论作者排除不依赖回复邮件是否实际发送。
 func (s *Service) sendModerationMails(ctx context.Context, comment *domain.Comment, author *domain.User, ev domain.CommentEvent) {
 	admins, err := s.users.ListActiveAdmins(ctx)
 	if err != nil {
 		s.log.Warn("notifications: list admins", logging.ID("site_id", ev.SiteID), logging.Error(err))
 		return
 	}
+	excludedParentID := s.replyParentUserID(ctx, comment)
 	pageTitle, pageURL := s.threadPage(ctx, comment)
 	for _, admin := range admins {
 		if admin.ID == comment.UserID {
+			continue
+		}
+		if excludedParentID != 0 && admin.ID == excludedParentID {
 			continue
 		}
 		if strings.TrimSpace(admin.Email) == "" {
@@ -164,11 +170,34 @@ func (s *Service) handlePublished(ctx context.Context, ev domain.CommentEvent) {
 	s.sendReplyNotification(ctx, comment, author)
 }
 
+// replyParentUserID 返回已发布回复的父评论作者 ID，供管理员通知排除收件人；
+// 非回复、未发布或父评论读取失败时返回 0，表示不做排除。
+func (s *Service) replyParentUserID(ctx context.Context, comment *domain.Comment) int64 {
+	if comment.ParentID == nil || comment.Status != domain.CommentStatusPublished {
+		return 0
+	}
+	parent, err := s.comments.FindBySiteAndID(ctx, comment.SiteID, *comment.ParentID)
+	if err != nil {
+		s.log.Warn("notifications: load parent for recipient exclusion", logging.ID("site_id", comment.SiteID), logging.ID("comment_id", comment.ID), logging.Error(err))
+		return 0
+	}
+	return parent.UserID
+}
+
 // sendReplyNotification 向父评论作者发送回复通知。
 // 由 CommentCreated（直接发布的回复）与 CommentPublished（人工审核发布的
-// 回复）两条路径共用，统一遵守父评论作者、自回复排除、通知偏好与退订规则。
+// 回复）两条路径共用，统一遵守全局回复开关、父评论作者、自回复排除、
+// 通知偏好与退订规则。
 func (s *Service) sendReplyNotification(ctx context.Context, comment *domain.Comment, author *domain.User) {
 	if comment.ParentID == nil {
+		return
+	}
+	current, err := s.settings.Get(ctx)
+	if err != nil {
+		s.log.Warn("notifications: read settings", logging.ID("site_id", comment.SiteID), logging.ID("comment_id", comment.ID), logging.Error(err))
+		return
+	}
+	if !current.Settings.Notifications.Replies {
 		return
 	}
 	parent, err := s.comments.FindBySiteAndID(ctx, comment.SiteID, *comment.ParentID)

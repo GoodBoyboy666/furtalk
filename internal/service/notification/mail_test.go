@@ -713,3 +713,246 @@ func TestSendAppendsUnsubscribeHtmlOnceForReply(t *testing.T) {
 		t.Fatalf("reply text must contain one unsubscribe line, got: %s", msg.TextBody)
 	}
 }
+
+// TestHandleCreatedDedupesAdminParentFromModerationMail 证明直接发布的回复中，
+// 父评论作者同时是活跃管理员时只收到“您有一条新回复”，不再收到同一评论的
+// “新评论”管理员邮件；其他活跃管理员仍各自收到“新评论”（R1/R2）。
+func TestHandleCreatedDedupesAdminParentFromModerationMail(t *testing.T) {
+	db, svc, mailer, _, _ := newNotificationHarness(t)
+	fx := seedNotificationData(t, db)
+	ctx := context.Background()
+	users := repository.NewUserRepo(db)
+	if err := users.UpdateRoleStatus(ctx, fx.ParentUserID, domain.RoleAdmin, domain.UserStatusActive); err != nil {
+		t.Fatalf("promote parent user to admin: %v", err)
+	}
+	otherAdmin := &domain.User{
+		Email:           "other-admin@example.com",
+		EmailNormalized: "other-admin@example.com",
+		Nickname:        "other admin",
+		Role:            domain.RoleAdmin,
+		Status:          domain.UserStatusActive,
+	}
+	if err := users.Create(ctx, otherAdmin); err != nil {
+		t.Fatalf("create other admin: %v", err)
+	}
+
+	svc.handle(ctx, domain.CommentEvent{
+		Type:      domain.TypeCommentCreated,
+		SiteID:    fx.SiteID,
+		ThreadID:  fx.ThreadID,
+		CommentID: fx.CommentID,
+		UserID:    fx.AuthorID,
+	})
+
+	replyCount := 0
+	moderationRecipients := make(map[string]bool)
+	for _, msg := range mailer.messages {
+		switch msg.Subject {
+		case "您有一条新回复":
+			replyCount++
+			if msg.To != "parent@example.com" {
+				t.Fatalf("reply mail to = %q, want parent", msg.To)
+			}
+		case "新评论":
+			moderationRecipients[msg.To] = true
+		default:
+			t.Fatalf("unexpected message: %+v", msg)
+		}
+	}
+	if replyCount != 1 {
+		t.Fatalf("reply mails = %d, want 1", replyCount)
+	}
+	if moderationRecipients["parent@example.com"] {
+		t.Fatal("parent author admin must not receive the moderation mail for the reply to their own comment")
+	}
+	if len(moderationRecipients) != 2 || !moderationRecipients["admin@example.com"] || !moderationRecipients[otherAdmin.Email] {
+		t.Fatalf("moderation recipients = %#v, want the two non-parent admins", moderationRecipients)
+	}
+}
+
+// TestHandleCreatedAdminParentReplySuppressedSkipsBothMails 证明关闭全局回复
+// 开关时，父评论作者（管理员）既收不到回复邮件，也因结构性排除收不到该评论
+// 的管理员新评论邮件；其他活跃管理员的新评论邮件保留（R1/R4）。
+func TestHandleCreatedAdminParentReplySuppressedSkipsBothMails(t *testing.T) {
+	db, svc, mailer, _, settingsSvc := newNotificationHarness(t)
+	fx := seedNotificationData(t, db)
+	ctx := context.Background()
+	users := repository.NewUserRepo(db)
+	if err := users.UpdateRoleStatus(ctx, fx.ParentUserID, domain.RoleAdmin, domain.UserStatusActive); err != nil {
+		t.Fatalf("promote parent user to admin: %v", err)
+	}
+	if _, err := settingsSvc.Patch(ctx, []setting.SettingItem{
+		{Key: setting.SettingKeyNotifications, Type: setting.SettingTypeJSON, Value: map[string]any{"moderation": true, "replies": false}},
+	}, 1); err != nil {
+		t.Fatalf("patch notifications: %v", err)
+	}
+
+	svc.handle(ctx, domain.CommentEvent{
+		Type:      domain.TypeCommentCreated,
+		SiteID:    fx.SiteID,
+		ThreadID:  fx.ThreadID,
+		CommentID: fx.CommentID,
+		UserID:    fx.AuthorID,
+	})
+
+	if len(mailer.messages) != 1 {
+		t.Fatalf("messages = %d, want 1 (admin moderation only)", len(mailer.messages))
+	}
+	if mailer.messages[0].To != "admin@example.com" || mailer.messages[0].Subject != "新评论" {
+		t.Fatalf("message = %+v, want admin moderation only", mailer.messages[0])
+	}
+}
+
+// TestHandleCreatedAdminParentReplyDisabledSkipsBothMails 证明父评论作者
+// （管理员）关闭个人回复偏好时，既收不到回复邮件，也因结构性排除收不到该评论
+// 的管理员新评论邮件（R1 边界/R5）。
+func TestHandleCreatedAdminParentReplyDisabledSkipsBothMails(t *testing.T) {
+	db, svc, mailer, _, _ := newNotificationHarness(t)
+	fx := seedNotificationData(t, db)
+	ctx := context.Background()
+	users := repository.NewUserRepo(db)
+	if err := users.UpdateRoleStatus(ctx, fx.ParentUserID, domain.RoleAdmin, domain.UserStatusActive); err != nil {
+		t.Fatalf("promote parent user to admin: %v", err)
+	}
+	if err := repository.NewPreferenceRepo(db).Upsert(ctx, &domain.NotificationPreferences{
+		UserID:            fx.ParentUserID,
+		ReplyEnabled:      false,
+		ModerationEnabled: true,
+	}); err != nil {
+		t.Fatalf("upsert preferences: %v", err)
+	}
+
+	svc.handle(ctx, domain.CommentEvent{
+		Type:      domain.TypeCommentCreated,
+		SiteID:    fx.SiteID,
+		ThreadID:  fx.ThreadID,
+		CommentID: fx.CommentID,
+		UserID:    fx.AuthorID,
+	})
+
+	if len(mailer.messages) != 1 {
+		t.Fatalf("messages = %d, want 1 (admin moderation only)", len(mailer.messages))
+	}
+	if mailer.messages[0].To != "admin@example.com" || mailer.messages[0].Subject != "新评论" {
+		t.Fatalf("message = %+v, want admin moderation only", mailer.messages[0])
+	}
+}
+
+// TestHandleCreatedRepliesOffSkipsReplyToNormalParent 证明关闭全局回复开关时，
+// direct 模式创建路径不再向普通父评论作者发送回复邮件，管理员新评论邮件保留
+// （R4）。
+func TestHandleCreatedRepliesOffSkipsReplyToNormalParent(t *testing.T) {
+	db, svc, mailer, _, settingsSvc := newNotificationHarness(t)
+	fx := seedNotificationData(t, db)
+	if _, err := settingsSvc.Patch(context.Background(), []setting.SettingItem{
+		{Key: setting.SettingKeyNotifications, Type: setting.SettingTypeJSON, Value: map[string]any{"moderation": true, "replies": false}},
+	}, 1); err != nil {
+		t.Fatalf("patch notifications: %v", err)
+	}
+
+	svc.handle(context.Background(), domain.CommentEvent{
+		Type:      domain.TypeCommentCreated,
+		SiteID:    fx.SiteID,
+		ThreadID:  fx.ThreadID,
+		CommentID: fx.CommentID,
+		UserID:    fx.AuthorID,
+	})
+
+	if len(mailer.messages) != 1 {
+		t.Fatalf("messages = %d, want 1 (moderation only)", len(mailer.messages))
+	}
+	if mailer.messages[0].To != "admin@example.com" || mailer.messages[0].Subject != "新评论" {
+		t.Fatalf("message = %+v, want admin moderation only", mailer.messages[0])
+	}
+}
+
+// TestHandleCreatedReplyDisabledPersonalSkipsReply 证明创建路径仍遵守父评论
+// 作者的个人回复偏好：reply_enabled=false 时不发送回复邮件，管理员新评论邮件
+// 保留（R5）。
+func TestHandleCreatedReplyDisabledPersonalSkipsReply(t *testing.T) {
+	db, svc, mailer, _, _ := newNotificationHarness(t)
+	fx := seedNotificationData(t, db)
+	ctx := context.Background()
+	if err := repository.NewPreferenceRepo(db).Upsert(ctx, &domain.NotificationPreferences{
+		UserID:            fx.ParentUserID,
+		ReplyEnabled:      false,
+		ModerationEnabled: true,
+	}); err != nil {
+		t.Fatalf("upsert preferences: %v", err)
+	}
+
+	svc.handle(ctx, domain.CommentEvent{
+		Type:      domain.TypeCommentCreated,
+		SiteID:    fx.SiteID,
+		ThreadID:  fx.ThreadID,
+		CommentID: fx.CommentID,
+		UserID:    fx.AuthorID,
+	})
+
+	if len(mailer.messages) != 1 {
+		t.Fatalf("messages = %d, want 1 (moderation only)", len(mailer.messages))
+	}
+	if mailer.messages[0].To != "admin@example.com" || mailer.messages[0].Subject != "新评论" {
+		t.Fatalf("message = %+v, want admin moderation only", mailer.messages[0])
+	}
+}
+
+// TestHandlePublishedRepliesOffSkipsReplyMail 证明关闭全局回复开关时，review
+// 模式发布路径仍发送发布确认邮件，但不再向父评论作者发送回复邮件（R4）。
+func TestHandlePublishedRepliesOffSkipsReplyMail(t *testing.T) {
+	db, svc, mailer, _, settingsSvc := newNotificationHarness(t)
+	fx := seedNotificationData(t, db)
+	if _, err := settingsSvc.Patch(context.Background(), []setting.SettingItem{
+		{Key: setting.SettingKeyNotifications, Type: setting.SettingTypeJSON, Value: map[string]any{"moderation": true, "replies": false}},
+	}, 1); err != nil {
+		t.Fatalf("patch notifications: %v", err)
+	}
+
+	svc.handle(context.Background(), domain.CommentEvent{
+		Type:      domain.TypeCommentPublished,
+		SiteID:    fx.SiteID,
+		ThreadID:  fx.ThreadID,
+		CommentID: fx.CommentID,
+		UserID:    fx.AuthorID,
+		ParentID:  &fx.ParentID,
+	})
+
+	if len(mailer.messages) != 1 {
+		t.Fatalf("messages = %d, want 1 (published only)", len(mailer.messages))
+	}
+	if mailer.messages[0].To != "author@example.com" || mailer.messages[0].Subject != "您的评论已发布" {
+		t.Fatalf("message = %+v, want published confirmation only", mailer.messages[0])
+	}
+}
+
+// TestHandlePublishedReplyDisabledPersonalSkipsReply 证明发布路径仍遵守父评论
+// 作者的个人回复偏好：reply_enabled=false 时不发送回复邮件，发布确认邮件保留
+// （R5）。
+func TestHandlePublishedReplyDisabledPersonalSkipsReply(t *testing.T) {
+	db, svc, mailer, _, _ := newNotificationHarness(t)
+	fx := seedNotificationData(t, db)
+	ctx := context.Background()
+	if err := repository.NewPreferenceRepo(db).Upsert(ctx, &domain.NotificationPreferences{
+		UserID:            fx.ParentUserID,
+		ReplyEnabled:      false,
+		ModerationEnabled: true,
+	}); err != nil {
+		t.Fatalf("upsert preferences: %v", err)
+	}
+
+	svc.handle(ctx, domain.CommentEvent{
+		Type:      domain.TypeCommentPublished,
+		SiteID:    fx.SiteID,
+		ThreadID:  fx.ThreadID,
+		CommentID: fx.CommentID,
+		UserID:    fx.AuthorID,
+		ParentID:  &fx.ParentID,
+	})
+
+	if len(mailer.messages) != 1 {
+		t.Fatalf("messages = %d, want 1 (published only)", len(mailer.messages))
+	}
+	if mailer.messages[0].To != "author@example.com" || mailer.messages[0].Subject != "您的评论已发布" {
+		t.Fatalf("message = %+v, want published confirmation only", mailer.messages[0])
+	}
+}
