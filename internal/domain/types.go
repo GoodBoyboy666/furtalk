@@ -158,6 +158,8 @@ const (
 	ProviderKindOIDC ProviderKind = "oidc"
 	// ProviderKindSpam 表示垃圾检测提供商。
 	ProviderKindSpam ProviderKind = "spam"
+	// ProviderKindNotification 表示实例级通知通道提供商。
+	ProviderKindNotification ProviderKind = "notification"
 )
 
 // CommentEventType 标识一种评论事件类型。

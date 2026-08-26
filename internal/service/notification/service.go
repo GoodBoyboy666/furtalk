@@ -30,31 +30,36 @@ const sendTimeout = 30 * time.Second
 // notificationTTL 限制退订令牌的有效期。
 const notificationTTL = 30 * 24 * time.Hour
 
-// Service 消费提交后的评论事件并投递通知邮件，同时实现带签名的退订用例。
+// Service 消费提交后的评论事件并投递通知邮件与实例级管理员通道通知，
+// 同时实现带签名的退订用例。
 type Service struct {
-	bus       *eventbus.Bus[domain.CommentEvent]
-	mailer    mailer.Mailer
-	templates mailer.TemplateRenderer
-	users     *repository.UserRepo
-	comments  *repository.CommentRepo
-	threads   *repository.ThreadRepo
-	prefs     *repository.PreferenceRepo
-	prefW     domain.PreferenceWriter
-	settings  *setting.Service
-	signer    UnsubscribeSigner
-	baseURL   string
-	log       *slog.Logger
+	bus        *eventbus.Bus[domain.CommentEvent]
+	mailer     mailer.Mailer
+	templates  mailer.TemplateRenderer
+	users      *repository.UserRepo
+	comments   *repository.CommentRepo
+	threads    *repository.ThreadRepo
+	prefs      *repository.PreferenceRepo
+	sites      *repository.SiteRepo
+	channels   ChannelProviderReader
+	dispatcher ChannelDispatcher
+	prefW      domain.PreferenceWriter
+	settings   *setting.Service
+	signer     UnsubscribeSigner
+	baseURL    string
+	log        *slog.Logger
 }
 
 // NewService 构建通知服务。
-func NewService(users *repository.UserRepo, comments *repository.CommentRepo, threads *repository.ThreadRepo, prefs *repository.PreferenceRepo, prefW domain.PreferenceWriter, settings *setting.Service, bus *eventbus.Bus[domain.CommentEvent], mailer mailer.Mailer, templates mailer.TemplateRenderer, signer UnsubscribeSigner, baseURL string, log *slog.Logger) *Service {
+func NewService(users *repository.UserRepo, comments *repository.CommentRepo, threads *repository.ThreadRepo, prefs *repository.PreferenceRepo, prefW domain.PreferenceWriter, settings *setting.Service, sites *repository.SiteRepo, channels ChannelProviderReader, dispatcher ChannelDispatcher, bus *eventbus.Bus[domain.CommentEvent], mailer mailer.Mailer, templates mailer.TemplateRenderer, signer UnsubscribeSigner, baseURL string, log *slog.Logger) *Service {
 	log = logging.Normalize(log)
-	return &Service{bus: bus, mailer: mailer, templates: templates, users: users, comments: comments, threads: threads, prefs: prefs, prefW: prefW, settings: settings, signer: signer, baseURL: baseURL, log: log}
+	return &Service{bus: bus, mailer: mailer, templates: templates, users: users, comments: comments, threads: threads, prefs: prefs, prefW: prefW, settings: settings, sites: sites, channels: channels, dispatcher: dispatcher, signer: signer, baseURL: baseURL, log: log}
 }
 
 // Run 阻塞并消费评论事件，直到 ctx 取消或事件总线关闭。
+// 只要事件总线存在就运行；SMTP 缺失时只跳过邮件，不跳过通道投递。
 func (s *Service) Run(ctx context.Context) error {
-	if s.bus == nil || s.mailer == nil {
+	if s.bus == nil {
 		return nil
 	}
 	return s.bus.Consume(ctx, func(ev domain.CommentEvent) {
@@ -73,9 +78,10 @@ func (s *Service) handle(ctx context.Context, ev domain.CommentEvent) {
 	}
 }
 
-// handleCreated 实现 CommentCreated 邮件规则。
-// 管理员新评论/待审核通知受全局通知开关控制；直接发布的回复由本路径发送
-// 回复通知。两者在同一事件处理器中分别门禁，关闭审核开关不影响回复通知。
+// handleCreated 实现 CommentCreated 邮件与通道规则。
+// 管理员新评论/待审核邮件受全局通知开关控制；直接发布的回复邮件由本路径发送。
+// 实例级管理员通道仅向 published / pending 状态投递；spam 与 comment.published
+// 事件不进入通道分支。SMTP 缺失时只跳过邮件，通道仍可投递。
 func (s *Service) handleCreated(ctx context.Context, ev domain.CommentEvent) {
 	current, err := s.settings.Get(ctx)
 	if err != nil {
@@ -92,11 +98,16 @@ func (s *Service) handleCreated(ctx context.Context, ev domain.CommentEvent) {
 		s.log.Warn("notifications: load comment author", logging.ID("site_id", ev.SiteID), logging.ID("comment_id", ev.CommentID), logging.ID("user_id", comment.UserID), logging.Error(err))
 		return
 	}
-	if current.Settings.Notifications.Moderation {
-		s.sendModerationMails(ctx, comment, author, ev)
+	if s.mailer != nil {
+		if current.Settings.Notifications.Moderation {
+			s.sendModerationMails(ctx, comment, author, ev)
+		}
+		if comment.Status == domain.CommentStatusPublished {
+			s.sendReplyNotification(ctx, comment, author)
+		}
 	}
-	if comment.Status == domain.CommentStatusPublished {
-		s.sendReplyNotification(ctx, comment, author)
+	if comment.Status == domain.CommentStatusPublished || comment.Status == domain.CommentStatusPending {
+		s.sendChannels(ctx, comment, author, ev)
 	}
 }
 
@@ -132,7 +143,11 @@ func (s *Service) sendModerationMails(ctx context.Context, comment *domain.Comme
 
 // handlePublished 实现 CommentPublished 邮件规则：向作者发送发布确认，
 // 并在评论为回复时通过共享 helper 向父评论作者发送回复通知。
+// 该事件只服务邮件链路；SMTP 缺失时直接返回，不产生任何通道投递。
 func (s *Service) handlePublished(ctx context.Context, ev domain.CommentEvent) {
+	if s.mailer == nil {
+		return
+	}
 	author, err := s.users.FindByID(ctx, ev.UserID)
 	if err != nil {
 		s.log.Warn("notifications: load author", logging.ID("user_id", ev.UserID), logging.Error(err))

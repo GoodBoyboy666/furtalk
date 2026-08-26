@@ -501,6 +501,67 @@
 - 通知邮件 best-effort；无需 Kafka/RabbitMQ。
 - 事件结构：`Published{CommentID, SiteID, ParentID, OccurredAt}`（comment 模块公开面）。
 
+### 多通道管理员通知（8 个固定通道）
+
+- 实例级通道：Telegram / Feishu / DingTalk / Bark / Slack / LINE / 通用 WebHook /
+  Discord。每平台在一个实例中最多一个目标；按固定 key（`notification.*`）存入
+  `dynamic_settings` 的 provider 行，复用 AES-256-GCM 密钥信封，无数据库迁移。
+- 投递范围：仅消费 `comment.created`，且持久化状态为 `published`（新评论）或
+  `pending`（评论待审核）；`spam` 与全部 `comment.published` 事件不投递到通道。
+- 投递语义：best-effort、单次尝试、5s 有界超时、不重试、不持久化；多通道并发扇出，
+  单通道失败只记录脱敏日志，不阻断其他通道与既有邮件。
+- 管理接口：沿用 `/api/v1/admin/providers` CRUD/test。列表只返回固定 key、kind、
+  `enabled`、`configured` 与公开元数据（Bark `server_url`），绝不返回机密或目标。
+- 出站风险：Bark `server_url` 与通用 WebHook 允许 HTTP/HTTPS 与私网目标（受信管理员
+  部署决策），拒绝 userinfo/fragment/非法 URL 且从不跟随重定向；Telegram/LINE 端点
+  固定在代码中；Slack/Discord/Feishu/DingTalk webhook 要求 HTTPS 与官方主机/路径。
+- 必填配置字段：Telegram（`bot_token`、`chat_id`）；Feishu/DingTalk/Slack/Discord
+  （`webhook_url`）；Bark（`server_url` 公开、`device_key` 机密）；LINE
+  （`channel_access_token`、`target_id`）；WebHook（`webhook_url`）。
+  Feishu/DingTalk/WebHook 可选 `signing_secret`（缺省保留、`null` 清除、非空替换）。
+- 平台错误只记录脱敏类别/错误码，绝不含 URL、凭据、目标或响应正文。
+
+### 通用 WebHook v1 信封与签名
+
+- 请求方法 POST；`Content-Type: application/json`；固定版本化 JSON 信封，
+  业务 ID 全部编码为十进制字符串。
+- 请求头：
+  - `X-FurTalk-Webhook-Version: 1`（始终）
+  - `X-FurTalk-Webhook-Timestamp: <unix-seconds>`（始终）
+  - `X-FurTalk-Webhook-Signature: sha256=<lowercase-hex>`（仅配置签名密钥时）
+- 签名：`signed_payload = "<unix-seconds>." + raw_body`，
+  `signature = HMAC-SHA256(secret, signed_payload)`。签名输入与发送使用同一字节
+  切片，绝不重新序列化；接收方应用常数时间比较。
+- 事件与 `notification_type`：
+
+  | event | notification_type | 场景 |
+  |---|---|---|
+  | `comment.created` | `new_comment` | 创建即 published |
+  | `comment.created` | `pending_comment` | 创建即 pending |
+  | `notification.test` | `test` | 管理员测试投递 |
+
+- `event_id` 对单次创建事件确定（`comment.created:<site_id>:<comment_id>`），
+  接收方可据此去重；FurTalk 本身不重试。
+- 示例请求体（published 新评论）：
+
+  ```json
+  {
+    "version": "1",
+    "event": "comment.created",
+    "notification_type": "new_comment",
+    "event_id": "comment.created:12:34",
+    "occurred_at": "2026-08-25T12:00:00Z",
+    "site": {"id": "12", "name": "Example", "canonical_url": "https://example.com"},
+    "page": {"thread_id": "56", "title": "Post title", "url": "https://example.com/post"},
+    "comment": {"id": "34", "parent_id": null, "status": "published",
+                "author_nickname": "Alice", "body_markdown": "Hello",
+                "body_truncated": false, "created_at": "2026-08-25T12:00:00Z"}
+  }
+  ```
+
+  缺失的 `parent_id` / `title` / `url` 序列化为 JSON `null`；测试事件
+  （`notification.test`）请求体携带 `"test": true` 与 `message` 字段。
+
 ## 6. 约定校验方式
 
 - `docs/swagger/swagger.json` 由源码注解生成；修改端点约定后须与源注解保持一致

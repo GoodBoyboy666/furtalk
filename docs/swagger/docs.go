@@ -749,7 +749,7 @@ const docTemplate = `{
                 "summary": "列出提供商配置",
                 "responses": {
                     "200": {
-                        "description": "提供商列表（不含机密；CAPTCHA 项无 enabled，OAuth/OIDC 与 Spam 项携带 enabled）",
+                        "description": "提供商列表（不含机密；CAPTCHA 项无 enabled，OAuth/OIDC、Spam 与 Notification 项携带 enabled）",
                         "schema": {
                             "$ref": "#/definitions/internal_handler.ProvidersResponse"
                         }
@@ -787,7 +787,7 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "提供商配置（CAPTCHA 不允许携带 enabled；Spam 必须携带 enabled）",
+                        "description": "提供商配置（CAPTCHA 不允许携带 enabled；Spam 与 Notification 必须携带 enabled）",
                         "name": "body",
                         "in": "body",
                         "required": true,

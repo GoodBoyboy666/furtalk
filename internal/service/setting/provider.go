@@ -17,6 +17,7 @@ import (
 	"furtalk/internal/platform/crypto"
 	"furtalk/internal/platform/mailer"
 	"furtalk/internal/platform/netprobe"
+	"furtalk/internal/platform/notifier"
 	"furtalk/internal/platform/oauth"
 	"furtalk/internal/platform/spam"
 	"furtalk/internal/repository"
@@ -68,6 +69,108 @@ type SpamConfig struct {
 	// SecretID 与 SecretKey 是腾讯云凭据，加密保存。
 	SecretID  string `json:"secret_id"`
 	SecretKey string `json:"secret_key"`
+}
+
+// NotificationConfig 是通知通道 provider 的类型化配置，机密字段在持久化前加密。
+// 平台字段做并集；每个固定 key 只使用自己声明的字段（见 notificationProviderSpec）。
+type NotificationConfig struct {
+	BotToken           string `json:"bot_token"`
+	ChatID             string `json:"chat_id"`
+	WebhookURL         string `json:"webhook_url"`
+	ServerURL          string `json:"server_url"`
+	DeviceKey          string `json:"device_key"`
+	ChannelAccessToken string `json:"channel_access_token"`
+	TargetID           string `json:"target_id"`
+	// SigningSecret 是可选签名密钥（feishu/dingtalk/webhook），三态处理：
+	// 缺省保留现值、显式 null 清除、非空替换。
+	SigningSecret *string `json:"signing_secret"`
+}
+
+// notificationConfigInput 是通知通道配置的严格解析输入。
+// SigningSecret 用 RawMessage 区分三种状态：缺失（nil）=保留、null=清除、非空=替换。
+type notificationConfigInput struct {
+	BotToken           string          `json:"bot_token"`
+	ChatID             string          `json:"chat_id"`
+	WebhookURL         string          `json:"webhook_url"`
+	ServerURL          string          `json:"server_url"`
+	DeviceKey          string          `json:"device_key"`
+	ChannelAccessToken string          `json:"channel_access_token"`
+	TargetID           string          `json:"target_id"`
+	SigningSecret      json.RawMessage `json:"signing_secret"`
+}
+
+// notificationProviderSpec 描述一个固定通知通道 key 的配置模式。
+// secretFields 是必填机密字段；optionalSecretFields 是可选的机密字段（三态处理）。
+type notificationProviderSpec struct {
+	key                  string
+	publicFields         []string
+	secretFields         []string
+	optionalSecretFields []string
+}
+
+// notificationProviderKeys 是固定的通知通道 provider key 顺序（投递顺序）。
+// 独立命名空间，避免与 OAuth 的 line/discord 等 key 冲突。
+var notificationProviderKeys = []string{
+	"notification.telegram",
+	"notification.feishu",
+	"notification.dingtalk",
+	"notification.bark",
+	"notification.slack",
+	"notification.line",
+	"notification.webhook",
+	"notification.discord",
+}
+
+// notificationProviderSpecs 是固定通知通道 provider 的配置矩阵。
+// 除 Bark 的 server_url 外，所有目的地字段均按机密加密保存。
+var notificationProviderSpecs = map[string]notificationProviderSpec{
+	"notification.telegram": {
+		key:          "notification.telegram",
+		secretFields: []string{"bot_token", "chat_id"},
+	},
+	"notification.feishu": {
+		key:                  "notification.feishu",
+		secretFields:         []string{"webhook_url"},
+		optionalSecretFields: []string{"signing_secret"},
+	},
+	"notification.dingtalk": {
+		key:                  "notification.dingtalk",
+		secretFields:         []string{"webhook_url"},
+		optionalSecretFields: []string{"signing_secret"},
+	},
+	"notification.bark": {
+		key:          "notification.bark",
+		publicFields: []string{"server_url"},
+		secretFields: []string{"device_key"},
+	},
+	"notification.slack": {
+		key:          "notification.slack",
+		secretFields: []string{"webhook_url"},
+	},
+	"notification.line": {
+		key:          "notification.line",
+		secretFields: []string{"channel_access_token", "target_id"},
+	},
+	"notification.webhook": {
+		key:                  "notification.webhook",
+		secretFields:         []string{"webhook_url"},
+		optionalSecretFields: []string{"signing_secret"},
+	},
+	"notification.discord": {
+		key:          "notification.discord",
+		secretFields: []string{"webhook_url"},
+	},
+}
+
+// ValidNotificationProviderKey 报告 key 是否为固定通知通道 provider key。
+func ValidNotificationProviderKey(providerKey string) bool {
+	_, ok := notificationProviderSpecs[providerKey]
+	return ok
+}
+
+// isNotificationProviderKey 报告 key 是否属于保留的 notification.* 命名空间。
+func isNotificationProviderKey(providerKey string) bool {
+	return strings.HasPrefix(providerKey, "notification.")
 }
 
 // spamProviderSpec 描述一个固定垃圾检测 provider key 的配置模式。
@@ -145,12 +248,20 @@ type ProviderService struct {
 	key                []byte
 	prober             Prober
 	invalidateSettings func()
+	notificationTester NotificationTester
 }
 
 // Prober 执行有界外部连通性检查，供管理员提供商测试端点使用。
 type Prober interface {
 	ProbeCaptcha(ctx context.Context, cfg CaptchaConfig) error
 	ProbeURL(ctx context.Context, rawURL string) error
+}
+
+// NotificationTester 向通知通道发送显式标记的测试消息。
+// 由组合根在通知服务装配完成后接线，设置层不感知通知业务消息内容；
+// 测试允许在通道停用时执行，但要求配置完整。
+type NotificationTester interface {
+	TestNotification(ctx context.Context, providerKey string, cfg NotificationConfig) error
 }
 
 // networkProber 是生产环境的 prober。
@@ -190,8 +301,15 @@ func (s *ProviderService) SetSettingsInvalidator(fn func()) {
 	}
 }
 
+// SetNotificationTester 安装通知通道测试器，供管理员测试端点实际发送测试消息。
+func (s *ProviderService) SetNotificationTester(t NotificationTester) {
+	if t != nil {
+		s.notificationTester = t
+	}
+}
+
 // List 返回全部提供商的只读管理表示（异类投影），按 provider key 升序。
-// CAPTCHA 项无启用语义；OAuth/OIDC 与垃圾检测项携带 enabled。
+// CAPTCHA 项无启用语义；OAuth/OIDC、垃圾检测与通知通道项携带 enabled。
 func (s *ProviderService) List(ctx context.Context) ([]ProviderMeta, error) {
 	captchas, err := s.settings.ListCaptchaProviders(ctx)
 	if err != nil {
@@ -205,7 +323,11 @@ func (s *ProviderService) List(ctx context.Context) ([]ProviderMeta, error) {
 	if err != nil {
 		return nil, err
 	}
-	metas := make([]ProviderMeta, 0, len(captchas)+len(auths)+len(spams))
+	notifications, err := s.settings.ListNotificationProviders(ctx)
+	if err != nil {
+		return nil, err
+	}
+	metas := make([]ProviderMeta, 0, len(captchas)+len(auths)+len(spams)+len(notifications))
 	for _, row := range captchas {
 		metas = append(metas, ProviderMeta{
 			ProviderKey:  row.ProviderKey,
@@ -229,6 +351,15 @@ func (s *ProviderService) List(ctx context.Context) ([]ProviderMeta, error) {
 			Kind:         domain.ProviderKindSpam,
 			Enabled:      row.Enabled,
 			Configured:   spamConfigured(row),
+			PublicConfig: publicRaw(row.PublicConfig),
+		})
+	}
+	for _, row := range notifications {
+		metas = append(metas, ProviderMeta{
+			ProviderKey:  row.ProviderKey,
+			Kind:         domain.ProviderKindNotification,
+			Enabled:      row.Enabled,
+			Configured:   len(row.SecretCiphertext) > 0,
 			PublicConfig: publicRaw(row.PublicConfig),
 		})
 	}
@@ -269,7 +400,7 @@ func publicRaw(raw []byte) json.RawMessage {
 }
 
 // validateProviderKey 校验 provider key 非空、不与公开选择设置行 key 冲突，
-// 且不占用保留的 spam.* 命名空间（垃圾检测 key 只允许 spam 类型的 upsert）。
+// 且不占用保留的 spam.* / notification.* 命名空间（这两类 key 只允许对应类型的 upsert）。
 func validateProviderKey(providerKey string) error {
 	if strings.TrimSpace(providerKey) == "" {
 		return fmt.Errorf("%w: provider key must not be empty", domain.ErrValidation)
@@ -279,6 +410,9 @@ func validateProviderKey(providerKey string) error {
 	}
 	if isSpamProviderKey(providerKey) {
 		return fmt.Errorf("%w: provider key %q is reserved for spam providers", domain.ErrValidation, providerKey)
+	}
+	if isNotificationProviderKey(providerKey) {
+		return fmt.Errorf("%w: provider key %q is reserved for notification providers", domain.ErrValidation, providerKey)
 	}
 	return nil
 }
@@ -652,6 +786,342 @@ func decodeSpam(raw json.RawMessage, into *SpamConfig) error {
 	return nil
 }
 
+// UpsertNotification 校验并写入通知通道 provider 配置；enabled 独立启用。
+// 只接受固定 key。Secret 更新契约：新建必须提供该平台全部必填机密字段；
+// 编辑时必填机密字段为空保留现值，非空才替换；可选签名密钥三态处理
+// （缺失=保留、null=清除、非空=替换）。启用前必须校验合并后的完整配置。
+func (s *ProviderService) UpsertNotification(ctx context.Context, providerKey string, enabled bool, config json.RawMessage) error {
+	if !ValidNotificationProviderKey(providerKey) {
+		return fmt.Errorf("%w: unknown notification provider key %q", domain.ErrValidation, providerKey)
+	}
+	spec := notificationProviderSpecs[providerKey]
+	input, err := decodeNotificationInput(config)
+	if err != nil {
+		return err
+	}
+	// 读取既有配置用于合并；密钥损坏时返回 ErrSecretCorrupt，管理员需删除后重建。
+	var existing *NotificationConfig
+	row, getErr := s.settings.GetNotificationProvider(ctx, providerKey)
+	if getErr == nil {
+		provider, err := s.notificationProvider(row)
+		if err != nil {
+			return err
+		}
+		existing = &provider.Config
+	} else if !errors.Is(getErr, domain.ErrNotFound) {
+		return getErr
+	}
+
+	merged, err := effectiveNotificationConfig(providerKey, *input, existing)
+	if err != nil {
+		return err
+	}
+	if err := validateNotificationConfig(providerKey, merged); err != nil {
+		return err
+	}
+	if enabled {
+		if err := validateNotificationRunnable(providerKey, merged); err != nil {
+			return err
+		}
+	}
+	public, err := publicNotificationConfig(*merged, spec)
+	if err != nil {
+		return err
+	}
+	secret, err := secretNotificationConfig(*merged, spec)
+	if err != nil {
+		return err
+	}
+	newRow := &repository.NotificationProviderRow{
+		ProviderKey:  providerKey,
+		Enabled:      enabled,
+		PublicConfig: public,
+	}
+	if len(secret) > 0 {
+		secretEnvelope, err := cryptox.Encrypt(s.key, masterKeyVersion, secret)
+		if err != nil {
+			return fmt.Errorf("setting: encrypt provider secret: %w", err)
+		}
+		newRow.SecretKeyVersion = int(masterKeyVersion)
+		newRow.SecretNonce = secretEnvelope[1 : 1+12]
+		newRow.SecretCiphertext = secretEnvelope[1+12:]
+	}
+	return s.txRunner.RunInTx(ctx, func(ctx context.Context) error {
+		return s.settings.UpsertNotificationProvider(ctx, newRow)
+	})
+}
+
+// NotificationProvider 是返回给消费者的类型化、解密后的通知通道配置。
+type NotificationProvider struct {
+	ProviderKey string
+	Enabled     bool
+	Configured  bool
+	Config      NotificationConfig
+}
+
+// NotificationProvider 返回单个通知通道的解密配置。
+// provider 缺失时返回 domain.ErrProviderNotFound；密钥损坏时返回 domain.ErrSecretCorrupt。
+func (s *ProviderService) NotificationProvider(ctx context.Context, providerKey string) (*NotificationProvider, error) {
+	row, err := s.settings.GetNotificationProvider(ctx, providerKey)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			return nil, domain.ErrProviderNotFound
+		}
+		return nil, err
+	}
+	return s.notificationProvider(row)
+}
+
+// EnabledNotificationProviders 返回全部已启用通知通道的解密配置，按固定 key 顺序。
+// 配置损坏会整体失败（fail closed），绝不静默跳过某个通道。
+func (s *ProviderService) EnabledNotificationProviders(ctx context.Context) ([]NotificationProvider, error) {
+	rows, err := s.settings.ListNotificationProviders(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]NotificationProvider, 0, len(rows))
+	for _, key := range notificationProviderKeys {
+		for _, row := range rows {
+			if row.ProviderKey != key || !row.Enabled {
+				continue
+			}
+			provider, err := s.notificationProvider(&row)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, *provider)
+			break
+		}
+	}
+	return out, nil
+}
+
+// notificationProvider 合并公开字段与解密后的机密字段为类型化配置。
+// 只合并该平台声明的机密字段，防止字段串位；无信封时只返回公开配置。
+func (s *ProviderService) notificationProvider(row *repository.NotificationProviderRow) (*NotificationProvider, error) {
+	provider := &NotificationProvider{
+		ProviderKey: row.ProviderKey,
+		Enabled:     row.Enabled,
+		Configured:  len(row.SecretCiphertext) > 0,
+	}
+	if err := decodeConfigFields(row.PublicConfig, &provider.Config); err != nil {
+		return nil, err
+	}
+	if len(row.SecretCiphertext) == 0 {
+		return provider, nil
+	}
+	secret, err := s.decryptSecretEnvelope(row.SecretKeyVersion, row.SecretNonce, row.SecretCiphertext, row.ProviderKey)
+	if err != nil {
+		return nil, fmt.Errorf("%w: provider secret for %q is corrupt", domain.ErrSecretCorrupt, row.ProviderKey)
+	}
+	var secretCfg NotificationConfig
+	if err := json.Unmarshal(secret, &secretCfg); err != nil {
+		return nil, fmt.Errorf("%w: provider secret for %q is corrupt", domain.ErrSecretCorrupt, row.ProviderKey)
+	}
+	spec := notificationProviderSpecs[row.ProviderKey]
+	for _, field := range append(append([]string{}, spec.secretFields...), spec.optionalSecretFields...) {
+		switch field {
+		case "bot_token":
+			provider.Config.BotToken = secretCfg.BotToken
+		case "chat_id":
+			provider.Config.ChatID = secretCfg.ChatID
+		case "webhook_url":
+			provider.Config.WebhookURL = secretCfg.WebhookURL
+		case "device_key":
+			provider.Config.DeviceKey = secretCfg.DeviceKey
+		case "channel_access_token":
+			provider.Config.ChannelAccessToken = secretCfg.ChannelAccessToken
+		case "target_id":
+			provider.Config.TargetID = secretCfg.TargetID
+		case "signing_secret":
+			provider.Config.SigningSecret = secretCfg.SigningSecret
+		default:
+			return nil, fmt.Errorf("setting: unsupported notification secret field %q", field)
+		}
+	}
+	return provider, nil
+}
+
+// effectiveNotificationConfig 把输入合并到既有配置：必填字段为空保留现值，
+// signing_secret 三态处理（缺失=保留、null=清除、显式空串=清除、非空=替换）。
+func effectiveNotificationConfig(providerKey string, input notificationConfigInput, existing *NotificationConfig) (*NotificationConfig, error) {
+	if !ValidNotificationProviderKey(providerKey) {
+		return nil, fmt.Errorf("%w: unknown notification provider key %q", domain.ErrValidation, providerKey)
+	}
+	out := &NotificationConfig{}
+	if existing != nil {
+		*out = *existing
+	}
+	if input.BotToken != "" {
+		out.BotToken = input.BotToken
+	}
+	if input.ChatID != "" {
+		out.ChatID = input.ChatID
+	}
+	if input.WebhookURL != "" {
+		out.WebhookURL = input.WebhookURL
+	}
+	if input.ServerURL != "" {
+		out.ServerURL = input.ServerURL
+	}
+	if input.DeviceKey != "" {
+		out.DeviceKey = input.DeviceKey
+	}
+	if input.ChannelAccessToken != "" {
+		out.ChannelAccessToken = input.ChannelAccessToken
+	}
+	if input.TargetID != "" {
+		out.TargetID = input.TargetID
+	}
+	switch {
+	case input.SigningSecret == nil:
+		// 缺失 → 保留现值。
+	case string(input.SigningSecret) == "null":
+		out.SigningSecret = nil
+	default:
+		var v string
+		if err := json.Unmarshal(input.SigningSecret, &v); err != nil {
+			return nil, fmt.Errorf("%w: signing_secret must be a string or null", domain.ErrValidation)
+		}
+		v = strings.TrimSpace(v)
+		if v == "" {
+			out.SigningSecret = nil
+		} else {
+			out.SigningSecret = &v
+		}
+	}
+	return out, nil
+}
+
+// validateNotificationConfig 校验平台必填字段与 URL 形态。
+// 完整合并后的配置每次 upsert 都校验，保证保存的通道始终可运行。
+func validateNotificationConfig(providerKey string, cfg *NotificationConfig) error {
+	switch providerKey {
+	case "notification.telegram":
+		if strings.TrimSpace(cfg.BotToken) == "" {
+			return missingNotificationField(providerKey, "bot_token")
+		}
+		if strings.TrimSpace(cfg.ChatID) == "" {
+			return missingNotificationField(providerKey, "chat_id")
+		}
+	case "notification.feishu", "notification.dingtalk", "notification.slack", "notification.discord":
+		if strings.TrimSpace(cfg.WebhookURL) == "" {
+			return missingNotificationField(providerKey, "webhook_url")
+		}
+		platform, err := notifier.ParsePlatform(providerKey)
+		if err != nil {
+			return fmt.Errorf("%w: %v", domain.ErrValidation, err)
+		}
+		if err := notifier.ValidateWebhookURL(platform, cfg.WebhookURL); err != nil {
+			return fmt.Errorf("%w: %v", domain.ErrValidation, err)
+		}
+	case "notification.webhook":
+		if strings.TrimSpace(cfg.WebhookURL) == "" {
+			return missingNotificationField(providerKey, "webhook_url")
+		}
+		if err := notifier.ValidateTrustedURL(cfg.WebhookURL); err != nil {
+			return fmt.Errorf("%w: %v", domain.ErrValidation, err)
+		}
+	case "notification.bark":
+		if strings.TrimSpace(cfg.ServerURL) == "" {
+			return missingNotificationField(providerKey, "server_url")
+		}
+		if strings.TrimSpace(cfg.DeviceKey) == "" {
+			return missingNotificationField(providerKey, "device_key")
+		}
+		if err := notifier.ValidateTrustedURL(cfg.ServerURL); err != nil {
+			return fmt.Errorf("%w: %v", domain.ErrValidation, err)
+		}
+	case "notification.line":
+		if strings.TrimSpace(cfg.ChannelAccessToken) == "" {
+			return missingNotificationField(providerKey, "channel_access_token")
+		}
+		if strings.TrimSpace(cfg.TargetID) == "" {
+			return missingNotificationField(providerKey, "target_id")
+		}
+	default:
+		return fmt.Errorf("%w: unknown notification provider key %q", domain.ErrValidation, providerKey)
+	}
+	return nil
+}
+
+// validateNotificationRunnable 校验启用通道可运行：要求配置完整且可解密。
+// 由于 upsert 已对合并结果做完整校验，这里与常规校验等价。
+func validateNotificationRunnable(providerKey string, cfg *NotificationConfig) error {
+	return validateNotificationConfig(providerKey, cfg)
+}
+
+// missingNotificationField 生成必填字段缺失的验证错误。
+func missingNotificationField(providerKey, field string) error {
+	return fmt.Errorf("%w: %s %s is required", domain.ErrValidation, providerKey, field)
+}
+
+// publicNotificationConfig 构建存储到 public_config 的 JSON，只包含该平台声明的公开字段。
+func publicNotificationConfig(cfg NotificationConfig, spec notificationProviderSpec) ([]byte, error) {
+	values := map[string]any{}
+	for _, field := range spec.publicFields {
+		switch field {
+		case "server_url":
+			if cfg.ServerURL != "" {
+				values[field] = cfg.ServerURL
+			}
+		default:
+			return nil, fmt.Errorf("setting: unsupported notification public field %q", field)
+		}
+	}
+	return json.Marshal(values)
+}
+
+// secretNotificationConfig 构建待加密的 Secret JSON，只包含该平台声明的机密字段；
+// 可选机密字段未设置时从 JSON 中省略。
+func secretNotificationConfig(cfg NotificationConfig, spec notificationProviderSpec) ([]byte, error) {
+	values := map[string]string{}
+	for _, field := range spec.secretFields {
+		switch field {
+		case "bot_token":
+			values[field] = cfg.BotToken
+		case "chat_id":
+			values[field] = cfg.ChatID
+		case "webhook_url":
+			values[field] = cfg.WebhookURL
+		case "device_key":
+			values[field] = cfg.DeviceKey
+		case "channel_access_token":
+			values[field] = cfg.ChannelAccessToken
+		case "target_id":
+			values[field] = cfg.TargetID
+		default:
+			return nil, fmt.Errorf("setting: unsupported notification secret field %q", field)
+		}
+	}
+	for _, field := range spec.optionalSecretFields {
+		if field != "signing_secret" {
+			return nil, fmt.Errorf("setting: unsupported optional notification secret field %q", field)
+		}
+		if cfg.SigningSecret != nil {
+			values[field] = *cfg.SigningSecret
+		}
+	}
+	return json.Marshal(values)
+}
+
+// decodeNotificationInput 严格解析通知通道 provider 配置：拒绝未知字段与尾随数据。
+func decodeNotificationInput(raw json.RawMessage) (*notificationConfigInput, error) {
+	if len(raw) == 0 {
+		return nil, fmt.Errorf("%w: provider config is required", domain.ErrValidation)
+	}
+	var input notificationConfigInput
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&input); err != nil {
+		return nil, fmt.Errorf("%w: malformed provider config", domain.ErrValidation)
+	}
+	if err := dec.Decode(&struct{}{}); err != io.EOF {
+		return nil, fmt.Errorf("%w: malformed provider config", domain.ErrValidation)
+	}
+	return &input, nil
+}
+
 // Delete 删除提供商配置；删除当前选中的 CAPTCHA provider 时在同一事务清空选择设置，
 // 删除未选中的 provider 不影响当前选择。
 func (s *ProviderService) Delete(ctx context.Context, providerKey string) error {
@@ -706,10 +1176,17 @@ func (s *ProviderService) deleteProviderRow(ctx context.Context, providerKey str
 	} else if !errors.Is(err, domain.ErrNotFound) {
 		return err
 	}
+	if err := s.settings.DeleteNotificationProvider(ctx, providerKey); err == nil {
+		return nil
+	} else if !errors.Is(err, domain.ErrNotFound) {
+		return err
+	}
 	return domain.ErrNotFound
 }
 
-// Test 对已配置且启用的提供商执行有界外部连通性检查。
+// Test 对已配置的提供商执行有界外部连通性检查。
+// CAPTCHA/OAuth 沿用探测目标检查；通知通道通过 NotificationTester 发送显式测试消息，
+// 测试允许在通道停用时执行，但要求配置完整（无效配置→validation，远程失败→unavailable）。
 func (s *ProviderService) Test(ctx context.Context, providerKey string) error {
 	if cfg, err := s.CaptchaProvider(ctx, providerKey); err == nil {
 		if err := s.prober.ProbeCaptcha(ctx, *cfg); err != nil {
@@ -719,25 +1196,36 @@ func (s *ProviderService) Test(ctx context.Context, providerKey string) error {
 	} else if !errors.Is(err, domain.ErrProviderNotFound) && !errors.Is(err, domain.ErrNotFound) {
 		return err
 	}
-	provider, err := s.AuthProvider(ctx, providerKey)
-	if err != nil {
-		return err
-	}
 	// Apple 的连通性测试在探测网络前先解析 ES256 私钥：私钥损坏属于配置错误，
 	// 会在任何远程请求发起之前以 validation 失败，无效配置不产生可达性结果。
-	if provider.ProviderKey == "apple" {
-		if err := oauth.ValidateApplePrivateKey(provider.ApplePrivateKey); err != nil {
-			return fmt.Errorf("%w: %v", domain.ErrValidation, err)
+	if provider, err := s.AuthProvider(ctx, providerKey); err == nil {
+		if provider.ProviderKey == "apple" {
+			if err := oauth.ValidateApplePrivateKey(provider.ApplePrivateKey); err != nil {
+				return fmt.Errorf("%w: %v", domain.ErrValidation, err)
+			}
 		}
-	}
-	target, err := authProbeTarget(provider)
-	if err != nil {
+		target, err := authProbeTarget(provider)
+		if err != nil {
+			return err
+		}
+		if err := s.prober.ProbeURL(ctx, target); err != nil {
+			return fmt.Errorf("%w: %v", domain.ErrUnavailable, err)
+		}
+		return nil
+	} else if !errors.Is(err, domain.ErrProviderNotFound) && !errors.Is(err, domain.ErrNotFound) {
 		return err
 	}
-	if err := s.prober.ProbeURL(ctx, target); err != nil {
-		return fmt.Errorf("%w: %v", domain.ErrUnavailable, err)
+	if ValidNotificationProviderKey(providerKey) {
+		provider, err := s.NotificationProvider(ctx, providerKey)
+		if err != nil {
+			return err
+		}
+		if s.notificationTester == nil {
+			return fmt.Errorf("%w: notification tester is not configured", domain.ErrUnavailable)
+		}
+		return s.notificationTester.TestNotification(ctx, providerKey, provider.Config)
 	}
-	return nil
+	return domain.ErrProviderNotFound
 }
 
 // 固定 provider 的连通性探测目标（仅公开数据，不含机密）。

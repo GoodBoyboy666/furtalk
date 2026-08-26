@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -22,6 +23,14 @@ import (
 
 // newSettingsTestRouter 构建挂载设置路由的测试引擎，provider 服务可传 nil。
 func newSettingsTestRouter(t *testing.T) *gin.Engine {
+	t.Helper()
+	router, _ := newSettingsTestRouterWithProviders(t)
+	return router
+}
+
+// newSettingsTestRouterWithProviders 构建设置路由测试引擎并返回 provider 服务，
+// 供测试注入通知通道 tester。
+func newSettingsTestRouterWithProviders(t *testing.T) (*gin.Engine, *setting.ProviderService) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 	dsn := filepath.Join(t.TempDir(), "handler-settings.db")
@@ -48,7 +57,7 @@ func newSettingsTestRouter(t *testing.T) *gin.Engine {
 	router := gin.New()
 	router.Use(httpx.ErrorWriter(translator))
 	RegisterAdminSettings(router.Group("/api/v1/admin"), svc, providers)
-	return router
+	return router, providers
 }
 
 // TestSettingsRouteIsPatch 验证设置更新只接受 PATCH，旧 PUT 路由不存在。
@@ -327,5 +336,176 @@ func TestAdminProviderSpamUnknownKey(t *testing.T) {
 	router.ServeHTTP(recorder, request)
 	if recorder.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("unknown spam key = %d, want 422; body=%s", recorder.Code, recorder.Body.String())
+	}
+}
+
+// fakeNotificationTester 记录测试调用并返回可配置错误。
+type fakeNotificationTester struct {
+	called bool
+	err    error
+}
+
+func (f *fakeNotificationTester) TestNotification(context.Context, string, setting.NotificationConfig) error {
+	f.called = true
+	return f.err
+}
+
+// TestAdminProviderNotificationRequiresEnabled 验证通知通道 upsert 必须携带 enabled。
+func TestAdminProviderNotificationRequiresEnabled(t *testing.T) {
+	router := newSettingsTestRouter(t)
+	request := httptest.NewRequest(http.MethodPut, "/api/v1/admin/providers/notification.telegram", strings.NewReader(
+		`{"kind":"notification","config":{"bot_token":"t","chat_id":"1"}}`))
+	request.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("notification upsert without enabled = %d, want 422; body=%s", recorder.Code, recorder.Body.String())
+	}
+}
+
+// TestAdminProviderNotificationRoundTrip 验证通知通道可保存、列表返回
+// kind/enabled/configured 且不回显机密。
+func TestAdminProviderNotificationRoundTrip(t *testing.T) {
+	router := newSettingsTestRouter(t)
+	put := httptest.NewRequest(http.MethodPut, "/api/v1/admin/providers/notification.telegram", strings.NewReader(
+		`{"kind":"notification","enabled":true,"config":{"bot_token":"bot-secret-xyz","chat_id":"123"}}`))
+	put.Header.Set("Content-Type", "application/json")
+	putRecorder := httptest.NewRecorder()
+	router.ServeHTTP(putRecorder, put)
+	if putRecorder.Code != http.StatusNoContent {
+		t.Fatalf("telegram upsert = %d, want 204; body=%s", putRecorder.Code, putRecorder.Body.String())
+	}
+
+	list := httptest.NewRequest(http.MethodGet, "/api/v1/admin/providers", nil)
+	listRecorder := httptest.NewRecorder()
+	router.ServeHTTP(listRecorder, list)
+	if strings.Contains(listRecorder.Body.String(), "bot-secret-xyz") {
+		t.Fatalf("list leaks secret: %s", listRecorder.Body.String())
+	}
+	var resp ProvidersResponse
+	if err := json.Unmarshal(listRecorder.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode list: %v", err)
+	}
+	var found *ProviderMetadata
+	for i := range resp.Providers {
+		if resp.Providers[i].ProviderKey == "notification.telegram" {
+			found = &resp.Providers[i]
+		}
+	}
+	if found == nil {
+		t.Fatalf("notification.telegram missing from %+v", resp.Providers)
+	}
+	if found.Kind != "notification" || found.Enabled == nil || !*found.Enabled || !found.Configured {
+		t.Fatalf("telegram meta = %+v, want notification/configured/enabled", found)
+	}
+}
+
+// TestAdminProviderNotificationBarkPublicMeta 验证 Bark 列表仅返回公开 server_url，
+// 绝不回显 device_key。
+func TestAdminProviderNotificationBarkPublicMeta(t *testing.T) {
+	router := newSettingsTestRouter(t)
+	put := httptest.NewRequest(http.MethodPut, "/api/v1/admin/providers/notification.bark", strings.NewReader(
+		`{"kind":"notification","enabled":true,"config":{"server_url":"https://api.day.app","device_key":"device-secret-xyz"}}`))
+	put.Header.Set("Content-Type", "application/json")
+	putRecorder := httptest.NewRecorder()
+	router.ServeHTTP(putRecorder, put)
+	if putRecorder.Code != http.StatusNoContent {
+		t.Fatalf("bark upsert = %d, want 204; body=%s", putRecorder.Code, putRecorder.Body.String())
+	}
+
+	list := httptest.NewRequest(http.MethodGet, "/api/v1/admin/providers", nil)
+	listRecorder := httptest.NewRecorder()
+	router.ServeHTTP(listRecorder, list)
+	body := listRecorder.Body.String()
+	if strings.Contains(body, "device-secret-xyz") {
+		t.Fatalf("list leaks device key: %s", body)
+	}
+	if !strings.Contains(body, "https://api.day.app") {
+		t.Fatalf("list should expose public server_url: %s", body)
+	}
+}
+
+// TestAdminProviderNotificationDelete 验证通知通道可删除。
+func TestAdminProviderNotificationDelete(t *testing.T) {
+	router := newSettingsTestRouter(t)
+	put := httptest.NewRequest(http.MethodPut, "/api/v1/admin/providers/notification.webhook", strings.NewReader(
+		`{"kind":"notification","enabled":false,"config":{"webhook_url":"http://127.0.0.1:9000/hook"}}`))
+	put.Header.Set("Content-Type", "application/json")
+	putRecorder := httptest.NewRecorder()
+	router.ServeHTTP(putRecorder, put)
+	if putRecorder.Code != http.StatusNoContent {
+		t.Fatalf("webhook upsert = %d, want 204; body=%s", putRecorder.Code, putRecorder.Body.String())
+	}
+
+	del := httptest.NewRequest(http.MethodDelete, "/api/v1/admin/providers/notification.webhook", nil)
+	delRecorder := httptest.NewRecorder()
+	router.ServeHTTP(delRecorder, del)
+	if delRecorder.Code != http.StatusNoContent {
+		t.Fatalf("delete = %d, want 204", delRecorder.Code)
+	}
+	list := httptest.NewRequest(http.MethodGet, "/api/v1/admin/providers", nil)
+	listRecorder := httptest.NewRecorder()
+	router.ServeHTTP(listRecorder, list)
+	if strings.Contains(listRecorder.Body.String(), "notification.webhook") {
+		t.Fatalf("deleted provider still listed: %s", listRecorder.Body.String())
+	}
+}
+
+// TestAdminProviderNotificationTest 验证测试端点实际调用 tester。
+func TestAdminProviderNotificationTest(t *testing.T) {
+	router, providers := newSettingsTestRouterWithProviders(t)
+	tester := &fakeNotificationTester{}
+	providers.SetNotificationTester(tester)
+
+	// 保存停用的通道后仍可测试。
+	put := httptest.NewRequest(http.MethodPut, "/api/v1/admin/providers/notification.telegram", strings.NewReader(
+		`{"kind":"notification","enabled":false,"config":{"bot_token":"t","chat_id":"1"}}`))
+	put.Header.Set("Content-Type", "application/json")
+	putRecorder := httptest.NewRecorder()
+	router.ServeHTTP(putRecorder, put)
+	if putRecorder.Code != http.StatusNoContent {
+		t.Fatalf("upsert = %d, want 204", putRecorder.Code)
+	}
+
+	test := httptest.NewRequest(http.MethodPost, "/api/v1/admin/providers/notification.telegram/test", nil)
+	testRecorder := httptest.NewRecorder()
+	router.ServeHTTP(testRecorder, test)
+	if testRecorder.Code != http.StatusOK {
+		t.Fatalf("test = %d, want 200; body=%s", testRecorder.Code, testRecorder.Body.String())
+	}
+	if !tester.called {
+		t.Fatal("tester was not called")
+	}
+}
+
+// TestAdminProviderNotificationTestUnavailable 验证未接线 tester 时测试端点返回 503。
+func TestAdminProviderNotificationTestUnavailable(t *testing.T) {
+	router, _ := newSettingsTestRouterWithProviders(t)
+	put := httptest.NewRequest(http.MethodPut, "/api/v1/admin/providers/notification.telegram", strings.NewReader(
+		`{"kind":"notification","enabled":false,"config":{"bot_token":"t","chat_id":"1"}}`))
+	put.Header.Set("Content-Type", "application/json")
+	putRecorder := httptest.NewRecorder()
+	router.ServeHTTP(putRecorder, put)
+	if putRecorder.Code != http.StatusNoContent {
+		t.Fatalf("upsert = %d, want 204", putRecorder.Code)
+	}
+	test := httptest.NewRequest(http.MethodPost, "/api/v1/admin/providers/notification.telegram/test", nil)
+	testRecorder := httptest.NewRecorder()
+	router.ServeHTTP(testRecorder, test)
+	if testRecorder.Code != http.StatusServiceUnavailable {
+		t.Fatalf("test without tester = %d, want 503; body=%s", testRecorder.Code, testRecorder.Body.String())
+	}
+}
+
+// TestAdminProviderNotificationInvalidURL 验证非法 webhook 地址 upsert 返回 422。
+func TestAdminProviderNotificationInvalidURL(t *testing.T) {
+	router := newSettingsTestRouter(t)
+	request := httptest.NewRequest(http.MethodPut, "/api/v1/admin/providers/notification.slack", strings.NewReader(
+		`{"kind":"notification","enabled":true,"config":{"webhook_url":"https://evil.com/services/T/B/X"}}`))
+	request.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("invalid slack url = %d, want 422; body=%s", recorder.Code, recorder.Body.String())
 	}
 }

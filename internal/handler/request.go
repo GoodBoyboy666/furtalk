@@ -175,7 +175,7 @@ type SettingsPatchRequest struct {
 }
 
 // ProviderUpsertRequest 是提供商新增/更新请求体。
-// Enabled 仅 OAuth/OIDC 与 Spam 使用；CAPTCHA 提供商不允许携带该字段（传指针区分缺省与 false）。
+// Enabled 仅 OAuth/OIDC、Spam 与 Notification 使用；CAPTCHA 提供商不允许携带该字段（传指针区分缺省与 false）。
 // key/kind 矩阵由固定 catalog 投影：github→oauth、google→oidc、自定义 key→oidc，
 // 以及 gitlab/microsoft/twitter/gitea/apple/discord/line/mastodon 固定预设；
 // 未知 key 仅允许 oidc，拒绝任意自定义 oauth。
@@ -191,6 +191,15 @@ type SettingsPatchRequest struct {
 //   - spam.akismet：action（pending|spam）、api_key（新建必填；编辑留空保留）
 //   - spam.aliyun：region（必填）、biz_type（可选）、access_key_id/access_key_secret（组必填或整组空白保留）
 //   - spam.tencent：region（必填）、biz_type（可选）、secret_id/secret_key（组必填或整组空白保留）
+//   - notification：固定 key 为 notification.telegram / notification.feishu / notification.dingtalk /
+//     notification.bark / notification.slack / notification.line / notification.webhook /
+//     notification.discord，必须携带 enabled
+//   - notification.telegram：bot_token、chat_id（必填）
+//   - notification.feishu / dingtalk：webhook_url（必填）、signing_secret（可选；缺省保留、null 清除）
+//   - notification.bark：server_url（必填公开）、device_key（必填机密）
+//   - notification.slack / discord：webhook_url（必填）
+//   - notification.line：channel_access_token、target_id（必填）
+//   - notification.webhook：webhook_url（必填）、signing_secret（可选；缺省保留、null 清除）
 //
 // 管理响应与日志永不含任何 secret 或 envelope 字节。
 type ProviderUpsertRequest struct {

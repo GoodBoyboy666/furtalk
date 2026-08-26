@@ -104,7 +104,7 @@ func newNotificationHarness(t *testing.T) (*gorm.DB, *Service, *captureMailer, *
 
 	mailer := &captureMailer{}
 	renderer := &recordingRenderer{}
-	svc := NewService(users, comments, threads, prefs, nil, settingsSvc, nil, mailer, renderer, fakeSigner{}, "https://furtalk.example.com", nil)
+	svc := NewService(users, comments, threads, prefs, nil, settingsSvc, nil, nil, nil, nil, mailer, renderer, fakeSigner{}, "https://furtalk.example.com", nil)
 	return db, svc, mailer, renderer, settingsSvc
 }
 

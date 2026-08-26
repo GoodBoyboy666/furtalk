@@ -76,7 +76,7 @@ func adminPatchSettings(service *setting.Service) gin.HandlerFunc {
 // @Summary 列出提供商配置
 // @Tags admin-providers
 // @Produce json
-// @Success 200 {object} ProvidersResponse "提供商列表（不含机密；CAPTCHA 项无 enabled，OAuth/OIDC 与 Spam 项携带 enabled）"
+// @Success 200 {object} ProvidersResponse "提供商列表（不含机密；CAPTCHA 项无 enabled，OAuth/OIDC、Spam 与 Notification 项携带 enabled）"
 // @Failure 401 {object} httpx.ErrorResponse "需要管理员登录"
 // @Failure 403 {object} httpx.ErrorResponse "权限不足"
 // @Router /api/v1/admin/providers [get]
@@ -116,7 +116,7 @@ func adminListProviders(service *setting.ProviderService) gin.HandlerFunc {
 // @Tags admin-providers
 // @Accept json
 // @Param provider_key path string true "提供商 key"
-// @Param body body ProviderUpsertRequest true "提供商配置（CAPTCHA 不允许携带 enabled；Spam 必须携带 enabled）"
+// @Param body body ProviderUpsertRequest true "提供商配置（CAPTCHA 不允许携带 enabled；Spam 与 Notification 必须携带 enabled）"
 // @Success 204 "保存完成"
 // @Failure 400 {object} httpx.ErrorResponse "请求参数无效"
 // @Failure 401 {object} httpx.ErrorResponse "需要管理员登录"
@@ -157,6 +157,12 @@ func adminUpsertProvider(service *setting.ProviderService) gin.HandlerFunc {
 				return
 			}
 			err = service.UpsertSpam(c.Request.Context(), key, *req.Enabled, config)
+		case domain.ProviderKindNotification:
+			if req.Enabled == nil {
+				writeError(c, fmt.Errorf("%w: notification provider requires enabled", domain.ErrValidation))
+				return
+			}
+			err = service.UpsertNotification(c.Request.Context(), key, *req.Enabled, config)
 		default:
 			err = fmt.Errorf("%w: unknown provider kind %q", domain.ErrValidation, kind)
 		}

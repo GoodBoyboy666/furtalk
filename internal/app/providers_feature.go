@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"log/slog"
 
 	"furtalk/internal/domain"
@@ -8,6 +9,7 @@ import (
 	"furtalk/internal/platform/eventbus"
 	"furtalk/internal/platform/logging"
 	"furtalk/internal/platform/mailer"
+	"furtalk/internal/platform/notifier"
 	"furtalk/internal/platform/passkey"
 	"furtalk/internal/platform/ratelimit"
 	"furtalk/internal/service/bootstrap"
@@ -137,7 +139,9 @@ func newServices(
 		Logger:    logger,
 	})
 
-	notificationsService := notification.NewService(repos.users, repos.comments, repos.threads, repos.prefs, identityService, settingsService, bus, smtp.Mailer, templates, signer, cfg.PublicBaseURL, logger)
+	notifierDispatcher := notifier.NewDispatcher()
+	notificationsService := notification.NewService(repos.users, repos.comments, repos.threads, repos.prefs, identityService, settingsService, repos.sites, providerService, notifierDispatcher, bus, smtp.Mailer, templates, signer, cfg.PublicBaseURL, logger)
+	providerService.SetNotificationTester(notificationTesterAdapter{svc: notificationsService})
 
 	// identity 与 comment 相互引用，清理接线通过 setter 在两侧装配完成后进行。
 	identityService.SetCommentDeleter(commentService)
@@ -174,11 +178,20 @@ type jobContribution struct {
 	Jobs []BackgroundJob `group:"backgroundJobs,flatten"`
 }
 
-// provideNotificationJob 仅在 SMTP 投递启用时贡献通知消费任务。
-func provideNotificationJob(s *services, smtp smtpDelivery) jobContribution {
-	if !smtp.Enabled {
-		return jobContribution{}
-	}
+// notificationTesterAdapter 把通知服务实现的通道测试桥接到 ProviderService 的
+// NotificationTester 端口，设置层不感知通知业务消息内容。
+type notificationTesterAdapter struct {
+	svc *notification.Service
+}
+
+// TestNotification 向指定通知通道发送显式标记的测试消息。
+func (a notificationTesterAdapter) TestNotification(ctx context.Context, providerKey string, cfg setting.NotificationConfig) error {
+	return a.svc.TestChannel(ctx, providerKey, cfg)
+}
+
+// provideNotificationJob 贡献通知消费任务。任务只要事件总线存在就运行，
+// SMTP 缺失时通知服务只跳过邮件、不跳过实例级管理员通道投递。
+func provideNotificationJob(s *services) jobContribution {
 	return jobContribution{Jobs: []BackgroundJob{{Name: "notification-consumer", Run: s.notifications.Run}}}
 }
 

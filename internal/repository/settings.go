@@ -192,6 +192,17 @@ type SpamProviderRow struct {
 	SecretCiphertext []byte
 }
 
+// NotificationProviderRow 是通知通道 provider 配置行的仓储边界表示，含密文字段。
+// 通知通道与 OAuth/OIDC 一样携带 enabled，每平台实例级最多一个目标。
+type NotificationProviderRow struct {
+	ProviderKey      string
+	Enabled          bool
+	PublicConfig     []byte
+	SecretKeyVersion int
+	SecretNonce      []byte
+	SecretCiphertext []byte
+}
+
 // captchaProviderEnvelope 是 CAPTCHA provider 存入 dynamic_settings 的 JSON value。
 // 只含 kind 判别符与公开/密文块，绝不包含 enabled。
 type captchaProviderEnvelope struct {
@@ -215,6 +226,17 @@ type authProviderEnvelope struct {
 // spamProviderEnvelope 是垃圾检测 provider 存入 dynamic_settings 的 JSON value。
 // 与 OAuth/OIDC 一样携带 enabled；本地词库渠道允许无 Secret 信封。
 type spamProviderEnvelope struct {
+	Kind             domain.ProviderKind `json:"kind"`
+	Enabled          bool                `json:"enabled"`
+	PublicConfig     json.RawMessage     `json:"public_config,omitempty"`
+	SecretKeyVersion int                 `json:"secret_key_version"`
+	SecretNonce      []byte              `json:"secret_nonce,omitempty"`
+	SecretCiphertext []byte              `json:"secret_ciphertext,omitempty"`
+}
+
+// notificationProviderEnvelope 是通知通道 provider 存入 dynamic_settings 的 JSON value。
+// 与 OAuth/OIDC 一样携带 enabled；每平台实例级最多一个目标。
+type notificationProviderEnvelope struct {
 	Kind             domain.ProviderKind `json:"kind"`
 	Enabled          bool                `json:"enabled"`
 	PublicConfig     json.RawMessage     `json:"public_config,omitempty"`
@@ -392,6 +414,59 @@ func (r *SettingsRepo) DeleteSpamProvider(ctx context.Context, providerKey strin
 	return r.deleteProviderRow(ctx, providerKey)
 }
 
+// ListNotificationProviders 按 provider key 升序返回全部通知通道 provider 配置行。
+func (r *SettingsRepo) ListNotificationProviders(ctx context.Context) ([]NotificationProviderRow, error) {
+	rows, err := r.listProviderDecoded(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]NotificationProviderRow, 0, len(rows))
+	for _, row := range rows {
+		if row.kind != domain.ProviderKindNotification {
+			continue
+		}
+		out = append(out, row.toNotificationRow())
+	}
+	return out, nil
+}
+
+// GetNotificationProvider 按 provider key 查询通知通道配置行；
+// 行缺失或类型不是 notification 时返回 domain.ErrNotFound。
+func (r *SettingsRepo) GetNotificationProvider(ctx context.Context, providerKey string) (*NotificationProviderRow, error) {
+	row, err := r.getProviderDecoded(ctx, providerKey)
+	if err != nil {
+		return nil, err
+	}
+	if row.kind != domain.ProviderKindNotification {
+		return nil, domain.ErrNotFound
+	}
+	out := row.toNotificationRow()
+	return &out, nil
+}
+
+// UpsertNotificationProvider 写入通知通道 provider 配置，key 冲突时原地覆盖 JSON value。
+func (r *SettingsRepo) UpsertNotificationProvider(ctx context.Context, s *NotificationProviderRow) error {
+	env := notificationProviderEnvelope{
+		Kind:             domain.ProviderKindNotification,
+		Enabled:          s.Enabled,
+		SecretKeyVersion: s.SecretKeyVersion,
+		SecretNonce:      s.SecretNonce,
+		SecretCiphertext: s.SecretCiphertext,
+	}
+	if len(s.PublicConfig) > 0 {
+		env.PublicConfig = json.RawMessage(s.PublicConfig)
+	}
+	return r.upsertProviderValue(ctx, s.ProviderKey, env)
+}
+
+// DeleteNotificationProvider 删除通知通道 provider 配置行；行缺失或类型不符时返回 domain.ErrNotFound。
+func (r *SettingsRepo) DeleteNotificationProvider(ctx context.Context, providerKey string) error {
+	if _, err := r.GetNotificationProvider(ctx, providerKey); err != nil {
+		return err
+	}
+	return r.deleteProviderRow(ctx, providerKey)
+}
+
 // toCaptchaRow 把解码中间表示转为 CAPTCHA 行。
 func (d decodedProviderRow) toCaptchaRow() CaptchaProviderRow {
 	return CaptchaProviderRow{
@@ -419,6 +494,18 @@ func (d decodedProviderRow) toAuthRow() AuthProviderRow {
 // toSpamRow 把解码中间表示转为垃圾检测行。
 func (d decodedProviderRow) toSpamRow() SpamProviderRow {
 	return SpamProviderRow{
+		ProviderKey:      d.providerKey,
+		Enabled:          d.enabled,
+		PublicConfig:     d.publicConfig,
+		SecretKeyVersion: d.secretKeyVersion,
+		SecretNonce:      d.secretNonce,
+		SecretCiphertext: d.secretCiphertext,
+	}
+}
+
+// toNotificationRow 把解码中间表示转为通知通道行。
+func (d decodedProviderRow) toNotificationRow() NotificationProviderRow {
+	return NotificationProviderRow{
 		ProviderKey:      d.providerKey,
 		Enabled:          d.enabled,
 		PublicConfig:     d.publicConfig,
@@ -499,6 +586,16 @@ func decodeProviderRow(row model.DynamicSetting) (decodedProviderRow, error) {
 		out.secretCiphertext = env.SecretCiphertext
 	case domain.ProviderKindSpam:
 		var env spamProviderEnvelope
+		if err := json.Unmarshal([]byte(row.Value), &env); err != nil {
+			return decodedProviderRow{}, fmt.Errorf("decode provider setting %q: %w", row.Key, err)
+		}
+		out.enabled = env.Enabled
+		out.publicConfig = normalizePublicConfig(env.PublicConfig)
+		out.secretKeyVersion = env.SecretKeyVersion
+		out.secretNonce = env.SecretNonce
+		out.secretCiphertext = env.SecretCiphertext
+	case domain.ProviderKindNotification:
+		var env notificationProviderEnvelope
 		if err := json.Unmarshal([]byte(row.Value), &env); err != nil {
 			return decodedProviderRow{}, fmt.Errorf("decode provider setting %q: %w", row.Key, err)
 		}
