@@ -219,10 +219,9 @@ func logout(service *identity.Service) gin.HandlerFunc {
 // @Tags auth
 // @Accept json
 // @Produce json
-// @Param body body PasskeyLoginOptionsRequest true "用户句柄（可选）"
+// @Param body body PasskeyLoginOptionsRequest true "空对象；始终启动 discoverable Passkey 登录"
 // @Success 200 {object} PasskeyLoginOptionsResponse "断言选项"
 // @Failure 400 {object} httpx.ErrorResponse "请求参数无效"
-// @Failure 404 {object} httpx.ErrorResponse "用户不存在"
 // @Router /api/v1/auth/passkeys/login/options [post]
 func passkeyLoginOptions(service *identity.Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -232,7 +231,7 @@ func passkeyLoginOptions(service *identity.Service) gin.HandlerFunc {
 			writeError(c, err)
 			return
 		}
-		options, err := service.BeginPasskeyLogin(c.Request.Context(), req.UserHandle)
+		options, err := service.BeginPasskeyLogin(c.Request.Context())
 		if err != nil {
 			writeError(c, err)
 			return

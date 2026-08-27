@@ -35,7 +35,7 @@ type LoginOptions struct {
 type PasskeyAdapter interface {
 	BeginRegistration(user passkey.User) (json.RawMessage, []byte, error)
 	FinishRegistration(user passkey.User, session, response []byte) (*passkey.Credential, error)
-	BeginLogin(user *passkey.User) (json.RawMessage, []byte, error)
+	BeginLogin() (json.RawMessage, []byte, error)
 	FinishLogin(session, response []byte, lookup func(rawID, userHandle []byte) (*passkey.User, error)) (*passkey.Credential, uint32, error)
 }
 
@@ -103,30 +103,12 @@ func (s *Service) FinishPasskeyRegistration(ctx context.Context, userID int64, c
 	return nil
 }
 
-// BeginPasskeyLogin 启动断言仪式。
-func (s *Service) BeginPasskeyLogin(ctx context.Context, userHandle *string) (*LoginOptions, error) {
+// BeginPasskeyLogin 启动 discoverable 断言仪式。
+func (s *Service) BeginPasskeyLogin(ctx context.Context) (*LoginOptions, error) {
 	if s.passkeyAdapter == nil {
 		return nil, domain.ErrInvalidCredentials
 	}
-	var user *passkey.User
-	if userHandle != nil && *userHandle != "" {
-		userID, err := strconv.ParseInt(*userHandle, 10, 64)
-		if err != nil || userID <= 0 {
-			user = nil
-		} else {
-			u, err := s.passkeyUser(ctx, userID)
-			if err != nil {
-				if errors.Is(err, domain.ErrNotFound) {
-					user = nil
-				} else {
-					return nil, err
-				}
-			} else {
-				user = u
-			}
-		}
-	}
-	options, session, err := s.passkeyAdapter.BeginLogin(user)
+	options, session, err := s.passkeyAdapter.BeginLogin()
 	if err != nil {
 		logging.FromContext(ctx, s.log).WarnContext(ctx, "passkey login begin failed", logging.Error(err))
 		return nil, domain.ErrInvalidCredentials

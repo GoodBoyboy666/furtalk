@@ -2702,7 +2702,7 @@ const docTemplate = `{
                 "summary": "开始 passkey 登录仪式",
                 "parameters": [
                     {
-                        "description": "用户句柄（可选）",
+                        "description": "空对象；始终启动 discoverable Passkey 登录",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -2720,12 +2720,6 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "请求参数无效",
-                        "schema": {
-                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "用户不存在",
                         "schema": {
                             "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
@@ -5723,12 +5717,7 @@ const docTemplate = `{
             }
         },
         "internal_handler.PasskeyLoginOptionsRequest": {
-            "type": "object",
-            "properties": {
-                "user_handle": {
-                    "type": "string"
-                }
-            }
+            "type": "object"
         },
         "internal_handler.PasskeyLoginOptionsResponse": {
             "type": "object",
