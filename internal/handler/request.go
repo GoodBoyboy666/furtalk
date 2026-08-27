@@ -1,6 +1,9 @@
 package handler
 
 import (
+	"encoding/json"
+	"fmt"
+
 	"furtalk/internal/service/comment"
 	"furtalk/internal/service/identity"
 	"furtalk/internal/service/setting"
@@ -42,9 +45,24 @@ type PasswordResetConfirmRequest struct {
 	NewPassword string `json:"new_password"`
 }
 
-// PasskeyLoginOptionsRequest 是开始 passkey 登录仪式的请求体。
-type PasskeyLoginOptionsRequest struct {
-	UserHandle *string `json:"user_handle"`
+// PasskeyLoginOptionsRequest 是开始 discoverable passkey 登录仪式的空请求体。
+// 保留 DTO 以便 DecodeBody 严格拒绝未来误传的用户标识字段。
+type PasskeyLoginOptionsRequest struct{}
+
+// UnmarshalJSON 限制 passkey 登录 options 请求必须是空 JSON 对象。
+// 空结构体默认会接受 null，这不符合该端点的请求契约。
+func (*PasskeyLoginOptionsRequest) UnmarshalJSON(data []byte) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil || fields == nil {
+		if err == nil {
+			err = fmt.Errorf("request must be a JSON object")
+		}
+		return err
+	}
+	if len(fields) != 0 {
+		return fmt.Errorf("request must be an empty JSON object")
+	}
+	return nil
 }
 
 // PasskeyFinishRequest 是完成 passkey 断言或注册的请求体。

@@ -56,6 +56,9 @@ func New(cfg Config) (*Adapter, error) {
 		RPID:          cfg.RPID,
 		RPOrigins:     cfg.RPOrigins,
 		RPDisplayName: cfg.RPDisplayName,
+		AuthenticatorSelection: protocol.AuthenticatorSelection{
+			UserVerification: protocol.VerificationRequired,
+		},
 		Timeouts: webauthn.TimeoutsConfig{
 			Login:        webauthn.TimeoutConfig{Enforce: true, Timeout: cfg.LoginTimeout},
 			Registration: webauthn.TimeoutConfig{Enforce: true, Timeout: cfg.RegistrationTimeout},
@@ -99,19 +102,10 @@ func (a *Adapter) FinishRegistration(user User, sessionJSON, responseJSON []byte
 	return fromSDK(credential), nil
 }
 
-// BeginLogin 返回断言选项 JSON 与不透明 session 载荷。
-// user 为 nil 时启动客户端可发现的 passkey 登录。
-func (a *Adapter) BeginLogin(user *User) (json.RawMessage, []byte, error) {
-	var (
-		options *protocol.CredentialAssertion
-		session *webauthn.SessionData
-		err     error
-	)
-	if user == nil {
-		options, session, err = a.wa.BeginDiscoverableLogin()
-	} else {
-		options, session, err = a.wa.BeginLogin(user.toSDK())
-	}
+// BeginLogin 返回 discoverable 断言选项 JSON 与不透明 session 载荷。
+// 登录始终使用客户端可发现的 passkey，不接受用户标识或 credential allow-list。
+func (a *Adapter) BeginLogin() (json.RawMessage, []byte, error) {
+	options, session, err := a.wa.BeginDiscoverableLogin()
 	if err != nil {
 		return nil, nil, fmt.Errorf("passkey: %w", err)
 	}
@@ -126,8 +120,8 @@ func (a *Adapter) BeginLogin(user *User) (json.RawMessage, []byte, error) {
 	return raw, encoded, nil
 }
 
-// FinishLogin 根据 session 验证断言。
-// lookup 根据 credential ID 或 user handle 解析用户；
+// FinishLogin 根据 discoverable session 验证断言。
+// lookup 根据 credential ID 与 authenticator 返回的 user handle 解析用户；
 // 返回的断言计数器供使用方校验 sign_count，防止回滚攻击。
 func (a *Adapter) FinishLogin(sessionJSON, responseJSON []byte, lookup func(rawID, userHandle []byte) (*User, error)) (*Credential, uint32, error) {
 	session, err := decodeSession(sessionJSON)
@@ -145,23 +139,9 @@ func (a *Adapter) FinishLogin(sessionJSON, responseJSON []byte, lookup func(rawI
 		}
 		return user.toSDK(), nil
 	}
-	var (
-		credential *webauthn.Credential
-	)
-	if len(session.UserID) != 0 {
-		user, err := lookup(parsed.RawID, session.UserID)
-		if err != nil {
-			return nil, 0, fmt.Errorf("passkey: %w", err)
-		}
-		credential, err = a.wa.ValidateLogin(user.toSDK(), session, parsed)
-		if err != nil {
-			return nil, 0, fmt.Errorf("passkey: %w", err)
-		}
-	} else {
-		_, credential, err = a.wa.ValidatePasskeyLogin(handler, session, parsed)
-		if err != nil {
-			return nil, 0, fmt.Errorf("passkey: %w", err)
-		}
+	_, credential, err := a.wa.ValidatePasskeyLogin(handler, session, parsed)
+	if err != nil {
+		return nil, 0, fmt.Errorf("passkey: %w", err)
 	}
 	counter := parsed.Response.AuthenticatorData.Counter
 	return fromSDK(credential), counter, nil
@@ -173,7 +153,10 @@ type ceremonySession struct {
 }
 
 func (a *Adapter) beginRegistration(user User) (*ceremonySession, error) {
-	options, session, err := a.wa.BeginRegistration(user.toSDK())
+	options, session, err := a.wa.BeginRegistration(
+		user.toSDK(),
+		webauthn.WithResidentKeyRequirement(protocol.ResidentKeyRequirementRequired),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("passkey: %w", err)
 	}
