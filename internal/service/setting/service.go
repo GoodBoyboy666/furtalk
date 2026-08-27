@@ -100,6 +100,44 @@ var knownSettings = []knownSetting{
 	{key: SettingKeyEmojiCatalogURL, typ: SettingTypeString},
 }
 
+// View 是一次 Get 的原子快照：类型化设置与凭证 epoch。
+type View struct {
+	Settings domain.Settings
+	Epoch    int64
+}
+
+// TxRunner 是设置用例依赖的事务边界，由 platform/gormtx.Runner 实现。
+type TxRunner interface {
+	RunInTx(ctx context.Context, fn func(ctx context.Context) error) error
+}
+
+// CaptchaSelectionValidator 校验 captcha_provider 选择指向可用的 CAPTCHA provider。
+// 由 ProviderService 实现；在设置 PATCH 事务内调用。
+type CaptchaSelectionValidator interface {
+	ValidateSelection(ctx context.Context, providerKey string) error
+}
+
+// Service 读取并更新按 key 存储的动态实例配置，
+// 评论模式实际变化时原子递增内部 credential_epoch。
+type Service struct {
+	txRunner         TxRunner
+	settingsRepo     *repository.SettingsRepo
+	captchaValidator CaptchaSelectionValidator
+	mu               sync.RWMutex
+	cached           *view
+}
+
+type view struct {
+	settings domain.Settings
+	epoch    int64
+}
+
+// NewService 构建设置服务，注入事务运行器与设置仓储。
+// CAPTCHA 选择校验器可通过 SetCaptchaValidator 安装。
+func NewService(txRunner TxRunner, settingsRepo *repository.SettingsRepo) *Service {
+	return &Service{txRunner: txRunner, settingsRepo: settingsRepo}
+}
+
 // DefaultSettings 返回首次访问时写入的初始实例配置。
 func DefaultSettings() domain.Settings {
 	return domain.Settings{
@@ -441,44 +479,6 @@ func missingRows(rows []repository.DynamicSettingRow) []repository.DynamicSettin
 		})
 	}
 	return missing
-}
-
-// View 是一次 Get 的原子快照：类型化设置与凭证 epoch。
-type View struct {
-	Settings domain.Settings
-	Epoch    int64
-}
-
-// TxRunner 是设置用例依赖的事务边界，由 platform/gormtx.Runner 实现。
-type TxRunner interface {
-	RunInTx(ctx context.Context, fn func(ctx context.Context) error) error
-}
-
-// CaptchaSelectionValidator 校验 captcha_provider 选择指向可用的 CAPTCHA provider。
-// 由 ProviderService 实现；在设置 PATCH 事务内调用。
-type CaptchaSelectionValidator interface {
-	ValidateSelection(ctx context.Context, providerKey string) error
-}
-
-// Service 读取并更新按 key 存储的动态实例配置，
-// 评论模式实际变化时原子递增内部 credential_epoch。
-type Service struct {
-	txRunner         TxRunner
-	settingsRepo     *repository.SettingsRepo
-	captchaValidator CaptchaSelectionValidator
-	mu               sync.RWMutex
-	cached           *view
-}
-
-type view struct {
-	settings domain.Settings
-	epoch    int64
-}
-
-// NewService 构建设置服务，注入事务运行器与设置仓储。
-// CAPTCHA 选择校验器可通过 SetCaptchaValidator 安装。
-func NewService(txRunner TxRunner, settingsRepo *repository.SettingsRepo) *Service {
-	return &Service{txRunner: txRunner, settingsRepo: settingsRepo}
 }
 
 // SetCaptchaValidator 安装 CAPTCHA provider 选择校验器。

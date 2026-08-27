@@ -97,119 +97,6 @@ func RegisterMeComments(api *gin.RouterGroup, service *comment.Service, userGate
 	me.GET("/comments/:comment_id", meCommentsGet(service))
 }
 
-// @Summary 分页列出本人评论
-// @Tags me
-// @Produce json
-// @Param site_id query integer false "站点 ID（十进制字符串）"
-// @Param status query string false "pending | published | spam"
-// @Param page query integer false "页码（从 1 开始，默认 1）"
-// @Param limit query integer false "每页数量（默认 25）"
-// @Success 200 {object} MeCommentListResponse "本人评论一页与匹配总数"
-// @Failure 400 {object} httpx.ErrorResponse "请求参数无效"
-// @Failure 401 {object} httpx.ErrorResponse "需要登录"
-// @Router /api/v1/me/comments [get]
-func meCommentsList(service *comment.Service) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		principal, ok := requirePrincipal(c)
-		if !ok {
-			return
-		}
-		var siteID *int64
-		if parsed, err := httpx.ParseOptionalQueryID(c, "site_id"); err != nil {
-			writeError(c, err)
-			return
-		} else {
-			siteID = parsed
-		}
-		var status *domain.CommentStatus
-		if raw := c.Query("status"); raw != "" {
-			s := domain.CommentStatus(raw)
-			if !validOwnerCommentStatus(s) {
-				writeError(c, httpx.ErrInvalidID)
-				return
-			}
-			status = &s
-		}
-		page, err := parsePage(c)
-		if err != nil {
-			writeError(c, err)
-			return
-		}
-		limit, _ := strconv.Atoi(c.DefaultQuery("limit", "25"))
-		result, err := service.ListByOwner(c.Request.Context(), principal.UserID, siteID, status, page, limit)
-		if err != nil {
-			writeError(c, err)
-			return
-		}
-		resp := MeCommentListResponse{
-			Comments:       make([]MeCommentResponse, 0, len(result.Comments)),
-			Total:          result.Total,
-			UserDeleteMode: result.UserDeleteMode,
-		}
-		for _, view := range result.Comments {
-			resp.Comments = append(resp.Comments, toMeCommentResponse(view))
-		}
-		c.JSON(http.StatusOK, resp)
-	}
-}
-
-// @Summary 列出本人评论的站点选项
-// @Tags me
-// @Produce json
-// @Success 200 {object} MeCommentSitesResponse "本人发表过评论的站点"
-// @Failure 401 {object} httpx.ErrorResponse "需要登录"
-// @Router /api/v1/me/comments/sites [get]
-func meCommentsSites(service *comment.Service) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		principal, ok := requirePrincipal(c)
-		if !ok {
-			return
-		}
-		sites, err := service.ListOwnerSites(c.Request.Context(), principal.UserID)
-		if err != nil {
-			writeError(c, err)
-			return
-		}
-		resp := MeCommentSitesResponse{Sites: make([]MeCommentSiteResponse, 0, len(sites))}
-		for _, s := range sites {
-			resp.Sites = append(resp.Sites, MeCommentSiteResponse{
-				ID:   strconv.FormatInt(s.ID, 10),
-				Name: s.Name,
-			})
-		}
-		c.JSON(http.StatusOK, resp)
-	}
-}
-
-// @Summary 获取本人单条评论详情
-// @Tags me
-// @Produce json
-// @Param comment_id path integer true "评论 ID（十进制字符串）"
-// @Success 200 {object} MeCommentDetailResponse "本人评论详情"
-// @Failure 401 {object} httpx.ErrorResponse "需要登录"
-// @Failure 404 {object} httpx.ErrorResponse "评论不存在或不属于当前用户"
-// @Router /api/v1/me/comments/{comment_id} [get]
-func meCommentsGet(service *comment.Service) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		principal, ok := requirePrincipal(c)
-		if !ok {
-			return
-		}
-		commentID, err := httpx.ParseIDParam(c, "comment_id")
-		if err != nil {
-			writeError(c, err)
-			return
-		}
-		detail, err := service.GetByOwner(c.Request.Context(), principal.UserID, commentID)
-		if err != nil {
-			writeError(c, err)
-			return
-		}
-		resp := toMeCommentDetailResponse(*detail)
-		c.JSON(http.StatusOK, resp)
-	}
-}
-
 // RegisterAdminComments 挂载管理端评论端点。
 func RegisterAdminComments(admin *gin.RouterGroup, service *comment.Service) {
 	admin.GET("/comments", adminCommentsList(service))
@@ -226,36 +113,6 @@ func RegisterAdminComments(admin *gin.RouterGroup, service *comment.Service) {
 	admin.POST("/comments/:comment_id/restore", adminCommentsRestore(service))
 }
 
-// @Summary 批量管理评论
-// @Tags admin-comments
-// @Accept json
-// @Produce json
-// @Param body body AdminBatchRequest true "评论批量命令"
-// @Success 200 {object} AdminBatchResponse "批量操作计数"
-// @Failure 400 {object} httpx.ErrorResponse "请求参数或 ID 无效"
-// @Failure 401 {object} httpx.ErrorResponse "需要管理员登录"
-// @Failure 403 {object} httpx.ErrorResponse "权限不足"
-// @Failure 404 {object} httpx.ErrorResponse "评论不存在"
-// @Failure 409 {object} httpx.ErrorResponse "评论状态或置顶资格冲突"
-// @Failure 422 {object} httpx.ErrorResponse "请求参数无效或需要确认"
-// @Param X-CSRF-Token header string true "CSRF token"
-// @Router /api/v1/admin/comments/batch [post]
-func adminCommentsBatch(service *comment.Service) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		input, err := decodeCommentBatchRequest(c)
-		if err != nil {
-			writeBatchError(c, err)
-			return
-		}
-		result, err := service.AdminBatch(c.Request.Context(), input)
-		if err != nil {
-			writeBatchError(c, err)
-			return
-		}
-		c.JSON(http.StatusOK, toAdminBatchResponse(*result))
-	}
-}
-
 // RegisterAdminThreads 挂载管理端线程（评论区开关）端点。
 func RegisterAdminThreads(admin *gin.RouterGroup, service *comment.Service) {
 	group := admin.Group("/sites/:site_id/threads")
@@ -264,180 +121,6 @@ func RegisterAdminThreads(admin *gin.RouterGroup, service *comment.Service) {
 	group.POST("/batch", adminThreadsBatch(service))
 	group.PATCH("/:thread_id", adminThreadsPatch(service))
 	group.DELETE("/:thread_id", adminThreadsDelete(service))
-}
-
-// @Summary 批量管理评论区
-// @Tags admin-threads
-// @Accept json
-// @Produce json
-// @Param site_id path integer true "站点 ID（十进制字符串）"
-// @Param body body AdminBatchRequest true "评论区批量命令"
-// @Success 200 {object} AdminBatchResponse "批量操作计数"
-// @Failure 400 {object} httpx.ErrorResponse "请求参数或 ID 无效"
-// @Failure 401 {object} httpx.ErrorResponse "需要管理员登录"
-// @Failure 403 {object} httpx.ErrorResponse "权限不足"
-// @Failure 404 {object} httpx.ErrorResponse "评论区不存在或不属于该站点"
-// @Failure 422 {object} httpx.ErrorResponse "请求参数无效或需要确认"
-// @Param X-CSRF-Token header string true "CSRF token"
-// @Router /api/v1/admin/sites/{site_id}/threads/batch [post]
-func adminThreadsBatch(service *comment.Service) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		siteID, err := httpx.ParseIDParam(c, "site_id")
-		if err != nil {
-			writeBatchError(c, err)
-			return
-		}
-		input, err := decodeThreadBatchRequest(c)
-		if err != nil {
-			writeBatchError(c, err)
-			return
-		}
-		result, err := service.AdminBatchThreads(c.Request.Context(), siteID, input)
-		if err != nil {
-			writeBatchError(c, err)
-			return
-		}
-		c.JSON(http.StatusOK, toAdminBatchResponse(*result))
-	}
-}
-
-// @Summary 按站点列出线程
-// @Tags admin-threads
-// @Produce json
-// @Param site_id path integer true "站点 ID（十进制字符串）"
-// @Param comments_enabled query boolean false "按评论开关过滤"
-// @Param q query string false "搜索 page_key/page_title/page_url"
-// @Param sort query string false "排序方向：asc（最早优先）或 desc（最新优先，默认）"
-// @Param page query integer false "页码（从 1 开始，默认 1）"
-// @Param limit query integer false "每页数量（默认 25）"
-// @Success 200 {object} AdminThreadListResponse "一页线程与匹配总数"
-// @Failure 400 {object} httpx.ErrorResponse "请求参数无效"
-// @Failure 401 {object} httpx.ErrorResponse "需要管理员登录"
-// @Failure 403 {object} httpx.ErrorResponse "权限不足"
-// @Router /api/v1/admin/sites/{site_id}/threads [get]
-func adminThreadsList(service *comment.Service) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		siteID, err := httpx.ParseIDParam(c, "site_id")
-		if err != nil {
-			writeError(c, err)
-			return
-		}
-		var enabled *bool
-		if enabled, err = httpx.ParseOptionalQueryBool(c, "comments_enabled"); err != nil {
-			writeError(c, err)
-			return
-		}
-		sort, err := domain.NormalizeAdminSort(c.Query("sort"))
-		if err != nil {
-			writeError(c, err)
-			return
-		}
-		page, err := parsePage(c)
-		if err != nil {
-			writeError(c, err)
-			return
-		}
-		limit, _ := strconv.Atoi(c.DefaultQuery("limit", "25"))
-		result, err := service.AdminListThreads(c.Request.Context(), siteID, enabled, c.Query("q"), page, sort, limit)
-		if err != nil {
-			writeError(c, err)
-			return
-		}
-		resp := AdminThreadListResponse{
-			Threads: make([]AdminThreadResponse, 0, len(result.Threads)),
-			Total:   result.Total,
-		}
-		for _, view := range result.Threads {
-			resp.Threads = append(resp.Threads, toAdminThreadResponse(view))
-		}
-		c.JSON(http.StatusOK, resp)
-	}
-}
-
-// @Summary 更新线程元数据（page_key / page_title / comments_enabled）
-// @Tags admin-threads
-// @Accept json
-// @Produce json
-// @Param site_id path integer true "站点 ID（十进制字符串）"
-// @Param thread_id path integer true "线程 ID（十进制字符串）"
-// @Param body body AdminThreadUpdateRequest true "新的线程元数据（至少一个字段）"
-// @Success 200 {object} AdminThreadResponse "更新后的线程视图"
-// @Failure 400 {object} httpx.ErrorResponse "请求参数无效"
-// @Failure 401 {object} httpx.ErrorResponse "需要管理员登录"
-// @Failure 403 {object} httpx.ErrorResponse "权限不足"
-// @Failure 404 {object} httpx.ErrorResponse "线程不存在或不属于该站点"
-// @Failure 409 {object} httpx.ErrorResponse "page_key 在站点内重复"
-// @Failure 422 {object} httpx.ErrorResponse "缺少任何更新字段或字段校验失败"
-// @Param X-CSRF-Token header string true "CSRF token"
-// @Router /api/v1/admin/sites/{site_id}/threads/{thread_id} [patch]
-func adminThreadsPatch(service *comment.Service) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		siteID, err := httpx.ParseIDParam(c, "site_id")
-		if err != nil {
-			writeError(c, err)
-			return
-		}
-		threadID, err := httpx.ParseIDParam(c, "thread_id")
-		if err != nil {
-			writeError(c, err)
-			return
-		}
-		var req AdminThreadUpdateRequest
-		if err := httpx.DecodeBody(c, &req); err != nil {
-			writeError(c, err)
-			return
-		}
-		if req.PageKey == nil && !req.PageTitle.Set && !req.PageURL.Set && req.CommentsEnabled == nil {
-			c.JSON(http.StatusUnprocessableEntity, errorResponse(c, "invalid_input", "至少提供一个更新字段"))
-			return
-		}
-		view, err := service.AdminUpdateThread(c.Request.Context(), siteID, threadID, comment.AdminThreadUpdateInput{
-			PageKey:         req.PageKey,
-			PageTitle:       comment.OptionalNullableString{Set: req.PageTitle.Set, Value: req.PageTitle.Value},
-			PageURL:         comment.OptionalNullableString{Set: req.PageURL.Set, Value: req.PageURL.Value},
-			CommentsEnabled: req.CommentsEnabled,
-		})
-		if err != nil {
-			writeError(c, err)
-			return
-		}
-		c.JSON(http.StatusOK, toAdminThreadResponse(*view))
-	}
-}
-
-// @Summary 硬删除线程及其全部评论
-// @Tags admin-threads
-// @Produce json
-// @Param site_id path integer true "站点 ID（十进制字符串）"
-// @Param thread_id path integer true "线程 ID（十进制字符串）"
-// @Param confirm query boolean true "破坏性操作需要显式确认"
-// @Success 204 "删除成功"
-// @Failure 400 {object} httpx.ErrorResponse "请求参数无效"
-// @Failure 401 {object} httpx.ErrorResponse "需要管理员登录"
-// @Failure 403 {object} httpx.ErrorResponse "权限不足"
-// @Failure 404 {object} httpx.ErrorResponse "线程不存在或不属于该站点"
-// @Failure 422 {object} httpx.ErrorResponse "破坏性操作需要显式确认"
-// @Param X-CSRF-Token header string true "CSRF token"
-// @Router /api/v1/admin/sites/{site_id}/threads/{thread_id} [delete]
-func adminThreadsDelete(service *comment.Service) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		siteID, err := httpx.ParseIDParam(c, "site_id")
-		if err != nil {
-			writeError(c, err)
-			return
-		}
-		threadID, err := httpx.ParseIDParam(c, "thread_id")
-		if err != nil {
-			writeError(c, err)
-			return
-		}
-		confirm := c.Query("confirm") == "true"
-		if err := service.AdminDeleteThread(c.Request.Context(), siteID, threadID, confirm); err != nil {
-			writeError(c, err)
-			return
-		}
-		c.Status(http.StatusNoContent)
-	}
 }
 
 // @Summary 获取 widget 运行时配置
@@ -759,6 +442,59 @@ func widgetDeleteComment(service *comment.Service) gin.HandlerFunc {
 	}
 }
 
+// @Summary 用授权码交换 widget 会话凭证
+// @Tags widget
+// @Accept json
+// @Param body body AuthorizationExchangeRequest true "授权码"
+// @Success 204 "已写入 widget 会话 Cookie"
+// @Failure 400 {object} httpx.ErrorResponse "授权码无效"
+// @Failure 403 {object} httpx.ErrorResponse "origin 不被允许"
+// @Router /api/v1/widget/comment-authorizations/exchange [post]
+func widgetExchange(service *comment.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Header("Cache-Control", "no-store")
+		var req AuthorizationExchangeRequest
+		if err := httpx.DecodeBody(c, &req); err != nil {
+			writeError(c, err)
+			return
+		}
+		requestOrigin := httpx.ValidRequestOrigin(c)
+		result, err := service.ExchangeAuthorization(c.Request.Context(), req.Code, requestOrigin)
+		if err != nil {
+			writeError(c, err)
+			return
+		}
+		setWidgetCookie(c, result)
+		c.Status(http.StatusNoContent)
+	}
+}
+
+// @Summary 探测当前 widget 会话
+// @Tags widget
+// @Produce json
+// @Success 200 {object} WidgetSessionResponse "会话状态"
+// @Router /api/v1/widget/session [get]
+func widgetSession(service *comment.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Header("Cache-Control", "no-store")
+		raw, _ := c.Cookie(middleware.WidgetCookieName)
+		requestOrigin := httpx.ValidRequestOrigin(c)
+		result := service.Probe(c.Request.Context(), raw, requestOrigin)
+		c.JSON(http.StatusOK, toWidgetSessionResponse(*result))
+	}
+}
+
+// @Summary 清除当前 widget 会话
+// @Tags widget
+// @Success 204 "已清除会话 Cookie"
+// @Router /api/v1/widget/session [delete]
+func widgetClear(service *comment.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		middleware.ClearWidgetCookie(c)
+		c.Status(http.StatusNoContent)
+	}
+}
+
 // @Summary 为第一方页面签发一次性授权码
 // @Tags first-party
 // @Accept json
@@ -853,59 +589,6 @@ func firstPartyAuthorizationContext(service *comment.Service) gin.HandlerFunc {
 	}
 }
 
-// @Summary 用授权码交换 widget 会话凭证
-// @Tags widget
-// @Accept json
-// @Param body body AuthorizationExchangeRequest true "授权码"
-// @Success 204 "已写入 widget 会话 Cookie"
-// @Failure 400 {object} httpx.ErrorResponse "授权码无效"
-// @Failure 403 {object} httpx.ErrorResponse "origin 不被允许"
-// @Router /api/v1/widget/comment-authorizations/exchange [post]
-func widgetExchange(service *comment.Service) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		c.Header("Cache-Control", "no-store")
-		var req AuthorizationExchangeRequest
-		if err := httpx.DecodeBody(c, &req); err != nil {
-			writeError(c, err)
-			return
-		}
-		requestOrigin := httpx.ValidRequestOrigin(c)
-		result, err := service.ExchangeAuthorization(c.Request.Context(), req.Code, requestOrigin)
-		if err != nil {
-			writeError(c, err)
-			return
-		}
-		setWidgetCookie(c, result)
-		c.Status(http.StatusNoContent)
-	}
-}
-
-// @Summary 探测当前 widget 会话
-// @Tags widget
-// @Produce json
-// @Success 200 {object} WidgetSessionResponse "会话状态"
-// @Router /api/v1/widget/session [get]
-func widgetSession(service *comment.Service) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		c.Header("Cache-Control", "no-store")
-		raw, _ := c.Cookie(middleware.WidgetCookieName)
-		requestOrigin := httpx.ValidRequestOrigin(c)
-		result := service.Probe(c.Request.Context(), raw, requestOrigin)
-		c.JSON(http.StatusOK, toWidgetSessionResponse(*result))
-	}
-}
-
-// @Summary 清除当前 widget 会话
-// @Tags widget
-// @Success 204 "已清除会话 Cookie"
-// @Router /api/v1/widget/session [delete]
-func widgetClear(service *comment.Service) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		middleware.ClearWidgetCookie(c)
-		c.Status(http.StatusNoContent)
-	}
-}
-
 // @Summary 第一方回复评论
 // @Tags first-party
 // @Accept json
@@ -983,6 +666,149 @@ func firstPartyDelete(service *comment.Service) gin.HandlerFunc {
 			return
 		}
 		c.JSON(http.StatusOK, toCommentDeleteResponse(*result))
+	}
+}
+
+// @Summary 分页列出本人评论
+// @Tags me
+// @Produce json
+// @Param site_id query integer false "站点 ID（十进制字符串）"
+// @Param status query string false "pending | published | spam"
+// @Param page query integer false "页码（从 1 开始，默认 1）"
+// @Param limit query integer false "每页数量（默认 25）"
+// @Success 200 {object} MeCommentListResponse "本人评论一页与匹配总数"
+// @Failure 400 {object} httpx.ErrorResponse "请求参数无效"
+// @Failure 401 {object} httpx.ErrorResponse "需要登录"
+// @Router /api/v1/me/comments [get]
+func meCommentsList(service *comment.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		principal, ok := requirePrincipal(c)
+		if !ok {
+			return
+		}
+		var siteID *int64
+		if parsed, err := httpx.ParseOptionalQueryID(c, "site_id"); err != nil {
+			writeError(c, err)
+			return
+		} else {
+			siteID = parsed
+		}
+		var status *domain.CommentStatus
+		if raw := c.Query("status"); raw != "" {
+			s := domain.CommentStatus(raw)
+			if !validOwnerCommentStatus(s) {
+				writeError(c, httpx.ErrInvalidID)
+				return
+			}
+			status = &s
+		}
+		page, err := parsePage(c)
+		if err != nil {
+			writeError(c, err)
+			return
+		}
+		limit, _ := strconv.Atoi(c.DefaultQuery("limit", "25"))
+		result, err := service.ListByOwner(c.Request.Context(), principal.UserID, siteID, status, page, limit)
+		if err != nil {
+			writeError(c, err)
+			return
+		}
+		resp := MeCommentListResponse{
+			Comments:       make([]MeCommentResponse, 0, len(result.Comments)),
+			Total:          result.Total,
+			UserDeleteMode: result.UserDeleteMode,
+		}
+		for _, view := range result.Comments {
+			resp.Comments = append(resp.Comments, toMeCommentResponse(view))
+		}
+		c.JSON(http.StatusOK, resp)
+	}
+}
+
+// @Summary 列出本人评论的站点选项
+// @Tags me
+// @Produce json
+// @Success 200 {object} MeCommentSitesResponse "本人发表过评论的站点"
+// @Failure 401 {object} httpx.ErrorResponse "需要登录"
+// @Router /api/v1/me/comments/sites [get]
+func meCommentsSites(service *comment.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		principal, ok := requirePrincipal(c)
+		if !ok {
+			return
+		}
+		sites, err := service.ListOwnerSites(c.Request.Context(), principal.UserID)
+		if err != nil {
+			writeError(c, err)
+			return
+		}
+		resp := MeCommentSitesResponse{Sites: make([]MeCommentSiteResponse, 0, len(sites))}
+		for _, s := range sites {
+			resp.Sites = append(resp.Sites, MeCommentSiteResponse{
+				ID:   strconv.FormatInt(s.ID, 10),
+				Name: s.Name,
+			})
+		}
+		c.JSON(http.StatusOK, resp)
+	}
+}
+
+// @Summary 获取本人单条评论详情
+// @Tags me
+// @Produce json
+// @Param comment_id path integer true "评论 ID（十进制字符串）"
+// @Success 200 {object} MeCommentDetailResponse "本人评论详情"
+// @Failure 401 {object} httpx.ErrorResponse "需要登录"
+// @Failure 404 {object} httpx.ErrorResponse "评论不存在或不属于当前用户"
+// @Router /api/v1/me/comments/{comment_id} [get]
+func meCommentsGet(service *comment.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		principal, ok := requirePrincipal(c)
+		if !ok {
+			return
+		}
+		commentID, err := httpx.ParseIDParam(c, "comment_id")
+		if err != nil {
+			writeError(c, err)
+			return
+		}
+		detail, err := service.GetByOwner(c.Request.Context(), principal.UserID, commentID)
+		if err != nil {
+			writeError(c, err)
+			return
+		}
+		resp := toMeCommentDetailResponse(*detail)
+		c.JSON(http.StatusOK, resp)
+	}
+}
+
+// @Summary 批量管理评论
+// @Tags admin-comments
+// @Accept json
+// @Produce json
+// @Param body body AdminBatchRequest true "评论批量命令"
+// @Success 200 {object} AdminBatchResponse "批量操作计数"
+// @Failure 400 {object} httpx.ErrorResponse "请求参数或 ID 无效"
+// @Failure 401 {object} httpx.ErrorResponse "需要管理员登录"
+// @Failure 403 {object} httpx.ErrorResponse "权限不足"
+// @Failure 404 {object} httpx.ErrorResponse "评论不存在"
+// @Failure 409 {object} httpx.ErrorResponse "评论状态或置顶资格冲突"
+// @Failure 422 {object} httpx.ErrorResponse "请求参数无效或需要确认"
+// @Param X-CSRF-Token header string true "CSRF token"
+// @Router /api/v1/admin/comments/batch [post]
+func adminCommentsBatch(service *comment.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		input, err := decodeCommentBatchRequest(c)
+		if err != nil {
+			writeBatchError(c, err)
+			return
+		}
+		result, err := service.AdminBatch(c.Request.Context(), input)
+		if err != nil {
+			writeBatchError(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, toAdminBatchResponse(*result))
 	}
 }
 
@@ -1271,6 +1097,180 @@ func adminCommentsRestore(service *comment.Service) gin.HandlerFunc {
 			return
 		}
 		c.JSON(http.StatusOK, toAdminCommentResponse(*view))
+	}
+}
+
+// @Summary 批量管理评论区
+// @Tags admin-threads
+// @Accept json
+// @Produce json
+// @Param site_id path integer true "站点 ID（十进制字符串）"
+// @Param body body AdminBatchRequest true "评论区批量命令"
+// @Success 200 {object} AdminBatchResponse "批量操作计数"
+// @Failure 400 {object} httpx.ErrorResponse "请求参数或 ID 无效"
+// @Failure 401 {object} httpx.ErrorResponse "需要管理员登录"
+// @Failure 403 {object} httpx.ErrorResponse "权限不足"
+// @Failure 404 {object} httpx.ErrorResponse "评论区不存在或不属于该站点"
+// @Failure 422 {object} httpx.ErrorResponse "请求参数无效或需要确认"
+// @Param X-CSRF-Token header string true "CSRF token"
+// @Router /api/v1/admin/sites/{site_id}/threads/batch [post]
+func adminThreadsBatch(service *comment.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		siteID, err := httpx.ParseIDParam(c, "site_id")
+		if err != nil {
+			writeBatchError(c, err)
+			return
+		}
+		input, err := decodeThreadBatchRequest(c)
+		if err != nil {
+			writeBatchError(c, err)
+			return
+		}
+		result, err := service.AdminBatchThreads(c.Request.Context(), siteID, input)
+		if err != nil {
+			writeBatchError(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, toAdminBatchResponse(*result))
+	}
+}
+
+// @Summary 按站点列出线程
+// @Tags admin-threads
+// @Produce json
+// @Param site_id path integer true "站点 ID（十进制字符串）"
+// @Param comments_enabled query boolean false "按评论开关过滤"
+// @Param q query string false "搜索 page_key/page_title/page_url"
+// @Param sort query string false "排序方向：asc（最早优先）或 desc（最新优先，默认）"
+// @Param page query integer false "页码（从 1 开始，默认 1）"
+// @Param limit query integer false "每页数量（默认 25）"
+// @Success 200 {object} AdminThreadListResponse "一页线程与匹配总数"
+// @Failure 400 {object} httpx.ErrorResponse "请求参数无效"
+// @Failure 401 {object} httpx.ErrorResponse "需要管理员登录"
+// @Failure 403 {object} httpx.ErrorResponse "权限不足"
+// @Router /api/v1/admin/sites/{site_id}/threads [get]
+func adminThreadsList(service *comment.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		siteID, err := httpx.ParseIDParam(c, "site_id")
+		if err != nil {
+			writeError(c, err)
+			return
+		}
+		var enabled *bool
+		if enabled, err = httpx.ParseOptionalQueryBool(c, "comments_enabled"); err != nil {
+			writeError(c, err)
+			return
+		}
+		sort, err := domain.NormalizeAdminSort(c.Query("sort"))
+		if err != nil {
+			writeError(c, err)
+			return
+		}
+		page, err := parsePage(c)
+		if err != nil {
+			writeError(c, err)
+			return
+		}
+		limit, _ := strconv.Atoi(c.DefaultQuery("limit", "25"))
+		result, err := service.AdminListThreads(c.Request.Context(), siteID, enabled, c.Query("q"), page, sort, limit)
+		if err != nil {
+			writeError(c, err)
+			return
+		}
+		resp := AdminThreadListResponse{
+			Threads: make([]AdminThreadResponse, 0, len(result.Threads)),
+			Total:   result.Total,
+		}
+		for _, view := range result.Threads {
+			resp.Threads = append(resp.Threads, toAdminThreadResponse(view))
+		}
+		c.JSON(http.StatusOK, resp)
+	}
+}
+
+// @Summary 更新线程元数据（page_key / page_title / comments_enabled）
+// @Tags admin-threads
+// @Accept json
+// @Produce json
+// @Param site_id path integer true "站点 ID（十进制字符串）"
+// @Param thread_id path integer true "线程 ID（十进制字符串）"
+// @Param body body AdminThreadUpdateRequest true "新的线程元数据（至少一个字段）"
+// @Success 200 {object} AdminThreadResponse "更新后的线程视图"
+// @Failure 400 {object} httpx.ErrorResponse "请求参数无效"
+// @Failure 401 {object} httpx.ErrorResponse "需要管理员登录"
+// @Failure 403 {object} httpx.ErrorResponse "权限不足"
+// @Failure 404 {object} httpx.ErrorResponse "线程不存在或不属于该站点"
+// @Failure 409 {object} httpx.ErrorResponse "page_key 在站点内重复"
+// @Failure 422 {object} httpx.ErrorResponse "缺少任何更新字段或字段校验失败"
+// @Param X-CSRF-Token header string true "CSRF token"
+// @Router /api/v1/admin/sites/{site_id}/threads/{thread_id} [patch]
+func adminThreadsPatch(service *comment.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		siteID, err := httpx.ParseIDParam(c, "site_id")
+		if err != nil {
+			writeError(c, err)
+			return
+		}
+		threadID, err := httpx.ParseIDParam(c, "thread_id")
+		if err != nil {
+			writeError(c, err)
+			return
+		}
+		var req AdminThreadUpdateRequest
+		if err := httpx.DecodeBody(c, &req); err != nil {
+			writeError(c, err)
+			return
+		}
+		if req.PageKey == nil && !req.PageTitle.Set && !req.PageURL.Set && req.CommentsEnabled == nil {
+			c.JSON(http.StatusUnprocessableEntity, errorResponse(c, "invalid_input", "至少提供一个更新字段"))
+			return
+		}
+		view, err := service.AdminUpdateThread(c.Request.Context(), siteID, threadID, comment.AdminThreadUpdateInput{
+			PageKey:         req.PageKey,
+			PageTitle:       comment.OptionalNullableString{Set: req.PageTitle.Set, Value: req.PageTitle.Value},
+			PageURL:         comment.OptionalNullableString{Set: req.PageURL.Set, Value: req.PageURL.Value},
+			CommentsEnabled: req.CommentsEnabled,
+		})
+		if err != nil {
+			writeError(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, toAdminThreadResponse(*view))
+	}
+}
+
+// @Summary 硬删除线程及其全部评论
+// @Tags admin-threads
+// @Produce json
+// @Param site_id path integer true "站点 ID（十进制字符串）"
+// @Param thread_id path integer true "线程 ID（十进制字符串）"
+// @Param confirm query boolean true "破坏性操作需要显式确认"
+// @Success 204 "删除成功"
+// @Failure 400 {object} httpx.ErrorResponse "请求参数无效"
+// @Failure 401 {object} httpx.ErrorResponse "需要管理员登录"
+// @Failure 403 {object} httpx.ErrorResponse "权限不足"
+// @Failure 404 {object} httpx.ErrorResponse "线程不存在或不属于该站点"
+// @Failure 422 {object} httpx.ErrorResponse "破坏性操作需要显式确认"
+// @Param X-CSRF-Token header string true "CSRF token"
+// @Router /api/v1/admin/sites/{site_id}/threads/{thread_id} [delete]
+func adminThreadsDelete(service *comment.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		siteID, err := httpx.ParseIDParam(c, "site_id")
+		if err != nil {
+			writeError(c, err)
+			return
+		}
+		threadID, err := httpx.ParseIDParam(c, "thread_id")
+		if err != nil {
+			writeError(c, err)
+			return
+		}
+		confirm := c.Query("confirm") == "true"
+		if err := service.AdminDeleteThread(c.Request.Context(), siteID, threadID, confirm); err != nil {
+			writeError(c, err)
+			return
+		}
+		c.Status(http.StatusNoContent)
 	}
 }
 

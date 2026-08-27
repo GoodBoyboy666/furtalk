@@ -20,6 +20,13 @@ type Service struct {
 	sites *repository.SiteRepo
 }
 
+// SiteUpdate 携带可选的 PATCH 更新字段；nil 表示该字段未提供。
+type SiteUpdate struct {
+	Name         *string
+	CanonicalURL *string
+	Status       *domain.SiteStatus
+}
+
 // NewService 构建站点服务，并注入站点仓储。
 func NewService(sites *repository.SiteRepo) *Service {
 	return &Service{sites: sites}
@@ -72,13 +79,6 @@ func (s *Service) Get(ctx context.Context, id int64) (*domain.Site, error) {
 	}
 	row.Origins = origins
 	return row, nil
-}
-
-// SiteUpdate 携带可选的 PATCH 更新字段；nil 表示该字段未提供。
-type SiteUpdate struct {
-	Name         *string
-	CanonicalURL *string
-	Status       *domain.SiteStatus
 }
 
 // Update 按 PATCH 语义更新站点可选字段：名称、规范 URL 或状态。

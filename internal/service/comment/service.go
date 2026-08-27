@@ -25,6 +25,11 @@ const (
 	maxNicknameLength  = 100
 )
 
+// CommentAction 是评论创建的 CAPTCHA 策略操作键。
+const (
+	CommentAction = "comment"
+)
+
 // Service 实现线程、评论与 widget 凭证生命周期用例，是模块的门面。
 type Service struct {
 	txRunner  TxRunner
@@ -153,8 +158,3 @@ type TxRunner interface {
 type EventPublisher interface {
 	Publish(domain.CommentEvent) error
 }
-
-// CommentAction 是评论创建的 CAPTCHA 策略操作键。
-const (
-	CommentAction = "comment"
-)

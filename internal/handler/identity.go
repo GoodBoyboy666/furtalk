@@ -58,40 +58,6 @@ func RegisterAdminUsers(admin *gin.RouterGroup, service *identity.Service) {
 	admin.POST("/users/:user_id/restore", adminUsersRestore(service))
 }
 
-// @Summary 批量管理用户
-// @Tags admin-users
-// @Accept json
-// @Produce json
-// @Param body body AdminBatchRequest true "用户批量命令"
-// @Success 200 {object} AdminBatchResponse "批量操作计数"
-// @Failure 400 {object} httpx.ErrorResponse "请求参数无效"
-// @Failure 401 {object} httpx.ErrorResponse "需要管理员登录"
-// @Failure 403 {object} httpx.ErrorResponse "不能删除当前操作者或权限不足"
-// @Failure 404 {object} httpx.ErrorResponse "用户不存在"
-// @Failure 409 {object} httpx.ErrorResponse "生命周期冲突或不能移除最后一个管理员"
-// @Failure 422 {object} httpx.ErrorResponse "请求参数无效或缺少破坏性操作确认"
-// @Param X-CSRF-Token header string true "CSRF token"
-// @Router /api/v1/admin/users/batch [post]
-func adminUsersBatch(service *identity.Service) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		input, err := decodeUserBatchRequest(c)
-		if err != nil {
-			writeBatchError(c, err)
-			return
-		}
-		input.ActingID = actingUserID(c)
-		if input.ActingID <= 0 {
-			return
-		}
-		result, err := service.AdminBatchUsers(c.Request.Context(), input)
-		if err != nil {
-			writeBatchError(c, err)
-			return
-		}
-		c.JSON(http.StatusOK, toAdminBatchResponse(*result))
-	}
-}
-
 // @Summary 请求发送邮箱验证码
 // @Tags auth
 // @Accept json
@@ -443,6 +409,17 @@ func writeOAuthError(c *gin.Context, err error, redirect string) {
 	httpx.WriteErrorWithDetails(c, err, details)
 }
 
+// setSessionCookie 以与令牌生命周期匹配的 Max-Age 写入 FP Cookie。
+func setSessionCookie(c *gin.Context, session *identity.Session) {
+	lifetime := time.Until(session.ExpiresAt)
+	if lifetime <= 0 {
+		middleware.ClearFirstPartyCookie(c)
+		return
+	}
+	middleware.SetFirstPartyCookie(c, session.Token, lifetime)
+	middleware.SetCSRFCookie(c, session.CSRFToken, lifetime)
+}
+
 // @Summary 获取当前用户资料
 // @Tags me
 // @Produce json
@@ -768,6 +745,40 @@ func meDeleteIdentity(service *identity.Service) gin.HandlerFunc {
 	}
 }
 
+// @Summary 批量管理用户
+// @Tags admin-users
+// @Accept json
+// @Produce json
+// @Param body body AdminBatchRequest true "用户批量命令"
+// @Success 200 {object} AdminBatchResponse "批量操作计数"
+// @Failure 400 {object} httpx.ErrorResponse "请求参数无效"
+// @Failure 401 {object} httpx.ErrorResponse "需要管理员登录"
+// @Failure 403 {object} httpx.ErrorResponse "不能删除当前操作者或权限不足"
+// @Failure 404 {object} httpx.ErrorResponse "用户不存在"
+// @Failure 409 {object} httpx.ErrorResponse "生命周期冲突或不能移除最后一个管理员"
+// @Failure 422 {object} httpx.ErrorResponse "请求参数无效或缺少破坏性操作确认"
+// @Param X-CSRF-Token header string true "CSRF token"
+// @Router /api/v1/admin/users/batch [post]
+func adminUsersBatch(service *identity.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		input, err := decodeUserBatchRequest(c)
+		if err != nil {
+			writeBatchError(c, err)
+			return
+		}
+		input.ActingID = actingUserID(c)
+		if input.ActingID <= 0 {
+			return
+		}
+		result, err := service.AdminBatchUsers(c.Request.Context(), input)
+		if err != nil {
+			writeBatchError(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, toAdminBatchResponse(*result))
+	}
+}
+
 // @Summary 按关键字分页列出用户
 // @Tags admin-users
 // @Produce json
@@ -1023,15 +1034,4 @@ func adminUsersRestore(service *identity.Service) gin.HandlerFunc {
 		}
 		c.JSON(http.StatusOK, toAdminUserResponse(*profile))
 	}
-}
-
-// setSessionCookie 以与令牌生命周期匹配的 Max-Age 写入 FP Cookie。
-func setSessionCookie(c *gin.Context, session *identity.Session) {
-	lifetime := time.Until(session.ExpiresAt)
-	if lifetime <= 0 {
-		middleware.ClearFirstPartyCookie(c)
-		return
-	}
-	middleware.SetFirstPartyCookie(c, session.Token, lifetime)
-	middleware.SetCSRFCookie(c, session.CSRFToken, lifetime)
 }

@@ -24,6 +24,14 @@ type UnsubscribeSigner interface {
 	ParseUnsubscribe(raw string) (int64, string, error)
 }
 
+// 通知种类枚举，用于退订令牌与偏好开关。
+const (
+	// KindReply 表示回复通知。
+	KindReply = "reply"
+	// KindModeration 表示审核通知。
+	KindModeration = "moderation"
+)
+
 // sendTimeout 限制单次邮件投递的超时。
 const sendTimeout = 30 * time.Second
 
@@ -454,11 +462,3 @@ func (s *Service) parseUnsubscribe(rawToken string) (int64, string, error) {
 	}
 	return s.signer.ParseUnsubscribe(rawToken)
 }
-
-// 通知种类枚举，用于退订令牌与偏好开关。
-const (
-	// KindReply 表示回复通知。
-	KindReply = "reply"
-	// KindModeration 表示审核通知。
-	KindModeration = "moderation"
-)
