@@ -318,6 +318,40 @@ func (r *CommentRepo) FindGlobalByID(ctx context.Context, id int64) (*domain.Com
 	return &out, nil
 }
 
+// CountCreatedByRanges 按多个 UTC 半开区间统计物理存在的评论行。
+// 查询结构由服务层提供的区间数量决定，所有边界仍通过参数绑定。
+func (r *CommentRepo) CountCreatedByRanges(ctx context.Context, ranges []domain.CommentTrendRange) ([]int64, error) {
+	if len(ranges) == 0 {
+		return []int64{}, nil
+	}
+
+	var sql strings.Builder
+	args := make([]any, 0, len(ranges)*3)
+	for i, window := range ranges {
+		if i > 0 {
+			sql.WriteString(" UNION ALL ")
+		}
+		sql.WriteString("SELECT ? AS bucket_index, COUNT(*) AS comment_count FROM comments WHERE created_at >= ? AND created_at < ?")
+		args = append(args, i, window.Start.UTC(), window.End.UTC())
+	}
+
+	type countRow struct {
+		BucketIndex  int   `gorm:"column:bucket_index"`
+		CommentCount int64 `gorm:"column:comment_count"`
+	}
+	rows := make([]countRow, 0, len(ranges))
+	if err := gormtx.DB(ctx, r.db).Raw(sql.String(), args...).Scan(&rows).Error; err != nil {
+		return nil, fmt.Errorf("count comments by ranges: %w", err)
+	}
+	counts := make([]int64, len(ranges))
+	for _, row := range rows {
+		if row.BucketIndex >= 0 && row.BucketIndex < len(counts) {
+			counts[row.BucketIndex] = row.CommentCount
+		}
+	}
+	return counts, nil
+}
+
 // ListPublic 使用的递归 CTE 由下面三段 SQL 模板拼接：锚点 + 递归步进 + 投影。
 // 占位符 ? 按顺序绑定 site_id/thread_id、site_id/thread_id、published 状态。
 

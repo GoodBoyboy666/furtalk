@@ -23,6 +23,7 @@
 | POST | /api/v1/notification-unsubscriptions | 公开 | 退订通知 |
 | GET | /api/v1/widget/sites/{site_id}/runtime-config | 公开 | 站点运行时配置（含 CAPTCHA site key） |
 | GET | /api/v1/captcha/config | 公开 | 按 action 查询的公共 CAPTCHA 配置，`Cache-Control: no-store` |
+| GET | /api/v1/config | 公开 | 站点协议链接、同意版本与 Web 品牌主色白名单，`Cache-Control: no-store` |
 
 ### 公共 CAPTCHA 配置（/api/v1/captcha/config）
 
@@ -32,6 +33,22 @@
   `api_endpoint` 仅 CAP 返回，解析为官方 widget 端点 `<endpoint>/<site_key>/`。
 - 响应不含 `secret_key`；策略开启但 provider 缺失/损坏时返回 503。
 - 该端点仅提供渲染提示；CAPTCHA 是否必填以业务写端点自身的校验为最终依据。
+
+### 公共站点配置与登录协议（/api/v1/config）
+
+- 响应只包含 `user_agreement_url`、`privacy_policy_url`、
+  `legal_consent_version` 与 `brand_primary_color`；不会返回管理员设置列表、provider
+  配置、密钥或内部设置。未配置的协议链接为空字符串，品牌主色默认 `#18181B`。
+- 协议链接必须是空值或绝对 HTTPS 地址；品牌主色必须是标准 `#RRGGBB`。服务端返回
+  `Cache-Control: no-store`，前端同样校验该白名单响应。
+- 当任一协议链接存在时，登录页只显示已配置的协议入口，并要求用户勾选同意；未勾选
+  时邮箱验证码发送、密码、Passkey 与 OAuth/OIDC 登录入口均不可执行。验证码登录页
+  与重新发送也复用同一门禁。两个链接均为空时不显示门禁且保持原有登录行为。
+- 浏览器只在 `localStorage` 保存命名空间化的已同意版本；存储缺失、损坏或不可用时
+  默认未同意。协议版本只在管理员显式执行重新同意操作时递增，编辑链接或品牌颜色
+  不会隐式失效已有浏览器同意状态。
+- Web 根据单一品牌主色派生浅色/深色 `primary`、前景、焦点环、侧栏主色与主图表色；
+  Widget 不读取这些字段，继续使用自身 Shadow DOM 样式与契约。
 
 ### Widget 运行时配置 CAPTCHA 投影（/api/v1/widget/sites/{site_id}/runtime-config）
 
@@ -213,6 +230,7 @@
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | GET/PATCH | /api/v1/admin/settings | 站点设置 |
+| POST | /api/v1/admin/settings/legal-consent/reset | 显式递增协议同意版本（需要 CSRF；不修改协议链接） |
 | GET/PUT | /api/v1/admin/providers | provider 列表/写入 |
 | PUT/DELETE | /api/v1/admin/providers/{provider_key} | 更新/删除 provider |
 | POST | /api/v1/admin/providers/{provider_key}/test | provider 连通性测试 |
@@ -225,6 +243,7 @@
 | DELETE | /api/v1/admin/sites/{site_id}/threads/{thread_id} | 删除线程（需 `confirm=true`；硬删除线程及其下全部评论，跨站点 404，204） |
 | POST | /api/v1/admin/sites/{site_id}/threads/batch | 批量开启、关闭或硬删除评论区（`enable`、`disable`、`hard_delete`；当前页 ID，单批 1–100 个） |
 | GET | /api/v1/admin/comments | 评论管理列表（页码分页；支持正文/作者邮箱/昵称 `q` 搜索） |
+| GET | /api/v1/admin/comments/trend | 评论近 7/30 天按日趋势（管理员时区） |
 | GET/PATCH/DELETE | /api/v1/admin/comments/{comment_id} | 管理评论（PATCH 编辑正文） |
 | PUT/DELETE | /api/v1/admin/comments/{comment_id}/pin | 管理员置顶/取消置顶根评论（幂等） |
 | POST | /api/v1/admin/comments/{comment_id}/publish | 发布 |
@@ -268,6 +287,11 @@
   非正整数 `page`/`limit` 返回 400 `invalid_input`。
 - 三个评论类列表响应携带与当前过滤/搜索条件一致的真实 `total`，用户列表携带
   `total`。前端按 `total` 计算总页数；越界页码返回空数组与真实总数。
+- 管理员评论趋势使用 `GET /api/v1/admin/comments/trend?days=7&timezone=Asia%2FShanghai`。
+  `days` 缺省为 7 且只允许 7 或 30；`timezone` 必须是有效 IANA 时区。响应包含
+  `days`、规范化后的 `timezone` 与恰好对应数量的升序 `points`，每个点是该时区的
+  `YYYY-MM-DD` 日历日和新建评论 `count`。统计按 `comments.created_at` 计算所有仍
+  存在的状态，软删除仍计入，物理删除的行不再计入，缺失日期补零。
 - 管理评论与线程按 `(created_at, id)` 确定性排序（受控 `sort=asc|desc`，缺省
   desc），用户列表按 `id` 排序，本人评论按 `(created_at, id)` 升序。
 - 评论管理、线程管理与本人评论接口**无 `cursor` 查询参数，响应亦无

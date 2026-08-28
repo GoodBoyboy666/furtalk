@@ -15,11 +15,59 @@ import (
 func RegisterAdminSettings(admin *gin.RouterGroup, settingsService *setting.Service, providers *setting.ProviderService) {
 	admin.GET("/settings", adminGetSettings(settingsService))
 	admin.PATCH("/settings", adminPatchSettings(settingsService))
+	admin.POST("/settings/legal-consent/reset", adminResetLegalConsent(settingsService))
 
 	admin.GET("/providers", adminListProviders(providers))
 	admin.PUT("/providers/:provider_key", adminUpsertProvider(providers))
 	admin.POST("/providers/:provider_key/test", adminTestProvider(providers))
 	admin.DELETE("/providers/:provider_key", adminDeleteProvider(providers))
+}
+
+// @Summary 获取公开站点配置
+// @Tags public-config
+// @Produce json
+// @Success 200 {object} PublicConfigResponse "协议链接、同意版本与 Web 品牌主色"
+// @Failure 503 {object} httpx.ErrorResponse "配置暂不可用"
+// @Router /api/v1/config [get]
+func RegisterPublicConfig(api *gin.RouterGroup, service *setting.Service) {
+	api.GET("/config", publicConfig(service))
+}
+
+func publicConfig(service *setting.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Header("Cache-Control", "no-store")
+		view, err := service.Get(c.Request.Context())
+		if err != nil {
+			writeError(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, PublicConfigResponse{
+			UserAgreementURL:    view.Settings.UserAgreementURL,
+			PrivacyPolicyURL:    view.Settings.PrivacyPolicyURL,
+			LegalConsentVersion: view.Settings.LegalConsentVersion,
+			BrandPrimaryColor:   view.Settings.BrandPrimaryColor,
+		})
+	}
+}
+
+// @Summary 要求用户重新同意协议
+// @Tags admin-settings
+// @Produce json
+// @Success 200 {object} LegalConsentResetResponse "递增后的协议同意版本"
+// @Failure 401 {object} httpx.ErrorResponse "需要管理员登录"
+// @Failure 403 {object} httpx.ErrorResponse "权限不足"
+// @Failure 422 {object} httpx.ErrorResponse "协议版本无效或溢出"
+// @Param X-CSRF-Token header string true "CSRF token"
+// @Router /api/v1/admin/settings/legal-consent/reset [post]
+func adminResetLegalConsent(service *setting.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		version, err := service.ResetLegalConsent(c.Request.Context(), actingUserID(c))
+		if err != nil {
+			writeError(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, LegalConsentResetResponse{LegalConsentVersion: version})
+	}
 }
 
 // RegisterAdminSMTP 挂载 SMTP 测试路由。

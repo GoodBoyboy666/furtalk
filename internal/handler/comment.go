@@ -2,6 +2,7 @@ package handler
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -100,6 +101,8 @@ func RegisterMeComments(api *gin.RouterGroup, service *comment.Service, userGate
 // RegisterAdminComments 挂载管理端评论端点。
 func RegisterAdminComments(admin *gin.RouterGroup, service *comment.Service) {
 	admin.GET("/comments", adminCommentsList(service))
+	// 静态 trend 路由必须在 /comments/:comment_id 之前注册。
+	admin.GET("/comments/trend", adminCommentsTrend(service))
 	// 静态 batch 路由必须在 /comments/:comment_id 之前注册。
 	admin.POST("/comments/batch", adminCommentsBatch(service))
 	admin.GET("/comments/:comment_id", adminCommentsGet(service))
@@ -855,6 +858,36 @@ func adminCommentsList(service *comment.Service) gin.HandlerFunc {
 			resp.Comments = append(resp.Comments, toAdminCommentResponse(view))
 		}
 		c.JSON(http.StatusOK, resp)
+	}
+}
+
+// @Summary 获取管理员评论趋势
+// @Tags admin-comments
+// @Produce json
+// @Param days query integer false "时间范围：7 或 30（默认 7）"
+// @Param timezone query string true "IANA 时区名称"
+// @Success 200 {object} AdminCommentTrendResponse "按日新建评论趋势"
+// @Failure 400 {object} httpx.ErrorResponse "请求参数无效"
+// @Failure 401 {object} httpx.ErrorResponse "需要管理员登录"
+// @Failure 403 {object} httpx.ErrorResponse "权限不足"
+// @Router /api/v1/admin/comments/trend [get]
+func adminCommentsTrend(service *comment.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		days := 7
+		if raw := c.Query("days"); raw != "" {
+			parsed, err := strconv.Atoi(raw)
+			if err != nil {
+				writeError(c, fmt.Errorf("%w: invalid trend days", domain.ErrValidation))
+				return
+			}
+			days = parsed
+		}
+		trend, err := service.AdminCommentTrend(c.Request.Context(), days, c.Query("timezone"))
+		if err != nil {
+			writeError(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, toAdminCommentTrendResponse(*trend))
 	}
 }
 

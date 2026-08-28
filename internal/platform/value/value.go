@@ -8,6 +8,7 @@ import (
 	"net/mail"
 	"net/url"
 	"strings"
+	"unicode"
 )
 
 // ErrInvalid 在输入值不符合规范时返回。
@@ -70,4 +71,58 @@ func ValidateEmojiCatalogURL(raw string) error {
 		return fmt.Errorf("%w: emoji catalog url must not include a fragment", ErrInvalid)
 	}
 	return nil
+}
+
+// NormalizeHTTPSURL trims and validates an optional user-facing HTTPS link.
+func NormalizeHTTPSURL(raw string) (string, error) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return "", nil
+	}
+	if len(value) > 2048 {
+		return "", fmt.Errorf("%w: url must be at most 2048 characters", ErrInvalid)
+	}
+	for _, r := range value {
+		if unicode.IsControl(r) {
+			return "", fmt.Errorf("%w: url must not contain control characters", ErrInvalid)
+		}
+	}
+	u, err := url.Parse(value)
+	if err != nil || !u.IsAbs() || u.Host == "" {
+		return "", fmt.Errorf("%w: url must be an absolute https url", ErrInvalid)
+	}
+	if u.Scheme != "https" {
+		return "", fmt.Errorf("%w: url must use https", ErrInvalid)
+	}
+	if u.User != nil {
+		return "", fmt.Errorf("%w: url must not include userinfo", ErrInvalid)
+	}
+	return u.String(), nil
+}
+
+// ValidateHTTPSURL validates an optional absolute HTTPS URL.
+func ValidateHTTPSURL(raw string) error {
+	_, err := NormalizeHTTPSURL(raw)
+	return err
+}
+
+// NormalizeHexColor trims and validates a standard six-digit HEX color.
+// Valid values are returned in uppercase for stable persistence and diffs.
+func NormalizeHexColor(raw string) (string, error) {
+	value := strings.TrimSpace(raw)
+	if len(value) != 7 || value[0] != '#' {
+		return "", fmt.Errorf("%w: color must use #RRGGBB format", ErrInvalid)
+	}
+	for _, r := range value[1:] {
+		if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F')) {
+			return "", fmt.Errorf("%w: color must use #RRGGBB format", ErrInvalid)
+		}
+	}
+	return strings.ToUpper(value), nil
+}
+
+// ValidateHexColor validates a standard six-digit HEX color.
+func ValidateHexColor(raw string) error {
+	_, err := NormalizeHexColor(raw)
+	return err
 }

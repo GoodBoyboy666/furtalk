@@ -388,6 +388,19 @@ type AdminCommentListResponse struct {
 	Total    int64                  `json:"total"`
 }
 
+// AdminCommentTrendPointResponse 是一个按本地日历日统计的趋势点。
+type AdminCommentTrendPointResponse struct {
+	Date  string `json:"date"`
+	Count int64  `json:"count"`
+}
+
+// AdminCommentTrendResponse 是管理员概览的评论趋势响应。
+type AdminCommentTrendResponse struct {
+	Days     int                              `json:"days"`
+	Timezone string                           `json:"timezone"`
+	Points   []AdminCommentTrendPointResponse `json:"points"`
+}
+
 // AdminThreadResponse 是管理端线程视图。
 type AdminThreadResponse struct {
 	ID              string    `json:"id"`
@@ -605,6 +618,21 @@ func toAdminCommentResponse(view comment.AdminCommentView) AdminCommentResponse 
 	}
 }
 
+func toAdminCommentTrendResponse(trend domain.CommentTrend) AdminCommentTrendResponse {
+	points := make([]AdminCommentTrendPointResponse, 0, len(trend.Points))
+	for _, point := range trend.Points {
+		points = append(points, AdminCommentTrendPointResponse{
+			Date:  point.Date,
+			Count: point.Count,
+		})
+	}
+	return AdminCommentTrendResponse{
+		Days:     trend.Days,
+		Timezone: trend.Timezone,
+		Points:   points,
+	}
+}
+
 func toAdminThreadResponse(view comment.AdminThreadView) AdminThreadResponse {
 	return AdminThreadResponse{
 		ID:              strconv.FormatInt(view.ID, 10),
@@ -667,6 +695,20 @@ func toSiteResponse(s domain.Site) SiteResponse {
 // SettingsResponse 是设置读取或 PATCH 后的响应，只含公开设置项列表。
 type SettingsResponse struct {
 	Settings []setting.SettingItem `json:"settings"`
+}
+
+// PublicConfigResponse 是匿名读取的站点协议与 Web 主题配置白名单。
+// 该 DTO 刻意不复用 SettingsResponse，避免泄露管理员设置或 provider 配置。
+type PublicConfigResponse struct {
+	UserAgreementURL    string `json:"user_agreement_url"`
+	PrivacyPolicyURL    string `json:"privacy_policy_url"`
+	LegalConsentVersion int64  `json:"legal_consent_version"`
+	BrandPrimaryColor   string `json:"brand_primary_color"`
+}
+
+// LegalConsentResetResponse 是管理员主动要求重新同意后的新版本。
+type LegalConsentResetResponse struct {
+	LegalConsentVersion int64 `json:"legal_consent_version"`
 }
 
 // ProviderMetadata 是提供商元数据的 HTTP 表示，不含机密。

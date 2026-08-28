@@ -45,6 +45,14 @@ const (
 	// SettingKeyEmojiCatalogURL 是公开 string 设置：widget 远程表情目录的绝对 HTTPS URL。
 	// 空串表示不配置；query 允许，userinfo 与 fragment 不允许。
 	SettingKeyEmojiCatalogURL = "emoji_catalog_url"
+	// SettingKeyUserAgreementURL 是可选的用户协议绝对 HTTPS 地址。
+	SettingKeyUserAgreementURL = "user_agreement_url"
+	// SettingKeyPrivacyPolicyURL 是可选的隐私政策绝对 HTTPS 地址。
+	SettingKeyPrivacyPolicyURL = "privacy_policy_url"
+	// SettingKeyLegalConsentVersion 是管理员命令维护的协议同意版本。
+	SettingKeyLegalConsentVersion = "legal_consent_version"
+	// SettingKeyBrandPrimaryColor 是 Web 界面品牌主色。
+	SettingKeyBrandPrimaryColor = "brand_primary_color"
 
 	// SettingKeyInternalEpoch 持久化 Widget 凭证代次的保留内部 key。
 	// 它不通过管理 API 暴露，也不能由管理 API 修改。
@@ -98,6 +106,10 @@ var knownSettings = []knownSetting{
 	{key: SettingKeyGravatarBaseURL, typ: SettingTypeString},
 	{key: SettingKeyCommentSort, typ: SettingTypeString},
 	{key: SettingKeyEmojiCatalogURL, typ: SettingTypeString},
+	{key: SettingKeyUserAgreementURL, typ: SettingTypeString},
+	{key: SettingKeyPrivacyPolicyURL, typ: SettingTypeString},
+	{key: SettingKeyLegalConsentVersion, typ: SettingTypeInteger},
+	{key: SettingKeyBrandPrimaryColor, typ: SettingTypeString},
 }
 
 // View 是一次 Get 的原子快照：类型化设置与凭证 epoch。
@@ -161,6 +173,10 @@ func DefaultSettings() domain.Settings {
 		GravatarBaseURL:      value.DefaultGravatarBaseURL,
 		CommentSort:          string(domain.CommentSortAsc),
 		EmojiCatalogURL:      "",
+		UserAgreementURL:     "",
+		PrivacyPolicyURL:     "",
+		LegalConsentVersion:  1,
+		BrandPrimaryColor:    "#18181B",
 	}
 }
 
@@ -204,6 +220,18 @@ func Validate(s domain.Settings) error {
 	if err := value.ValidateEmojiCatalogURL(s.EmojiCatalogURL); err != nil {
 		return fmt.Errorf("%w: %v", domain.ErrValidation, err)
 	}
+	if err := value.ValidateHTTPSURL(s.UserAgreementURL); err != nil {
+		return fmt.Errorf("%w: user agreement url: %v", domain.ErrValidation, err)
+	}
+	if err := value.ValidateHTTPSURL(s.PrivacyPolicyURL); err != nil {
+		return fmt.Errorf("%w: privacy policy url: %v", domain.ErrValidation, err)
+	}
+	if s.LegalConsentVersion <= 0 {
+		return fmt.Errorf("%w: legal consent version must be positive", domain.ErrValidation)
+	}
+	if err := value.ValidateHexColor(s.BrandPrimaryColor); err != nil {
+		return fmt.Errorf("%w: brand primary color: %v", domain.ErrValidation, err)
+	}
 	return nil
 }
 
@@ -229,6 +257,10 @@ func defaultItems() []SettingItem {
 		{Key: SettingKeyGravatarBaseURL, Type: SettingTypeString, Value: s.GravatarBaseURL},
 		{Key: SettingKeyCommentSort, Type: SettingTypeString, Value: s.CommentSort},
 		{Key: SettingKeyEmojiCatalogURL, Type: SettingTypeString, Value: s.EmojiCatalogURL},
+		{Key: SettingKeyUserAgreementURL, Type: SettingTypeString, Value: s.UserAgreementURL},
+		{Key: SettingKeyPrivacyPolicyURL, Type: SettingTypeString, Value: s.PrivacyPolicyURL},
+		{Key: SettingKeyLegalConsentVersion, Type: SettingTypeInteger, Value: s.LegalConsentVersion},
+		{Key: SettingKeyBrandPrimaryColor, Type: SettingTypeString, Value: s.BrandPrimaryColor},
 	}
 }
 
@@ -389,6 +421,30 @@ func applyItems(s *domain.Settings, items []SettingItem) error {
 			s.CommentSort = item.Value.(string)
 		case SettingKeyEmojiCatalogURL:
 			s.EmojiCatalogURL = strings.TrimSpace(item.Value.(string))
+		case SettingKeyUserAgreementURL:
+			url, err := value.NormalizeHTTPSURL(item.Value.(string))
+			if err != nil {
+				return fmt.Errorf("%w: user agreement url: %v", domain.ErrValidation, err)
+			}
+			s.UserAgreementURL = url
+		case SettingKeyPrivacyPolicyURL:
+			url, err := value.NormalizeHTTPSURL(item.Value.(string))
+			if err != nil {
+				return fmt.Errorf("%w: privacy policy url: %v", domain.ErrValidation, err)
+			}
+			s.PrivacyPolicyURL = url
+		case SettingKeyLegalConsentVersion:
+			number, ok := item.Value.(float64)
+			if !ok || math.Trunc(number) != number || number <= 0 || number > math.MaxInt64 {
+				return fmt.Errorf("%w: legal consent version must be a positive integer", domain.ErrValidation)
+			}
+			s.LegalConsentVersion = int64(number)
+		case SettingKeyBrandPrimaryColor:
+			color, err := value.NormalizeHexColor(item.Value.(string))
+			if err != nil {
+				return fmt.Errorf("%w: brand primary color: %v", domain.ErrValidation, err)
+			}
+			s.BrandPrimaryColor = color
 		}
 	}
 	return nil
@@ -415,9 +471,15 @@ func settingsFromRows(rows []repository.DynamicSettingRow) (domain.Settings, err
 		if err := json.Unmarshal(row.Value, &value); err != nil {
 			return domain.Settings{}, fmt.Errorf("setting: decode value of %q: %w", row.Key, err)
 		}
+		if typ, ok := knownType(row.Key); ok && SettingType(row.Type) != typ {
+			return domain.Settings{}, fmt.Errorf("%w: setting %q has type %s, want %s", domain.ErrValidation, row.Key, row.Type, typ)
+		}
 		items = append(items, SettingItem{Key: row.Key, Type: SettingType(row.Type), Value: value})
 	}
 	if err := applyItems(&s, items); err != nil {
+		return domain.Settings{}, err
+	}
+	if err := Validate(s); err != nil {
 		return domain.Settings{}, err
 	}
 	return s, nil
@@ -427,7 +489,7 @@ func settingsFromRows(rows []repository.DynamicSettingRow) (domain.Settings, err
 func publicItemsFromRows(rows []repository.DynamicSettingRow) ([]SettingItem, error) {
 	items := make([]SettingItem, 0, len(rows))
 	for _, row := range rows {
-		if isInternalKey(row.Key) || repository.IsProviderSettingKey(row.Key) {
+		if isInternalKey(row.Key) || repository.IsProviderSettingKey(row.Key) || row.Key == SettingKeyLegalConsentVersion {
 			continue
 		}
 		var value any
@@ -544,6 +606,9 @@ func (s *Service) Patch(ctx context.Context, items []SettingItem, updatedBy int6
 	if err := validatePatch(items); err != nil {
 		return nil, err
 	}
+	if hasKey(items, SettingKeyLegalConsentVersion) {
+		return nil, fmt.Errorf("%w: legal consent version is command-owned", domain.ErrValidation)
+	}
 	err := s.txRunner.RunInTx(ctx, func(ctx context.Context) error {
 		rows, err := s.settingsRepo.List(ctx)
 		if err != nil {
@@ -608,6 +673,54 @@ func (s *Service) Patch(ctx context.Context, items []SettingItem, updatedBy int6
 	}
 	s.invalidate()
 	return s.PublicItems(ctx)
+}
+
+// ResetLegalConsent atomically increments the administrator-owned consent
+// version. URL settings are not touched; cache invalidation happens only after
+// the transaction commits.
+func (s *Service) ResetLegalConsent(ctx context.Context, updatedBy int64) (int64, error) {
+	var next int64
+	err := s.txRunner.RunInTx(ctx, func(ctx context.Context) error {
+		rows, err := s.settingsRepo.List(ctx)
+		if err != nil {
+			return err
+		}
+		missing := missingRows(rows)
+		if len(missing) > 0 {
+			if err := s.settingsRepo.SeedMissing(ctx, missing); err != nil {
+				return err
+			}
+		}
+		locked, err := s.settingsRepo.LockRows(ctx, []string{SettingKeyLegalConsentVersion})
+		if err != nil {
+			return err
+		}
+		current := DefaultSettings().LegalConsentVersion
+		for _, row := range locked {
+			if row.Key != SettingKeyLegalConsentVersion {
+				continue
+			}
+			if row.Type != string(SettingTypeInteger) {
+				return fmt.Errorf("%w: legal consent version has invalid type", domain.ErrValidation)
+			}
+			if err := json.Unmarshal(row.Value, &current); err != nil || current <= 0 {
+				return fmt.Errorf("%w: legal consent version is invalid", domain.ErrValidation)
+			}
+		}
+		if current == math.MaxInt64 {
+			return fmt.Errorf("%w: legal consent version overflow", domain.ErrValidation)
+		}
+		next = current + 1
+		return s.settingsRepo.Upsert(ctx, []repository.DynamicSettingRow{{
+			Key: SettingKeyLegalConsentVersion, Type: string(SettingTypeInteger),
+			Value: []byte(strconv.FormatInt(next, 10)), UpdatedBy: updatedBy,
+		}})
+	})
+	if err != nil {
+		return 0, err
+	}
+	s.invalidate()
+	return next, nil
 }
 
 // PublicItems 返回按 key 升序的公开设置项列表。

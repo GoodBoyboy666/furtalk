@@ -1,4 +1,5 @@
-h1:00qwVOsH+Ttf9+Oy1IEMHBSLHf0y3JX3yTzuYyV3I8c=
+h1:vdEnOv4ql3MNkkJQH9lcRz8Vx/7DIJ4rM5Woui3ex3U=
 20260816024330_initial.sql h1:8wC5g4zUb7IWZGkGeJR+AWBnhughssOEaVYXpbEIBmo=
 20260823082227_add_comment_likes.sql h1:ivFwwkf5eU86qLoVnY3HHaNbXMtTXBBj9hLyX+ga5iQ=
 20260823120000_add_comment_pinning.sql h1:78Nyt2tojlp7u1O7c42hNqcY/5as5isnioJHoN0hCrU=
+20260827132231_add_comment_created_at_index.sql h1:eVFt7tOpJlv25l868HfMRpRzdZHlU1aa3GcqR3+SIgk=

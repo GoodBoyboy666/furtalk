@@ -138,6 +138,24 @@ definitions:
       user_id:
         type: string
     type: object
+  internal_handler.AdminCommentTrendPointResponse:
+    properties:
+      count:
+        type: integer
+      date:
+        type: string
+    type: object
+  internal_handler.AdminCommentTrendResponse:
+    properties:
+      days:
+        type: integer
+      points:
+        items:
+          $ref: '#/definitions/internal_handler.AdminCommentTrendPointResponse'
+        type: array
+      timezone:
+        type: string
+    type: object
   internal_handler.AdminCommentUpdateRequest:
     properties:
       body:
@@ -501,6 +519,11 @@ definitions:
       user_id:
         type: string
     type: object
+  internal_handler.LegalConsentResetResponse:
+    properties:
+      legal_consent_version:
+        type: integer
+    type: object
   internal_handler.LikeResponse:
     properties:
       comment_id:
@@ -807,6 +830,17 @@ definitions:
       provider:
         type: string
       site_key:
+        type: string
+    type: object
+  internal_handler.PublicConfigResponse:
+    properties:
+      brand_primary_color:
+        type: string
+      legal_consent_version:
+        type: integer
+      privacy_policy_url:
+        type: string
+      user_agreement_url:
         type: string
     type: object
   internal_handler.ReplyRequest:
@@ -1437,6 +1471,40 @@ paths:
       summary: 批量管理评论
       tags:
       - admin-comments
+  /api/v1/admin/comments/trend:
+    get:
+      parameters:
+      - description: 时间范围：7 或 30（默认 7）
+        in: query
+        name: days
+        type: integer
+      - description: IANA 时区名称
+        in: query
+        name: timezone
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 按日新建评论趋势
+          schema:
+            $ref: '#/definitions/internal_handler.AdminCommentTrendResponse'
+        "400":
+          description: 请求参数无效
+          schema:
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
+        "401":
+          description: 需要管理员登录
+          schema:
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
+        "403":
+          description: 权限不足
+          schema:
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
+      summary: 获取管理员评论趋势
+      tags:
+      - admin-comments
   /api/v1/admin/providers:
     get:
       produces:
@@ -1627,6 +1695,36 @@ paths:
           schema:
             $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 更新系统设置
+      tags:
+      - admin-settings
+  /api/v1/admin/settings/legal-consent/reset:
+    post:
+      parameters:
+      - description: CSRF token
+        in: header
+        name: X-CSRF-Token
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 递增后的协议同意版本
+          schema:
+            $ref: '#/definitions/internal_handler.LegalConsentResetResponse'
+        "401":
+          description: 需要管理员登录
+          schema:
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
+        "403":
+          description: 权限不足
+          schema:
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
+        "422":
+          description: 协议版本无效或溢出
+          schema:
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
+      summary: 要求用户重新同意协议
       tags:
       - admin-settings
   /api/v1/admin/sites:
@@ -3125,6 +3223,22 @@ paths:
       summary: 第一方回复评论
       tags:
       - first-party
+  /api/v1/config:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 协议链接、同意版本与 Web 品牌主色
+          schema:
+            $ref: '#/definitions/internal_handler.PublicConfigResponse'
+        "503":
+          description: 配置暂不可用
+          schema:
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
+      summary: 获取公开站点配置
+      tags:
+      - public-config
   /api/v1/me:
     get:
       produces:

@@ -95,6 +95,110 @@ func TestGetSeedsDefaultsAndPersists(t *testing.T) {
 	}
 }
 
+func TestLegalAndBrandSettingsDefaultsAndValidation(t *testing.T) {
+	db, svc := newTestServiceDB(t)
+	ctx := context.Background()
+	view, err := svc.Get(ctx)
+	if err != nil {
+		t.Fatalf("get defaults: %v", err)
+	}
+	defaults := DefaultSettings()
+	if view.Settings.UserAgreementURL != defaults.UserAgreementURL ||
+		view.Settings.PrivacyPolicyURL != defaults.PrivacyPolicyURL ||
+		view.Settings.LegalConsentVersion != 1 ||
+		view.Settings.BrandPrimaryColor != "#18181B" {
+		t.Fatalf("legal/theme defaults = %+v", view.Settings)
+	}
+
+	if _, err := svc.Patch(ctx, []SettingItem{
+		{Key: SettingKeyUserAgreementURL, Type: SettingTypeString, Value: " https://example.com/terms "},
+		{Key: SettingKeyPrivacyPolicyURL, Type: SettingTypeString, Value: "https://example.com/privacy"},
+		{Key: SettingKeyBrandPrimaryColor, Type: SettingTypeString, Value: "#6750a4"},
+	}, 1); err != nil {
+		t.Fatalf("patch legal/theme settings: %v", err)
+	}
+	view, err = svc.Get(ctx)
+	if err != nil {
+		t.Fatalf("get patched settings: %v", err)
+	}
+	if view.Settings.UserAgreementURL != "https://example.com/terms" ||
+		view.Settings.BrandPrimaryColor != "#6750A4" {
+		t.Fatalf("normalized settings = %+v", view.Settings)
+	}
+	if view.Settings.LegalConsentVersion != 1 {
+		t.Fatalf("legal consent version changed during link/color patch: %d", view.Settings.LegalConsentVersion)
+	}
+
+	for _, item := range []SettingItem{
+		{Key: SettingKeyUserAgreementURL, Type: SettingTypeString, Value: "/relative"},
+		{Key: SettingKeyPrivacyPolicyURL, Type: SettingTypeString, Value: "http://example.com/privacy"},
+		{Key: SettingKeyBrandPrimaryColor, Type: SettingTypeString, Value: "#12345"},
+		{Key: SettingKeyLegalConsentVersion, Type: SettingTypeInteger, Value: float64(2)},
+	} {
+		if _, err := svc.Patch(ctx, []SettingItem{item}, 1); !errors.Is(err, domain.ErrValidation) {
+			t.Errorf("invalid %s error = %v, want ErrValidation", item.Key, err)
+		}
+	}
+	_ = db
+}
+
+func TestResetLegalConsentIncrementsWithoutChangingURLs(t *testing.T) {
+	db, svc := newTestServiceDB(t)
+	ctx := context.Background()
+	if _, err := svc.Patch(ctx, []SettingItem{
+		{Key: SettingKeyUserAgreementURL, Type: SettingTypeString, Value: "https://example.com/terms"},
+		{Key: SettingKeyPrivacyPolicyURL, Type: SettingTypeString, Value: "https://example.com/privacy"},
+	}, 1); err != nil {
+		t.Fatalf("patch urls: %v", err)
+	}
+	version, err := svc.ResetLegalConsent(ctx, 7)
+	if err != nil || version != 2 {
+		t.Fatalf("reset version = %d, error = %v; want 2", version, err)
+	}
+	view, err := svc.Get(ctx)
+	if err != nil {
+		t.Fatalf("get after reset: %v", err)
+	}
+	if view.Settings.LegalConsentVersion != 2 ||
+		view.Settings.UserAgreementURL != "https://example.com/terms" ||
+		view.Settings.PrivacyPolicyURL != "https://example.com/privacy" {
+		t.Fatalf("reset changed settings = %+v", view.Settings)
+	}
+	if _, err := svc.ResetLegalConsent(ctx, 7); err != nil {
+		t.Fatalf("second reset: %v", err)
+	}
+	if got, err := svc.Get(ctx); err != nil || got.Settings.LegalConsentVersion != 3 {
+		t.Fatalf("second version = %+v, error = %v; want 3", got.Settings, err)
+	}
+	_ = db
+}
+
+func TestResetLegalConsentRejectsInvalidStoredVersion(t *testing.T) {
+	db, svc := newTestServiceDB(t)
+	ctx := context.Background()
+	if _, err := svc.Get(ctx); err != nil {
+		t.Fatalf("seed defaults: %v", err)
+	}
+	repo := repository.NewSettingsRepo(db)
+	if err := repo.Upsert(ctx, []repository.DynamicSettingRow{{
+		Key: SettingKeyLegalConsentVersion, Type: string(SettingTypeInteger),
+		Value: []byte(`9223372036854775807`), UpdatedBy: 0,
+	}}); err != nil {
+		t.Fatalf("seed overflow: %v", err)
+	}
+	svc.Invalidate()
+	if _, err := svc.ResetLegalConsent(ctx, 1); !errors.Is(err, domain.ErrValidation) {
+		t.Fatalf("overflow reset error = %v, want ErrValidation", err)
+	}
+	row, err := repo.Get(ctx, SettingKeyLegalConsentVersion)
+	if err != nil {
+		t.Fatalf("read overflow row: %v", err)
+	}
+	if string(row.Value) != `9223372036854775807` {
+		t.Fatalf("overflow row changed to %s", row.Value)
+	}
+}
+
 // TestPatchValidationErrors 验证各类非法 PATCH 输入返回参数错误且无部分写入。
 func TestPatchValidationErrors(t *testing.T) {
 	svc := newTestService(t)

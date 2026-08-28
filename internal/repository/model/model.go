@@ -237,7 +237,7 @@ type Comment struct {
 	UAOS               *string               `gorm:"column:ua_os;type:text"`
 	UADevice           *string               `gorm:"column:ua_device;type:text"`
 	IsPinned           bool                  `gorm:"column:is_pinned;not null;default:false;check:ck_comments_pinned_root,NOT is_pinned OR (parent_id IS NULL AND root_id IS NULL AND depth = 0);index:idx_comments_public,priority:3"`
-	CreatedAt          time.Time             `gorm:"column:created_at;precision:6;autoCreateTime;index:idx_comments_public,priority:4;index:idx_comments_site_status,priority:3;index:idx_comments_user,priority:2;index:idx_comments_site_parent,priority:3;index:idx_comments_site_root,priority:3"`
+	CreatedAt          time.Time             `gorm:"column:created_at;precision:6;autoCreateTime;index:idx_comments_created_at;index:idx_comments_public,priority:4;index:idx_comments_site_status,priority:3;index:idx_comments_user,priority:2;index:idx_comments_site_parent,priority:3;index:idx_comments_site_root,priority:3"`
 	UpdatedAt          time.Time             `gorm:"column:updated_at;precision:6;autoUpdateTime"`
 	PublishedAt        *time.Time            `gorm:"column:published_at;precision:6"`
 	DeletedAt          *time.Time            `gorm:"column:deleted_at;precision:6"`
