@@ -152,3 +152,28 @@ func TestValidateGravatarBaseURL(t *testing.T) {
 		}
 	}
 }
+
+func TestNormalizeHTTPSURL(t *testing.T) {
+	if got, err := NormalizeHTTPSURL(" https://example.com/terms "); err != nil || got != "https://example.com/terms" {
+		t.Fatalf("NormalizeHTTPSURL = %q, %v", got, err)
+	}
+	for _, raw := range []string{"/terms", "http://example.com/terms", "javascript:alert(1)", "https://user:pass@example.com", "https://example.com/terms\nnext"} {
+		if err := ValidateHTTPSURL(raw); !errors.Is(err, ErrInvalid) {
+			t.Errorf("ValidateHTTPSURL(%q) = %v, want ErrInvalid", raw, err)
+		}
+	}
+	if err := ValidateHTTPSURL(""); err != nil {
+		t.Fatalf("empty HTTPS URL = %v, want nil", err)
+	}
+}
+
+func TestNormalizeHexColor(t *testing.T) {
+	if got, err := NormalizeHexColor(" #6750a4 "); err != nil || got != "#6750A4" {
+		t.Fatalf("NormalizeHexColor = %q, %v", got, err)
+	}
+	for _, raw := range []string{"", "6750A4", "#12345", "#GGGGGG"} {
+		if err := ValidateHexColor(raw); !errors.Is(err, ErrInvalid) {
+			t.Errorf("ValidateHexColor(%q) = %v, want ErrInvalid", raw, err)
+		}
+	}
+}

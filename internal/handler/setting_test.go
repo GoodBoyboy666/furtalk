@@ -57,7 +57,79 @@ func newSettingsTestRouterWithProviders(t *testing.T) (*gin.Engine, *setting.Pro
 	router := gin.New()
 	router.Use(httpx.ErrorWriter(translator))
 	RegisterAdminSettings(router.Group("/api/v1/admin"), svc, providers)
+	RegisterPublicConfig(router.Group("/api/v1"), svc)
 	return router, providers
+}
+
+func TestPublicConfigIsAllowlistedAndNoStore(t *testing.T) {
+	router := newSettingsTestRouter(t)
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/config", nil)
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("GET /config = %d, body=%s", recorder.Code, recorder.Body.String())
+	}
+	if recorder.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("Cache-Control = %q, want no-store", recorder.Header().Get("Cache-Control"))
+	}
+	body := recorder.Body.String()
+	for _, forbidden := range []string{"captcha_policy", "provider", "credential_epoch", "settings"} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("public config leaked %q: %s", forbidden, body)
+		}
+	}
+	var response PublicConfigResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode public config: %v", err)
+	}
+	if response.LegalConsentVersion != 1 || response.BrandPrimaryColor != "#18181B" {
+		t.Fatalf("default public config = %+v", response)
+	}
+}
+
+func TestPublicConfigAndLegalConsentReset(t *testing.T) {
+	router := newSettingsTestRouter(t)
+	patch := httptest.NewRequest(http.MethodPatch, "/api/v1/admin/settings", strings.NewReader(
+		`{"settings":[{"key":"user_agreement_url","type":"string","value":"https://example.com/terms"},{"key":"brand_primary_color","type":"string","value":"#6750a4"}]}`))
+	patch.Header.Set("Content-Type", "application/json")
+	patchRecorder := httptest.NewRecorder()
+	router.ServeHTTP(patchRecorder, patch)
+	if patchRecorder.Code != http.StatusOK {
+		t.Fatalf("patch = %d, body=%s", patchRecorder.Code, patchRecorder.Body.String())
+	}
+	get := httptest.NewRequest(http.MethodGet, "/api/v1/config", nil)
+	getRecorder := httptest.NewRecorder()
+	router.ServeHTTP(getRecorder, get)
+	var before PublicConfigResponse
+	if err := json.Unmarshal(getRecorder.Body.Bytes(), &before); err != nil {
+		t.Fatalf("decode before reset: %v", err)
+	}
+	if before.UserAgreementURL != "https://example.com/terms" || before.BrandPrimaryColor != "#6750A4" {
+		t.Fatalf("public config after patch = %+v", before)
+	}
+
+	reset := httptest.NewRequest(http.MethodPost, "/api/v1/admin/settings/legal-consent/reset", nil)
+	resetRecorder := httptest.NewRecorder()
+	router.ServeHTTP(resetRecorder, reset)
+	if resetRecorder.Code != http.StatusOK {
+		t.Fatalf("reset = %d, body=%s", resetRecorder.Code, resetRecorder.Body.String())
+	}
+	var resetResponse LegalConsentResetResponse
+	if err := json.Unmarshal(resetRecorder.Body.Bytes(), &resetResponse); err != nil {
+		t.Fatalf("decode reset: %v", err)
+	}
+	if resetResponse.LegalConsentVersion != 2 {
+		t.Fatalf("reset response = %+v, want version 2", resetResponse)
+	}
+	getRecorder = httptest.NewRecorder()
+	router.ServeHTTP(getRecorder, get)
+	var after PublicConfigResponse
+	if err := json.Unmarshal(getRecorder.Body.Bytes(), &after); err != nil {
+		t.Fatalf("decode after reset: %v", err)
+	}
+	if after.LegalConsentVersion != 2 || after.UserAgreementURL != before.UserAgreementURL || after.BrandPrimaryColor != before.BrandPrimaryColor {
+		t.Fatalf("reset changed public config = %+v", after)
+	}
 }
 
 // TestSettingsRouteIsPatch 验证设置更新只接受 PATCH，旧 PUT 路由不存在。

@@ -46,6 +46,7 @@ func provideRegisters(s *services) ([]router.Register, error) {
 			handler.RegisterBootstrap(api, s.bootstrap)
 			handler.RegisterNotification(api, s.notifications)
 			handler.RegisterCaptchaConfig(api, s.captchaConfig)
+			handler.RegisterPublicConfig(api, s.settings)
 		},
 		func(api *gin.RouterGroup) {
 			handler.RegisterAuth(api, s.identity, csrfMiddleware)

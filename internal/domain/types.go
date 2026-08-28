@@ -363,6 +363,26 @@ type AdminFilter struct {
 	Limit    int
 }
 
+// CommentTrendRange 是评论趋势统计使用的一个 UTC 半开时间区间。
+// 日期标签由服务层按请求时区计算，仓储层只接收边界时间。
+type CommentTrendRange struct {
+	Start time.Time
+	End   time.Time
+}
+
+// CommentTrendPoint 是按请求时区日历日统计的新建评论数量。
+type CommentTrendPoint struct {
+	Date  string
+	Count int64
+}
+
+// CommentTrend 是管理概览使用的连续评论趋势数据。
+type CommentTrend struct {
+	Days     int
+	Timezone string
+	Points   []CommentTrendPoint
+}
+
 // BatchResult 是管理端批量命令的统一计数结果。
 // RequestedCount 始终等于请求中的唯一 ID 数量；ChangedCount 与
 // UnchangedCount 之和等于 RequestedCount。
@@ -494,6 +514,14 @@ type Settings struct {
 	CommentSort string `json:"comment_sort"`
 	// EmojiCatalogURL 是 widget 远程表情目录地址；空串表示不配置自定义目录。
 	EmojiCatalogURL string `json:"emoji_catalog_url"`
+	// UserAgreementURL 是登录页展示的用户协议地址；空串表示不配置。
+	UserAgreementURL string `json:"user_agreement_url"`
+	// PrivacyPolicyURL 是登录页展示的隐私政策地址；空串表示不配置。
+	PrivacyPolicyURL string `json:"privacy_policy_url"`
+	// LegalConsentVersion 是管理员主动要求重新同意时递增的协议版本。
+	LegalConsentVersion int64 `json:"legal_consent_version"`
+	// BrandPrimaryColor 是 Web 界面派生主题使用的标准 HEX 品牌主色。
+	BrandPrimaryColor string `json:"brand_primary_color"`
 }
 
 // PrivacySettings 是隐私相关的动态设置：IP 与 UA 的存储粒度。

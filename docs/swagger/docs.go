@@ -190,6 +190,58 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/admin/comments/trend": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin-comments"
+                ],
+                "summary": "获取管理员评论趋势",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "时间范围：7 或 30（默认 7）",
+                        "name": "days",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "IANA 时区名称",
+                        "name": "timezone",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "按日新建评论趋势",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.AdminCommentTrendResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数无效",
+                        "schema": {
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "需要管理员登录",
+                        "schema": {
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "权限不足",
+                        "schema": {
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/admin/comments/{comment_id}": {
             "get": {
                 "produces": [
@@ -1021,6 +1073,52 @@ const docTemplate = `{
                     },
                     "403": {
                         "description": "权限不足",
+                        "schema": {
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/admin/settings/legal-consent/reset": {
+            "post": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin-settings"
+                ],
+                "summary": "要求用户重新同意协议",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "CSRF token",
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "递增后的协议同意版本",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.LegalConsentResetResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "需要管理员登录",
+                        "schema": {
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "权限不足",
+                        "schema": {
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "协议版本无效或溢出",
                         "schema": {
                             "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
@@ -3301,6 +3399,31 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/config": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "public-config"
+                ],
+                "summary": "获取公开站点配置",
+                "responses": {
+                    "200": {
+                        "description": "协议链接、同意版本与 Web 品牌主色",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.PublicConfigResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "配置暂不可用",
+                        "schema": {
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/me": {
             "get": {
                 "produces": [
@@ -4817,6 +4940,34 @@ const docTemplate = `{
                 }
             }
         },
+        "internal_handler.AdminCommentTrendPointResponse": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                },
+                "date": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_handler.AdminCommentTrendResponse": {
+            "type": "object",
+            "properties": {
+                "days": {
+                    "type": "integer"
+                },
+                "points": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_handler.AdminCommentTrendPointResponse"
+                    }
+                },
+                "timezone": {
+                    "type": "string"
+                }
+            }
+        },
         "internal_handler.AdminCommentUpdateRequest": {
             "type": "object",
             "properties": {
@@ -5374,6 +5525,14 @@ const docTemplate = `{
                 }
             }
         },
+        "internal_handler.LegalConsentResetResponse": {
+            "type": "object",
+            "properties": {
+                "legal_consent_version": {
+                    "type": "integer"
+                }
+            }
+        },
         "internal_handler.LikeResponse": {
             "type": "object",
             "properties": {
@@ -5841,6 +6000,23 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "site_key": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_handler.PublicConfigResponse": {
+            "type": "object",
+            "properties": {
+                "brand_primary_color": {
+                    "type": "string"
+                },
+                "legal_consent_version": {
+                    "type": "integer"
+                },
+                "privacy_policy_url": {
+                    "type": "string"
+                },
+                "user_agreement_url": {
                     "type": "string"
                 }
             }
