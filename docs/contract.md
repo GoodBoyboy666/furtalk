@@ -380,7 +380,7 @@
 
 | Key | 公开配置 | 加密机密 | 判定 |
 |---|---|---|---|
-| `spam.local` | `file_path`（必填、可读词库文件）、`check_nickname`、`action` | 无 | 命中 → 按 `action` |
+| `spam.local` | `check_nickname`、`action`；词库固定读取 `configs/spam/keywords.txt` | 无 | 命中 → 按 `action` |
 | `spam.akismet` | `action` | `api_key` | true → 按 `action`；false → 继续 |
 | `spam.aliyun` | `region`（必填）、`biz_type` | `access_key_id`、`access_key_secret` | review → pending；block → spam |
 | `spam.tencent` | `region`（必填）、`biz_type` | `secret_id`、`secret_key` | Review → pending；Block → spam |
@@ -388,9 +388,10 @@
 - `action` 只允许 `pending`/`spam`，只出现在本地/Akismet 二元渠道。
 - 外部渠道 Secret 组必须完整提交或整组留空：部分提交拒绝，整组空白保留现有
   envelope；`enabled=true` 必须同时满足公开配置与 Secret 完整。
-- 本地词库只存绝对路径，不在数据库或管理 API 中传输完整词库；文件按行解析、
-  忽略空行、去空白去重、Unicode 大小写不敏感匹配，`check_nickname` 开启时昵称
-  也参与匹配；运行期按 size/mtime 热重载，失败保留最近成功快照。
+- 本地词库不在数据库或管理 API 中传输路径或完整词库，固定从
+  `configs/spam/keywords.txt` 读取；文件按行解析、忽略空行、去空白去重、Unicode
+  大小写不敏感匹配，`check_nickname` 开启时昵称也参与匹配；运行期按 size/mtime
+  热重载，失败保留最近成功快照。启用前必须创建或挂载该文件。
 - 作者当前角色为管理员时跳过全部检测器（根评论与回复均适用）；普通用户与匿名
   作者完整执行检测链。
 - 单渠道失败、超时或返回未知结果按 unknown 降级并继续后续渠道；全部渠道通过或

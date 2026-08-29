@@ -53,9 +53,8 @@ type AuthConfig struct {
 // SpamConfig 是垃圾检测 provider 的通用类型化配置，含机密。
 // 固定 provider key 决定哪些字段公开、哪些字段加密（见 spamProviderSpec）。
 type SpamConfig struct {
-	// FilePath 与 CheckNickname 是本地词库渠道字段；CheckNickname 开启时昵称也参与匹配。
-	FilePath      string `json:"file_path"`
-	CheckNickname bool   `json:"check_nickname"`
+	// CheckNickname 是本地词库渠道字段；CheckNickname 开启时昵称也参与匹配。
+	CheckNickname bool `json:"check_nickname"`
 	// Action 是本地/Akismet 二元检测器的命中动作，仅允许 pending 或 spam。
 	Action string `json:"action"`
 	// APIKey 是 Akismet 的 API key，加密保存。
@@ -189,7 +188,7 @@ var spamProviderKeys = []string{"spam.local", "spam.akismet", "spam.aliyun", "sp
 var spamProviderSpecs = map[string]spamProviderSpec{
 	"spam.local": {
 		key:          "spam.local",
-		publicFields: []string{"file_path", "check_nickname", "action"},
+		publicFields: []string{"check_nickname", "action"},
 		binary:       true,
 	},
 	"spam.akismet": {
@@ -351,7 +350,7 @@ func (s *ProviderService) List(ctx context.Context) ([]ProviderMeta, error) {
 			Kind:         domain.ProviderKindSpam,
 			Enabled:      row.Enabled,
 			Configured:   spamConfigured(row),
-			PublicConfig: publicRaw(row.PublicConfig),
+			PublicConfig: publicSpamRaw(row.ProviderKey, row.PublicConfig),
 		})
 	}
 	for _, row := range notifications {
@@ -368,27 +367,37 @@ func (s *ProviderService) List(ctx context.Context) ([]ProviderMeta, error) {
 }
 
 // spamConfigured 判定垃圾检测 provider 的已配置状态。
-// 本地词库渠道由合法 file_path 决定（其信封允许无 Secret）；
-// 外部渠道必须有非空密文。
+// 本地词库渠道由合法公开字段决定（其信封允许无 Secret）；
+// 外部渠道必须有非空密文。旧行中的 file_path 仅作为历史数据忽略。
 func spamConfigured(row repository.SpamProviderRow) bool {
 	if row.ProviderKey == "spam.local" {
-		return spamLocalFilePath(row.PublicConfig) != ""
+		var public struct {
+			Action string `json:"action"`
+		}
+		if len(row.PublicConfig) == 0 || json.Unmarshal(row.PublicConfig, &public) != nil {
+			return false
+		}
+		return validateSpamAction(public.Action) == nil
 	}
 	return len(row.SecretCiphertext) > 0
 }
 
-// spamLocalFilePath 返回本地词库公开配置中的 file_path；解析失败时返回空串。
-func spamLocalFilePath(raw []byte) string {
-	var public struct {
-		FilePath string `json:"file_path"`
+// publicSpamRaw 返回垃圾检测公开配置；固定本地词库渠道过滤旧行中的
+// file_path 字段，防止历史路径继续出现在管理 API 响应中。
+func publicSpamRaw(providerKey string, raw []byte) json.RawMessage {
+	if providerKey != "spam.local" || len(raw) == 0 {
+		return publicRaw(raw)
 	}
-	if len(raw) == 0 {
-		return ""
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return publicRaw(raw)
 	}
-	if err := json.Unmarshal(raw, &public); err != nil {
-		return ""
+	delete(fields, "file_path")
+	filtered, err := json.Marshal(fields)
+	if err != nil {
+		return publicRaw(raw)
 	}
-	return public.FilePath
+	return filtered
 }
 
 // publicRaw 返回公开配置原始 JSON；空值归一化为空对象。
@@ -557,13 +566,16 @@ func (s *ProviderService) UpsertSpam(ctx context.Context, providerKey string, en
 }
 
 // validateSpamRunnable 校验 enabled=true 的渠道确实具备运行条件：
-// 本地渠道必须有合法 file_path；外部渠道必须有可用 Secret 信封。
+// 本地渠道必须有合法公开字段；外部渠道必须有可用 Secret 信封。
 func validateSpamRunnable(providerKey string, row *repository.SpamProviderRow) error {
 	if providerKey == "spam.local" {
-		if spamLocalFilePath(row.PublicConfig) == "" {
-			return fmt.Errorf("%w: local keyword file path is required", domain.ErrValidation)
+		var public struct {
+			Action string `json:"action"`
 		}
-		return nil
+		if err := json.Unmarshal(row.PublicConfig, &public); err != nil {
+			return fmt.Errorf("%w: local keyword configuration is corrupt", domain.ErrValidation)
+		}
+		return validateSpamAction(public.Action)
 	}
 	if len(row.SecretCiphertext) == 0 {
 		return fmt.Errorf("%w: provider secret is required when enabling %q", domain.ErrValidation, providerKey)
@@ -670,7 +682,7 @@ func (s *ProviderService) splitSpamConfig(providerKey string, raw json.RawMessag
 	return public, secret, nil
 }
 
-// validateSpamConfig 校验垃圾检测 provider 的字段：二元渠道的 action、本地词库路径
+// validateSpamConfig 校验垃圾检测 provider 的字段：二元渠道的 action、本地固定词库
 // 与云渠道的 region 必填。
 func validateSpamConfig(providerKey string, spec spamProviderSpec, cfg *SpamConfig) error {
 	if spec.binary {
@@ -679,17 +691,12 @@ func validateSpamConfig(providerKey string, spec spamProviderSpec, cfg *SpamConf
 		}
 	}
 	if providerKey == "spam.local" {
-		path := strings.TrimSpace(cfg.FilePath)
-		if path == "" {
-			return fmt.Errorf("%w: local keyword file path is required", domain.ErrValidation)
-		}
-		if err := spam.ValidateKeywordFile(path); err != nil {
+		if err := spam.ValidateKeywordFile(); err != nil {
 			if errors.Is(err, spam.ErrInvalidFile) {
 				return fmt.Errorf("%w: %v", domain.ErrValidation, err)
 			}
 			return err
 		}
-		cfg.FilePath = path
 	}
 	if providerKey == "spam.aliyun" || providerKey == "spam.tencent" {
 		if strings.TrimSpace(cfg.Region) == "" {
@@ -704,10 +711,6 @@ func publicSpamConfig(cfg SpamConfig, spec spamProviderSpec) ([]byte, error) {
 	values := map[string]any{}
 	for _, field := range spec.publicFields {
 		switch field {
-		case "file_path":
-			if cfg.FilePath != "" {
-				values[field] = cfg.FilePath
-			}
 		case "check_nickname":
 			values[field] = cfg.CheckNickname
 		case "action":

@@ -61,9 +61,15 @@ var (
 	ErrInvalidFile = errors.New("spam: invalid keyword file")
 )
 
-// ValidateKeywordFile 校验词库文件路径指向服务端可读的普通 UTF-8 文件，
+// ValidateKeywordFile 校验固定词库文件是服务端可读的普通 UTF-8 文件，
 // 并在大小与行数限制内完整解析。供保存配置时的首次加载验证使用。
-func ValidateKeywordFile(path string) error {
+func ValidateKeywordFile() error {
+	return validateKeywordFile(keywordFilePath)
+}
+
+// validateKeywordFile validates a path for focused package tests. Production
+// callers must use ValidateKeywordFile, which is bound to keywordFilePath.
+func validateKeywordFile(path string) error {
 	info, err := os.Stat(path)
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrInvalidFile, err)

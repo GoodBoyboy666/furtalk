@@ -6,40 +6,61 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"furtalk/internal/domain"
+	"furtalk/internal/repository"
 )
 
-// writeKeywordFile 写入临时词库文件并返回绝对路径。
-func writeKeywordFile(t *testing.T, content string) string {
+// writeKeywordFile 在临时工作目录的固定位置写入词库文件。
+func writeKeywordFile(t *testing.T, content string) {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "keywords.txt")
+	root := t.TempDir()
+	path := filepath.Join(root, "configs", "spam", "keywords.txt")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("create keyword directory: %v", err)
+	}
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("write keyword file: %v", err)
 	}
-	return path
+	changeWorkingDir(t, root)
+}
+
+func changeWorkingDir(t *testing.T, dir string) {
+	t.Helper()
+	previous, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("get working directory: %v", err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("change working directory: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chdir(previous); err != nil {
+			t.Errorf("restore working directory: %v", err)
+		}
+	})
 }
 
 // TestUpsertSpamLocal 验证本地词库渠道：合法文件 + action + enabled 可保存，
-// 无 action、非法 action、缺失/非法文件路径均被拒绝。
+// 无 action、非法 action、未知旧路径字段均被拒绝。
 func TestUpsertSpamLocal(t *testing.T) {
 	_, providers := newTestProviderService(t)
 	ctx := context.Background()
-	path := writeKeywordFile(t, "广告\n免费领取\n")
+	writeKeywordFile(t, "广告\n免费领取\n")
 
 	cases := []struct {
 		name    string
 		config  string
 		wantErr bool
 	}{
-		{name: "valid pending", config: `{"file_path":"` + path + `","check_nickname":true,"action":"pending"}`},
-		{name: "valid spam", config: `{"file_path":"` + path + `","action":"spam"}`},
-		{name: "missing action", config: `{"file_path":"` + path + `"}`, wantErr: true},
-		{name: "bad action", config: `{"file_path":"` + path + `","action":"block"}`, wantErr: true},
-		{name: "missing file", config: `{"action":"spam"}`, wantErr: true},
-		{name: "bad file path", config: `{"file_path":"/no/such/file.txt","action":"spam"}`, wantErr: true},
-		{name: "unknown field", config: `{"file_path":"` + path + `","action":"spam","nope":1}`, wantErr: true},
+		{name: "valid pending", config: `{"check_nickname":true,"action":"pending"}`},
+		{name: "valid spam", config: `{"action":"spam"}`},
+		{name: "missing action", config: `{}`, wantErr: true},
+		{name: "bad action", config: `{"action":"block"}`, wantErr: true},
+		{name: "legacy path field", config: `{"file_path":"/no/such/file.txt","action":"spam"}`, wantErr: true},
+		{name: "unknown field", config: `{"action":"spam","nope":1}`, wantErr: true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -54,6 +75,15 @@ func TestUpsertSpamLocal(t *testing.T) {
 				t.Fatalf("UpsertSpam = %v, want nil", err)
 			}
 		})
+	}
+}
+
+// TestUpsertSpamLocalMissingFixedFile 验证保存本地渠道时固定词库缺失会拒绝配置。
+func TestUpsertSpamLocalMissingFixedFile(t *testing.T) {
+	_, providers := newTestProviderService(t)
+	changeWorkingDir(t, t.TempDir())
+	if err := providers.UpsertSpam(context.Background(), "spam.local", false, json.RawMessage(`{"action":"spam"}`)); !errors.Is(err, domain.ErrValidation) {
+		t.Fatalf("upsert local without fixed file error = %v, want ErrValidation", err)
 	}
 }
 
@@ -150,12 +180,12 @@ func TestReserveSpamKeys(t *testing.T) {
 func TestEnabledSpamProvidersOrder(t *testing.T) {
 	_, providers := newTestProviderService(t)
 	ctx := context.Background()
-	path := writeKeywordFile(t, "广告\n")
+	writeKeywordFile(t, "广告\n")
 
 	if err := providers.UpsertSpam(ctx, "spam.tencent", true, json.RawMessage(`{"region":"ap-guangzhou","secret_id":"id","secret_key":"key"}`)); err != nil {
 		t.Fatalf("upsert tencent: %v", err)
 	}
-	if err := providers.UpsertSpam(ctx, "spam.local", true, json.RawMessage(`{"file_path":"`+path+`","action":"pending"}`)); err != nil {
+	if err := providers.UpsertSpam(ctx, "spam.local", true, json.RawMessage(`{"action":"pending"}`)); err != nil {
 		t.Fatalf("upsert local: %v", err)
 	}
 	// 禁用的 akismet 不应出现。
@@ -176,13 +206,13 @@ func TestEnabledSpamProvidersOrder(t *testing.T) {
 }
 
 // TestSpamListConfigured 验证管理列表对 spam 项的 configured/enabled 投影：
-// 本地由 file_path 决定，外部由 Secret 决定。
+// 本地由公开 action 字段决定，外部由 Secret 决定。
 func TestSpamListConfigured(t *testing.T) {
 	_, providers := newTestProviderService(t)
 	ctx := context.Background()
-	path := writeKeywordFile(t, "广告\n")
+	writeKeywordFile(t, "广告\n")
 
-	if err := providers.UpsertSpam(ctx, "spam.local", true, json.RawMessage(`{"file_path":"`+path+`","action":"pending"}`)); err != nil {
+	if err := providers.UpsertSpam(ctx, "spam.local", true, json.RawMessage(`{"action":"pending"}`)); err != nil {
 		t.Fatalf("upsert local: %v", err)
 	}
 	if err := providers.UpsertSpam(ctx, "spam.akismet", false, json.RawMessage(`{"action":"spam","api_key":"k"}`)); err != nil {
@@ -207,6 +237,29 @@ func TestSpamListConfigured(t *testing.T) {
 	aliyun := findMeta(metas, "spam.aliyun")
 	if aliyun == nil || aliyun.Configured {
 		t.Fatalf("spam.aliyun meta = %+v, want unconfigured", aliyun)
+	}
+}
+
+// TestSpamListFiltersLegacyFilePath 验证旧行中的 file_path 可读但不会继续回显。
+func TestSpamListFiltersLegacyFilePath(t *testing.T) {
+	_, providers := newTestProviderService(t)
+	if err := providers.settings.UpsertSpamProvider(context.Background(), &repository.SpamProviderRow{
+		ProviderKey:  "spam.local",
+		Enabled:      true,
+		PublicConfig: []byte(`{"file_path":"/etc/passwd","check_nickname":true,"action":"pending"}`),
+	}); err != nil {
+		t.Fatalf("insert legacy local provider: %v", err)
+	}
+	metas, err := providers.List(context.Background())
+	if err != nil {
+		t.Fatalf("list providers: %v", err)
+	}
+	local := findMeta(metas, "spam.local")
+	if local == nil || !local.Configured {
+		t.Fatalf("legacy local meta = %+v, want configured", local)
+	}
+	if strings.Contains(string(local.PublicConfig), "file_path") {
+		t.Fatalf("legacy file_path leaked in public config: %s", local.PublicConfig)
 	}
 }
 

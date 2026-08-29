@@ -205,7 +205,7 @@ type SettingsPatchRequest struct {
 //   - apple：client_id（Services ID）、team_id、key_id、private_key（新建必填；编辑缺省/空值保留）
 //   - captcha：provider、site_key、secret_key、endpoint（可选；cap 必填）
 //   - spam：固定 key 为 spam.local / spam.akismet / spam.aliyun / spam.tencent，必须携带 enabled
-//   - spam.local：file_path（必填且为可读词库文件）、check_nickname、action（pending|spam）
+//   - spam.local：固定读取 configs/spam/keywords.txt；check_nickname、action（pending|spam）
 //   - spam.akismet：action（pending|spam）、api_key（新建必填；编辑留空保留）
 //   - spam.aliyun：region（必填）、biz_type（可选）、access_key_id/access_key_secret（组必填或整组空白保留）
 //   - spam.tencent：region（必填）、biz_type（可选）、secret_id/secret_key（组必填或整组空白保留）
