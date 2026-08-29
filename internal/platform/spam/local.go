@@ -18,14 +18,15 @@ import (
 
 // 词库文件与单行的大小限制。
 const (
+	// keywordFilePath is the only production keyword-file location. The
+	// application is expected to run from its project/container root.
+	keywordFilePath    = "configs/spam/keywords.txt"
 	maxKeywordFileSize = 64 << 20 // 64 MiB
 	maxKeywordLineLen  = 4000     // 与评论正文最大长度一致
 )
 
 // LocalConfig 是本地词库检测器的配置。
 type LocalConfig struct {
-	// FilePath 是词库文件的绝对路径。
-	FilePath string
 	// CheckNickname 开启时昵称也参与匹配；关闭时只检测正文。
 	CheckNickname bool
 }
@@ -35,6 +36,7 @@ type LocalConfig struct {
 type LocalMatcher struct {
 	cfg     LocalConfig
 	log     *slog.Logger
+	path    string
 	mu      sync.RWMutex
 	current *snapshot
 }
@@ -55,7 +57,14 @@ type snapshot struct {
 
 // NewLocal 构建本地词库检测器。
 func NewLocal(cfg LocalConfig, logger *slog.Logger) *LocalMatcher {
-	return &LocalMatcher{cfg: cfg, log: logging.Normalize(logger)}
+	return newLocal(keywordFilePath, cfg, logger)
+}
+
+// newLocal constructs a matcher for a path. It is intentionally private: the
+// production constructor above always passes the fixed keywordFilePath. Tests
+// use it to isolate file-system fixtures without changing the process cwd.
+func newLocal(path string, cfg LocalConfig, logger *slog.Logger) *LocalMatcher {
+	return &LocalMatcher{cfg: cfg, log: logging.Normalize(logger), path: path}
 }
 
 // Check 检测正文（开启昵称检测时还包括昵称）是否命中词库。
@@ -80,7 +89,7 @@ func (m *LocalMatcher) Check(ctx context.Context, input Input) (Result, error) {
 // reloadIfChanged 按文件签名决定是否重建词库快照。
 // 热重载失败时继续使用最近一次成功快照；从未成功加载时返回错误。
 func (m *LocalMatcher) reloadIfChanged() (*snapshot, error) {
-	info, err := os.Stat(m.cfg.FilePath)
+	info, err := os.Stat(m.path)
 	if err != nil {
 		m.mu.RLock()
 		snap := m.current
@@ -95,10 +104,10 @@ func (m *LocalMatcher) reloadIfChanged() (*snapshot, error) {
 	m.mu.RLock()
 	current := m.current
 	m.mu.RUnlock()
-	if current != nil && current.path == m.cfg.FilePath && current.size == sig.size && current.mtimeNS == sig.mtimeNS {
+	if current != nil && current.path == m.path && current.size == sig.size && current.mtimeNS == sig.mtimeNS {
 		return current, nil
 	}
-	patterns, err := loadKeywordFile(m.cfg.FilePath, sig)
+	patterns, err := loadKeywordFile(m.path, sig)
 	if err != nil {
 		m.mu.RLock()
 		old := m.current
@@ -109,7 +118,7 @@ func (m *LocalMatcher) reloadIfChanged() (*snapshot, error) {
 		}
 		return nil, fmt.Errorf("%w: reload keyword file: %v", ErrUnavailable, err)
 	}
-	next := &snapshot{path: m.cfg.FilePath, size: sig.size, mtimeNS: sig.mtimeNS, matcher: buildAC(patterns)}
+	next := &snapshot{path: m.path, size: sig.size, mtimeNS: sig.mtimeNS, matcher: buildAC(patterns)}
 	m.mu.Lock()
 	m.current = next
 	m.mu.Unlock()

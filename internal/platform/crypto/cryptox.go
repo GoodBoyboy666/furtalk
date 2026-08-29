@@ -72,11 +72,10 @@ func Encrypt(key []byte, keyVersion byte, plaintext []byte) ([]byte, error) {
 	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
 		return nil, fmt.Errorf("cryptox: generate nonce: %w", err)
 	}
-	envelope := make([]byte, 0, envelopeKeyVersionLength+gcmNonceLength+len(plaintext)+gcmOverheadLength)
-	envelope = append(envelope, keyVersion)
-	envelope = append(envelope, nonce...)
-	envelope = aead.Seal(envelope, nonce, plaintext, nil)
-	return envelope, nil
+	envelope := make([]byte, envelopeKeyVersionLength+gcmNonceLength)
+	envelope[0] = keyVersion
+	copy(envelope[envelopeKeyVersionLength:], nonce)
+	return aead.Seal(envelope, nonce, plaintext, nil), nil
 }
 
 // Decrypt 打开信封并返回明文。

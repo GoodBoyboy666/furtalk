@@ -84,20 +84,36 @@ func (blockedExternalTransport) RoundTrip(req *http.Request) (*http.Response, er
 // writeLocalFile 写入临时词库文件。
 func writeLocalFile(t *testing.T, keywords string) string {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "words.txt")
+	root := t.TempDir()
+	path := filepath.Join(root, "configs", "spam", "keywords.txt")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("create keyword directory: %v", err)
+	}
 	if err := os.WriteFile(path, []byte(keywords), 0o644); err != nil {
 		t.Fatalf("write keyword file: %v", err)
 	}
+	previous, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("get working directory: %v", err)
+	}
+	if err := os.Chdir(root); err != nil {
+		t.Fatalf("change working directory: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chdir(previous); err != nil {
+			t.Errorf("restore working directory: %v", err)
+		}
+	})
 	return path
 }
 
 // localConfig 构造命中指定关键词的本地渠道配置。
 func localConfig(t *testing.T, keywords, action string) SpamProviderConfig {
+	writeLocalFile(t, keywords)
 	return SpamProviderConfig{
 		ProviderKey: "spam.local",
 		Enabled:     true,
 		Configured:  true,
-		FilePath:    writeLocalFile(t, keywords),
 		Action:      action,
 	}
 }
@@ -275,7 +291,7 @@ func (f *fixedTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 func TestSpamGatewayUnknownContinues(t *testing.T) {
 	tr := &recordingTransport{}
 	g := newGateway(tr,
-		SpamProviderConfig{ProviderKey: "spam.local", Enabled: true, Configured: true, FilePath: "/no/such/file", Action: "spam"},
+		SpamProviderConfig{ProviderKey: "spam.local", Enabled: true, Configured: true, Action: "spam"},
 		SpamProviderConfig{ProviderKey: "spam.akismet", Enabled: true, Action: "spam", APIKey: "k"},
 	)
 	if got := checkSpam(g, "普通内容"); got != nil {
@@ -290,10 +306,11 @@ func TestSpamGatewayUnknownContinues(t *testing.T) {
 
 // TestSpamGatewayOrderDoesNotDependOnReader 验证 reader 乱序返回时仍按固定顺序执行。
 func TestSpamGatewayOrderDoesNotDependOnReader(t *testing.T) {
+	writeLocalFile(t, "广告\n")
 	g := NewSpamGateway(fakeSpamReader{providers: []SpamProviderConfig{
 		{ProviderKey: "spam.tencent", Enabled: true, Region: "ap-guangzhou", SecretID: "i", SecretKey: "s"},
 		{ProviderKey: "spam.aliyun", Enabled: true, Region: "cn-shanghai", AccessKeyID: "i", AccessKeySecret: "s"},
-		{ProviderKey: "spam.local", Enabled: true, FilePath: writeLocalFile(t, "广告\n"), Action: "pending"},
+		{ProviderKey: "spam.local", Enabled: true, Action: "pending"},
 	}}, nil)
 	got := checkSpam(g, "有广告")
 	if got == nil || *got != domain.CommentStatusPending {

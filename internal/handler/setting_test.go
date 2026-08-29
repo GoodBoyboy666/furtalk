@@ -7,7 +7,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -20,6 +19,30 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
+
+func useFixedSpamKeywordFile(t *testing.T, content string) {
+	t.Helper()
+	root := t.TempDir()
+	path := filepath.Join(root, "configs", "spam", "keywords.txt")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("create fixed keyword directory: %v", err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write fixed keyword file: %v", err)
+	}
+	previous, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("get working directory: %v", err)
+	}
+	if err := os.Chdir(root); err != nil {
+		t.Fatalf("change working directory: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chdir(previous); err != nil {
+			t.Errorf("restore working directory: %v", err)
+		}
+	})
+}
 
 // newSettingsTestRouter 构建挂载设置路由的测试引擎，provider 服务可传 nil。
 func newSettingsTestRouter(t *testing.T) *gin.Engine {
@@ -315,7 +338,7 @@ func TestAdminProviderSpamRequiresEnabled(t *testing.T) {
 	router := newSettingsTestRouter(t)
 
 	request := httptest.NewRequest(http.MethodPut, "/api/v1/admin/providers/spam.local", strings.NewReader(
-		`{"kind":"spam","config":{"file_path":"/tmp/nope.txt","action":"pending"}}`))
+		`{"kind":"spam","config":{"action":"pending"}}`))
 	request.Header.Set("Content-Type", "application/json")
 	recorder := httptest.NewRecorder()
 	router.ServeHTTP(recorder, request)
@@ -327,13 +350,10 @@ func TestAdminProviderSpamRequiresEnabled(t *testing.T) {
 // TestAdminProviderSpamLocalRoundTrip 验证本地词库渠道可保存、列表返回 configured/enabled，
 // 且响应不含机密或正文。
 func TestAdminProviderSpamLocalRoundTrip(t *testing.T) {
+	useFixedSpamKeywordFile(t, "广告\n")
 	router := newSettingsTestRouter(t)
-	path := filepath.Join(t.TempDir(), "words.txt")
-	if err := os.WriteFile(path, []byte("广告\n"), 0o644); err != nil {
-		t.Fatalf("write words: %v", err)
-	}
 
-	payload := `{"kind":"spam","enabled":true,"config":{"file_path":` + strconv.Quote(path) + `,"check_nickname":true,"action":"pending"}}`
+	payload := `{"kind":"spam","enabled":true,"config":{"check_nickname":true,"action":"pending"}}`
 	request := httptest.NewRequest(http.MethodPut, "/api/v1/admin/providers/spam.local", strings.NewReader(payload))
 	request.Header.Set("Content-Type", "application/json")
 	recorder := httptest.NewRecorder()

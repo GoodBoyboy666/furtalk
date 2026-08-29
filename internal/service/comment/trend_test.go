@@ -99,6 +99,13 @@ func TestAdminCommentTrendHandlesDSTAndValidation(t *testing.T) {
 	if trend.Points[5].Date != "2026-03-07" || trend.Points[5].Count != 1 {
 		t.Fatalf("pre-DST day = %+v, want one comment before local midnight", trend.Points[5])
 	}
+	trend30, err := svc.AdminCommentTrend(context.Background(), 30, "America/New_York")
+	if err != nil {
+		t.Fatalf("30-day trend: %v", err)
+	}
+	if len(trend30.Points) != 30 || trend30.Days != 30 {
+		t.Fatalf("30-day trend points = %d, days = %d; want 30/30", len(trend30.Points), trend30.Days)
+	}
 	if _, err := svc.AdminCommentTrend(context.Background(), 6, "UTC"); !errors.Is(err, domain.ErrValidation) {
 		t.Fatalf("invalid days error = %v, want validation", err)
 	}

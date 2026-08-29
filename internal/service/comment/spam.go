@@ -49,7 +49,6 @@ type SpamProviderConfig struct {
 	ProviderKey     string
 	Enabled         bool
 	Configured      bool
-	FilePath        string
 	CheckNickname   bool
 	Action          string
 	APIKey          string
@@ -167,7 +166,6 @@ func (g *SpamGateway) detectorFor(cfg SpamProviderConfig) (spam.Detector, error)
 	switch cfg.ProviderKey {
 	case "spam.local":
 		detector = spam.NewLocal(spam.LocalConfig{
-			FilePath:      cfg.FilePath,
 			CheckNickname: cfg.CheckNickname,
 		}, g.log)
 	case "spam.akismet":
@@ -195,8 +193,8 @@ func (g *SpamGateway) detectorFor(cfg SpamProviderConfig) (spam.Detector, error)
 
 // spamFingerprint 生成不可逆的配置指纹，覆盖全部渠道相关字段。
 func spamFingerprint(cfg SpamProviderConfig) string {
-	return fmt.Sprintf("%s\x00%s\x00%t\x00%s\x00%s\x00%s\x00%s\x00%s\x00%s\x00%s\x00%s",
-		cfg.ProviderKey, cfg.FilePath, cfg.CheckNickname, cfg.Action,
+	return fmt.Sprintf("%s\x00%t\x00%s\x00%s\x00%s\x00%s\x00%s\x00%s\x00%s\x00%s",
+		cfg.ProviderKey, cfg.CheckNickname, cfg.Action,
 		cfg.APIKey, cfg.Region, cfg.BizType,
 		cfg.AccessKeyID, cfg.AccessKeySecret, cfg.SecretID, cfg.SecretKey)
 }

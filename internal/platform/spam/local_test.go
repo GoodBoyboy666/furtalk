@@ -18,10 +18,49 @@ func writeFile(t *testing.T, content string) string {
 	return path
 }
 
+func newTestLocal(path string, checkNickname bool) *LocalMatcher {
+	return newLocal(path, LocalConfig{CheckNickname: checkNickname}, nil)
+}
+
+func useFixedKeywordFile(t *testing.T, content string) {
+	t.Helper()
+	root := t.TempDir()
+	path := filepath.Join(root, keywordFilePath)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("create fixed keyword directory: %v", err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write fixed keyword file: %v", err)
+	}
+	previous, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("get working directory: %v", err)
+	}
+	if err := os.Chdir(root); err != nil {
+		t.Fatalf("change working directory: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chdir(previous); err != nil {
+			t.Errorf("restore working directory: %v", err)
+		}
+	})
+}
+
+func TestNewLocalUsesFixedKeywordFile(t *testing.T) {
+	useFixedKeywordFile(t, "广告\n")
+	got, err := NewLocal(LocalConfig{}, nil).Check(context.Background(), Input{Body: "有广告"})
+	if err != nil {
+		t.Fatalf("check fixed keyword file: %v", err)
+	}
+	if got != ResultBlock {
+		t.Fatalf("fixed keyword result = %v, want block", got)
+	}
+}
+
 // TestLocalMatcherMatches 验证正文命中、昵称开关与大小写/Unicode 不敏感匹配。
 func TestLocalMatcherMatches(t *testing.T) {
 	path := writeFile(t, "广告\n免费领取\nLOAN\n")
-	matcher := NewLocal(LocalConfig{FilePath: path, CheckNickname: true}, nil)
+	matcher := newTestLocal(path, true)
 	ctx := context.Background()
 
 	cases := []struct {
@@ -49,7 +88,7 @@ func TestLocalMatcherMatches(t *testing.T) {
 	}
 
 	// 关闭昵称检测：昵称命中不影响结果。
-	matcherNickOff := NewLocal(LocalConfig{FilePath: path, CheckNickname: false}, nil)
+	matcherNickOff := newTestLocal(path, false)
 	got, err := matcherNickOff.Check(ctx, Input{Body: "正常内容", Nickname: "广告"})
 	if err != nil {
 		t.Fatalf("check nickname off: %v", err)
@@ -63,7 +102,7 @@ func TestLocalMatcherMatches(t *testing.T) {
 func TestLocalMatcherUnicodeFold(t *testing.T) {
 	// 全角字符与大小写变体都应命中。
 	path := writeFile(t, "ｆｒｅｅ\n")
-	matcher := NewLocal(LocalConfig{FilePath: path, CheckNickname: false}, nil)
+	matcher := newTestLocal(path, false)
 	got, err := matcher.Check(context.Background(), Input{Body: "get free stuff"})
 	if err != nil {
 		t.Fatalf("check: %v", err)
@@ -79,7 +118,7 @@ func TestLocalMatcherHotReload(t *testing.T) {
 	if err := os.WriteFile(path, []byte("广告\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	matcher := NewLocal(LocalConfig{FilePath: path, CheckNickname: false}, nil)
+	matcher := newTestLocal(path, false)
 	ctx := context.Background()
 
 	if got, _ := matcher.Check(ctx, Input{Body: "有广告"}); got != ResultBlock {
@@ -106,7 +145,7 @@ func TestLocalMatcherHotReload(t *testing.T) {
 
 // TestLocalMatcherNeverLoaded 验证从未成功加载且文件缺失时按 unknown 降级（返回错误）。
 func TestLocalMatcherNeverLoaded(t *testing.T) {
-	matcher := NewLocal(LocalConfig{FilePath: "/no/such/file.txt", CheckNickname: false}, nil)
+	matcher := newTestLocal("/no/such/file.txt", false)
 	_, err := matcher.Check(context.Background(), Input{Body: "x"})
 	if err == nil {
 		t.Fatal("check on missing file = nil error, want error")
@@ -116,7 +155,7 @@ func TestLocalMatcherNeverLoaded(t *testing.T) {
 // TestLocalMatcherEmptyFile 验证空词库返回 pass。
 func TestLocalMatcherEmptyFile(t *testing.T) {
 	path := writeFile(t, "\n  \n")
-	matcher := NewLocal(LocalConfig{FilePath: path, CheckNickname: false}, nil)
+	matcher := newTestLocal(path, false)
 	got, err := matcher.Check(context.Background(), Input{Body: "广告"})
 	if err != nil {
 		t.Fatalf("check: %v", err)
@@ -128,14 +167,18 @@ func TestLocalMatcherEmptyFile(t *testing.T) {
 
 // TestValidateKeywordFile 验证文件校验：普通可读文件通过，缺失/非法 UTF-8 拒绝。
 func TestValidateKeywordFile(t *testing.T) {
+	useFixedKeywordFile(t, "广告\n")
+	if err := ValidateKeywordFile(); err != nil {
+		t.Fatalf("fixed valid file error = %v, want nil", err)
+	}
 	path := writeFile(t, "广告\n")
-	if err := ValidateKeywordFile(path); err != nil {
+	if err := validateKeywordFile(path); err != nil {
 		t.Fatalf("valid file error = %v, want nil", err)
 	}
-	if err := ValidateKeywordFile("/no/such/file"); err == nil {
+	if err := validateKeywordFile("/no/such/file"); err == nil {
 		t.Fatal("missing file error = nil, want error")
 	}
-	if err := ValidateKeywordFile(t.TempDir()); err == nil {
+	if err := validateKeywordFile(t.TempDir()); err == nil {
 		t.Fatal("directory error = nil, want error")
 	}
 }

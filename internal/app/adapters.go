@@ -144,7 +144,6 @@ func (a spamProviderReader) EnabledSpamProviders(ctx context.Context) ([]comment
 			ProviderKey:     p.ProviderKey,
 			Enabled:         p.Enabled,
 			Configured:      p.Configured,
-			FilePath:        p.Config.FilePath,
 			CheckNickname:   p.Config.CheckNickname,
 			Action:          p.Config.Action,
 			APIKey:          p.Config.APIKey,

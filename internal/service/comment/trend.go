@@ -10,6 +10,8 @@ import (
 	"furtalk/internal/domain"
 )
 
+const maxCommentTrendDays = 30
+
 // AdminCommentTrend 返回管理概览使用的按日新建评论趋势。
 // timezone 必须是有效的 IANA 时区名，统计包含当天并按本地午夜划分区间。
 func (s *Service) AdminCommentTrend(ctx context.Context, days int, timezone string) (*domain.CommentTrend, error) {
@@ -27,25 +29,25 @@ func (s *Service) AdminCommentTrend(ctx context.Context, days int, timezone stri
 
 	localNow := s.now().UTC().In(location)
 	today := time.Date(localNow.Year(), localNow.Month(), localNow.Day(), 0, 0, 0, 0, location)
-	ranges := make([]domain.CommentTrendRange, days)
-	for i := range ranges {
+	ranges := make([]domain.CommentTrendRange, 0, maxCommentTrendDays)
+	for i := 0; i < days; i++ {
 		date := today.AddDate(0, 0, i-(days-1))
-		ranges[i] = domain.CommentTrendRange{
+		ranges = append(ranges, domain.CommentTrendRange{
 			Start: date,
 			End:   date.AddDate(0, 0, 1),
-		}
+		})
 	}
 	counts, err := s.comments.CountCreatedByRanges(ctx, ranges)
 	if err != nil {
 		return nil, err
 	}
-	points := make([]domain.CommentTrendPoint, days)
-	for i := range points {
+	points := make([]domain.CommentTrendPoint, 0, maxCommentTrendDays)
+	for i := 0; i < days; i++ {
 		date := today.AddDate(0, 0, i-(days-1))
-		points[i] = domain.CommentTrendPoint{
+		points = append(points, domain.CommentTrendPoint{
 			Date:  date.Format("2006-01-02"),
 			Count: counts[i],
-		}
+		})
 	}
 	return &domain.CommentTrend{Days: days, Timezone: timezone, Points: points}, nil
 }

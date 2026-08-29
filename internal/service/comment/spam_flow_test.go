@@ -3,8 +3,6 @@ package comment
 import (
 	"context"
 	"net"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -71,16 +69,6 @@ func seedSpamFlowFixture(t *testing.T, db *gorm.DB) spamFlowFixture {
 	return spamFlowFixture{SiteID: site.ID, UserID: user.ID, AdminID: admin.ID, ThreadID: thread.ID}
 }
 
-// writeSpamKeywords 写入临时词库文件。
-func writeSpamKeywords(t *testing.T, keywords string) string {
-	t.Helper()
-	path := filepath.Join(t.TempDir(), "spam-words.txt")
-	if err := os.WriteFile(path, []byte(keywords), 0o644); err != nil {
-		t.Fatalf("write keywords: %v", err)
-	}
-	return path
-}
-
 // newSpamFlowWidgetService 装配匿名模式下带垃圾检测网关的 widget 服务。
 func newSpamFlowWidgetService(t *testing.T, db *gorm.DB, fx spamFlowFixture, reader *countingSpamReader) (*Service, *recordingTxRunner) {
 	t.Helper()
@@ -121,8 +109,9 @@ func widgetCredentialFor(userID, siteID, epoch int64) WidgetCredential {
 func TestWidgetCreateSpamHit(t *testing.T) {
 	db := newReplyTestDB(t)
 	fx := seedSpamFlowFixture(t, db)
+	writeLocalFile(t, "广告\n")
 	reader := &countingSpamReader{providers: []SpamProviderConfig{
-		{ProviderKey: "spam.local", Enabled: true, Configured: true, FilePath: writeSpamKeywords(t, "广告\n"), Action: "pending"},
+		{ProviderKey: "spam.local", Enabled: true, Configured: true, Action: "pending"},
 	}}
 	svc, _ := newSpamFlowWidgetService(t, db, fx, reader)
 
@@ -145,8 +134,9 @@ func TestWidgetCreateSpamHit(t *testing.T) {
 	}
 
 	// spam action 命中时状态为 spam。
+	writeLocalFile(t, "广告\n")
 	reader2 := &countingSpamReader{providers: []SpamProviderConfig{
-		{ProviderKey: "spam.local", Enabled: true, Configured: true, FilePath: writeSpamKeywords(t, "广告\n"), Action: "spam"},
+		{ProviderKey: "spam.local", Enabled: true, Configured: true, Action: "spam"},
 	}}
 	svc2, _ := newSpamFlowWidgetService(t, db, fx, reader2)
 	created2, err := svc2.Create(context.Background(), CreateInput{
@@ -168,8 +158,9 @@ func TestWidgetCreateSpamHit(t *testing.T) {
 func TestWidgetCreateSpamPass(t *testing.T) {
 	db := newReplyTestDB(t)
 	fx := seedSpamFlowFixture(t, db)
+	writeLocalFile(t, "广告\n")
 	reader := &countingSpamReader{providers: []SpamProviderConfig{
-		{ProviderKey: "spam.local", Enabled: true, Configured: true, FilePath: writeSpamKeywords(t, "广告\n"), Action: "spam"},
+		{ProviderKey: "spam.local", Enabled: true, Configured: true, Action: "spam"},
 	}}
 	svc, _ := newSpamFlowWidgetService(t, db, fx, reader)
 
@@ -192,8 +183,9 @@ func TestWidgetCreateSpamPass(t *testing.T) {
 func TestWidgetCreateAdminBypass(t *testing.T) {
 	db := newReplyTestDB(t)
 	fx := seedSpamFlowFixture(t, db)
+	writeLocalFile(t, "广告\n")
 	reader := &countingSpamReader{providers: []SpamProviderConfig{
-		{ProviderKey: "spam.local", Enabled: true, Configured: true, FilePath: writeSpamKeywords(t, "广告\n"), Action: "spam"},
+		{ProviderKey: "spam.local", Enabled: true, Configured: true, Action: "spam"},
 	}}
 	svc, _ := newSpamFlowWidgetService(t, db, fx, reader)
 
@@ -231,8 +223,9 @@ func TestFirstPartyReplySpam(t *testing.T) {
 	}
 
 	// 普通用户回复命中词库 → pending。
+	writeLocalFile(t, "广告\n")
 	reader := &countingSpamReader{providers: []SpamProviderConfig{
-		{ProviderKey: "spam.local", Enabled: true, Configured: true, FilePath: writeSpamKeywords(t, "广告\n"), Action: "pending"},
+		{ProviderKey: "spam.local", Enabled: true, Configured: true, Action: "pending"},
 	}}
 	pol := domain.CommentPolicy{
 		Mode: domain.CommentModeAuthenticated, Moderation: domain.ModerationDirect,
@@ -265,8 +258,9 @@ func TestFirstPartyReplySpam(t *testing.T) {
 	}
 
 	// 管理员回复 → 绕过检测，直接发布。
+	writeLocalFile(t, "广告\n")
 	reader2 := &countingSpamReader{providers: []SpamProviderConfig{
-		{ProviderKey: "spam.local", Enabled: true, Configured: true, FilePath: writeSpamKeywords(t, "广告\n"), Action: "spam"},
+		{ProviderKey: "spam.local", Enabled: true, Configured: true, Action: "spam"},
 	}}
 	svc2 := NewService(Dependencies{
 		TxRunner: gormtx.NewRunner(db),
