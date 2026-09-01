@@ -1,12 +1,16 @@
 package setting
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"furtalk/internal/domain"
+	cryptox "furtalk/internal/platform/crypto"
+	"furtalk/internal/platform/logging"
 	"furtalk/internal/repository"
 )
 
@@ -191,6 +195,45 @@ func TestNotificationCorruptSecret(t *testing.T) {
 	// 已启用列表遇到损坏配置 fail closed。
 	if _, err := providers.EnabledNotificationProviders(ctx); !errors.Is(err, domain.ErrSecretCorrupt) {
 		t.Fatalf("enabled list error = %v, want ErrSecretCorrupt", err)
+	}
+}
+
+func TestProviderSecretsUseV2AndRejectV1AtRuntime(t *testing.T) {
+	_, providers := newTestProviderService(t)
+	ctx := context.Background()
+	if err := providers.UpsertNotification(ctx, "notification.telegram", true, json.RawMessage("{\"bot_token\":\"token\",\"chat_id\":\"123\"}")); err != nil {
+		t.Fatalf("upsert: %v", err)
+	}
+	rows, err := providers.settings.ListNotificationProviders(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rows[0].SecretKeyVersion != int(cryptox.ProviderEnvelopeVersion) {
+		t.Fatalf("new envelope version = %d, want %d", rows[0].SecretKeyVersion, cryptox.ProviderEnvelopeVersion)
+	}
+
+	legacyKey := []byte("test-master-key-0123456789abcdef")
+	envelope, err := cryptox.Encrypt(legacyKey, 1, []byte("{\"bot_token\":\"legacy-token\",\"chat_id\":\"123\"}"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := providers.settings.UpsertNotificationProvider(ctx, &repository.NotificationProviderRow{
+		ProviderKey: "notification.telegram", Enabled: true, PublicConfig: []byte("{}"),
+		SecretKeyVersion: 1, SecretNonce: envelope[1:13], SecretCiphertext: envelope[13:],
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var logs bytes.Buffer
+	providers.log = logging.New(&logs)
+	if _, err := providers.NotificationProvider(ctx, "notification.telegram"); !errors.Is(err, domain.ErrSecretCorrupt) {
+		t.Fatalf("v1 runtime read error = %v, want ErrSecretCorrupt", err)
+	}
+	providers.AuditSecrets(ctx)
+	if !strings.Contains(logs.String(), "startup secret audit") || !strings.Contains(logs.String(), "unsupported_versions=1") {
+		t.Fatalf("audit warning = %q", logs.String())
+	}
+	if strings.Contains(logs.String(), "legacy-token") {
+		t.Fatalf("warning leaked secret: %q", logs.String())
 	}
 }
 

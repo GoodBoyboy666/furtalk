@@ -57,6 +57,9 @@ func DefaultPolicies() map[string]Config {
 const (
 	idleTimeout   = 10 * time.Minute
 	cleanupPeriod = 1 * time.Minute
+
+	// DefaultBucketCapacity bounds the subjects retained by every limiter.
+	DefaultBucketCapacity = 10_000
 )
 
 type bucket struct {
@@ -66,11 +69,12 @@ type bucket struct {
 
 // Limiter 是每键令牌桶，可安全并发使用。
 type Limiter struct {
-	rate    float64 // 每秒补充的令牌数
-	burst   int     // 可累积的最大令牌数
-	mu      sync.Mutex
-	buckets map[string]*bucket
-	now     func() time.Time
+	rate     float64 // 每秒补充的令牌数
+	burst    int     // 可累积的最大令牌数
+	capacity int
+	mu       sync.Mutex
+	buckets  map[string]*bucket
+	now      func() time.Time
 }
 
 // PolicyRegistry is an immutable collection of independent token buckets.
@@ -193,11 +197,20 @@ func NewFromConfig(cfg Config) *Limiter {
 // New 构建一个限流器，每秒补充 rate 个令牌，上限为 burst 容量。
 // Rate 与 burst 必须为正数。
 func New(rate float64, burst int) *Limiter {
+	return NewWithCapacity(rate, burst, DefaultBucketCapacity)
+}
+
+// NewWithCapacity 构建带显式 subject 容量的限流器，供测试和内部受控场景使用。
+func NewWithCapacity(rate float64, burst, capacity int) *Limiter {
+	if capacity <= 0 {
+		capacity = DefaultBucketCapacity
+	}
 	return &Limiter{
-		rate:    rate,
-		burst:   burst,
-		buckets: make(map[string]*bucket),
-		now:     time.Now,
+		rate:     rate,
+		burst:    burst,
+		capacity: capacity,
+		buckets:  make(map[string]*bucket),
+		now:      time.Now,
 	}
 }
 
@@ -213,12 +226,16 @@ func (l *Limiter) AllowN(key string, n int) bool {
 	if n <= 0 {
 		return true
 	}
+	key = normalizeSubject(key)
 	now := l.now()
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
 	b, ok := l.buckets[key]
 	if !ok {
+		if len(l.buckets) >= l.capacity {
+			return false
+		}
 		b = &bucket{tokens: float64(l.burst), last: now}
 		l.buckets[key] = b
 	}

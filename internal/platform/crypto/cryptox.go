@@ -9,6 +9,7 @@ package cryptox
 import (
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/hkdf"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
@@ -23,15 +24,42 @@ const (
 	envelopeKeyVersionLength = 1
 	gcmNonceLength           = 12
 	gcmOverheadLength        = 16
-	minimumKeyLength         = 32
+	derivedKeyLength         = 32
+	minimumSourceKeyLength   = 32
+
+	// ProviderEnvelopeVersion is the current provider-secret envelope format.
+	ProviderEnvelopeVersion byte = 2
+	// ProviderKeyDerivationInfo separates provider encryption from other uses of
+	// the configured tokens secret and is part of the persisted v2 contract.
+	ProviderKeyDerivationInfo = "furtalk/provider-secrets/aes-256-gcm/v2"
 )
 
 var (
 	// ErrBadEnvelope 在信封无法解析，或嵌入的 key version 与当前主密钥版本不匹配时返回。
 	ErrBadEnvelope = errors.New("cryptox: invalid secret envelope")
-	// ErrKeyLength 在密钥长度不足 32 字节时返回。
-	ErrKeyLength = errors.New("cryptox: key must be at least 32 bytes")
+	// ErrKeyLength 在 AES-256 密钥不是正好 32 字节时返回。
+	ErrKeyLength = errors.New("cryptox: AES-256 key must be exactly 32 bytes")
+	// ErrSourceKeyLength 在 KDF 输入不足 32 字节时返回。
+	ErrSourceKeyLength = errors.New("cryptox: source key must be at least 32 bytes")
 )
+
+// DeriveKey 使用 HKDF-SHA-256 从 raw 派生固定长度密钥。
+// info 是用途与版本隔离标签；salt 故意为空，因为 raw 已是高熵机器密钥。
+func DeriveKey(raw []byte, info string) ([]byte, error) {
+	if len(raw) < minimumSourceKeyLength {
+		return nil, ErrSourceKeyLength
+	}
+	key, err := hkdf.Key(sha256.New, raw, nil, info, derivedKeyLength)
+	if err != nil {
+		return nil, fmt.Errorf("cryptox: derive key: %w", err)
+	}
+	return key, nil
+}
+
+// DeriveProviderKey derives the AES-256 key used by provider-secret envelope v2.
+func DeriveProviderKey(raw []byte) ([]byte, error) {
+	return DeriveKey(raw, ProviderKeyDerivationInfo)
+}
 
 // RandomBytes 返回 n 个密码学安全的随机字节。
 func RandomBytes(n int) ([]byte, error) {
@@ -58,7 +86,7 @@ func SHA256Hex(raw []byte) string {
 }
 
 // Encrypt 使用新的随机 nonce 以 AES-256-GCM 密封明文，并返回首字节携带给定 key version 的信封。
-// 密钥必须至少 32 字节。
+// 密钥必须正好 32 字节。
 func Encrypt(key []byte, keyVersion byte, plaintext []byte) ([]byte, error) {
 	block, err := newBlock(key)
 	if err != nil {
@@ -106,7 +134,7 @@ func Decrypt(key []byte, keyVersion byte, envelope []byte) ([]byte, error) {
 }
 
 func newBlock(key []byte) (cipher.Block, error) {
-	if len(key) < minimumKeyLength {
+	if len(key) != derivedKeyLength {
 		return nil, ErrKeyLength
 	}
 	block, err := aes.NewCipher(key)

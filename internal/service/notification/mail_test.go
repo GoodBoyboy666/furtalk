@@ -1,6 +1,7 @@
 package notification
 
 import (
+	"bytes"
 	"context"
 	"path/filepath"
 	"strconv"
@@ -11,6 +12,7 @@ import (
 	"furtalk/internal/domain"
 	"furtalk/internal/platform/database"
 	"furtalk/internal/platform/gormtx"
+	"furtalk/internal/platform/logging"
 	"furtalk/internal/platform/mailer"
 	"furtalk/internal/repository"
 	"furtalk/internal/repository/model"
@@ -863,6 +865,48 @@ func TestHandleCreatedRepliesOffSkipsReplyToNormalParent(t *testing.T) {
 	}
 	if mailer.messages[0].To != "admin@example.com" || mailer.messages[0].Subject != "新评论" {
 		t.Fatalf("message = %+v, want admin moderation only", mailer.messages[0])
+	}
+}
+
+func TestModerationRecipientsAreCappedAfterExclusions(t *testing.T) {
+	db, svc, captured, _, _ := newNotificationHarness(t)
+	fx := seedNotificationData(t, db)
+	users := repository.NewUserRepo(db)
+	for i := 0; i < 101; i++ {
+		admin := &domain.User{
+			Email:           "admin-" + strconv.Itoa(i) + "@example.com",
+			EmailNormalized: "admin-" + strconv.Itoa(i) + "@example.com",
+			Nickname:        "admin",
+			Role:            domain.RoleAdmin,
+			Status:          domain.UserStatusActive,
+		}
+		if err := users.Create(context.Background(), admin); err != nil {
+			t.Fatalf("create admin %d: %v", i, err)
+		}
+	}
+	var logs bytes.Buffer
+	svc.log = logging.New(&logs)
+
+	svc.handle(context.Background(), domain.CommentEvent{
+		Type: domain.TypeCommentCreated, SiteID: fx.SiteID, ThreadID: fx.ThreadID,
+		CommentID: fx.CommentID, UserID: fx.AuthorID,
+	})
+
+	moderationCount := 0
+	for _, message := range captured.messages {
+		if message.Subject == "新评论" {
+			moderationCount++
+		}
+	}
+	if moderationCount != mailRecipientLimit {
+		t.Fatalf("moderation messages = %d, want %d", moderationCount, mailRecipientLimit)
+	}
+	if !strings.Contains(logs.String(), "moderation recipients truncated") ||
+		!strings.Contains(logs.String(), "dropped_count=2") {
+		t.Fatalf("truncation warning = %q", logs.String())
+	}
+	if strings.Contains(logs.String(), "admin-") || strings.Contains(logs.String(), "@example.com") {
+		t.Fatalf("truncation warning contains recipient PII: %q", logs.String())
 	}
 }
 

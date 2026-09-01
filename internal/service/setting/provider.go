@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/url"
 	"sort"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"furtalk/internal/domain"
 	"furtalk/internal/platform/captcha"
 	"furtalk/internal/platform/crypto"
+	"furtalk/internal/platform/logging"
 	"furtalk/internal/platform/mailer"
 	"furtalk/internal/platform/netprobe"
 	"furtalk/internal/platform/notifier"
@@ -24,7 +26,7 @@ import (
 )
 
 // masterKeyVersion 是当前 AES-GCM envelope 密钥版本。
-const masterKeyVersion byte = 1
+const masterKeyVersion byte = cryptox.ProviderEnvelopeVersion
 
 // CaptchaConfig 是 CAPTCHA 提供商的类型化配置，含机密。
 // Endpoint 仅 CAP 使用，是管理员配置的外部 Standalone 实例基址，属于公开字段。
@@ -248,6 +250,7 @@ type ProviderService struct {
 	prober             Prober
 	invalidateSettings func()
 	notificationTester NotificationTester
+	log                *slog.Logger
 }
 
 // Prober 执行有界外部连通性检查，供管理员提供商测试端点使用。
@@ -281,9 +284,97 @@ func (networkProber) ProbeURL(ctx context.Context, rawURL string) error {
 	return netprobe.ProbeURL(ctx, rawURL, testProbeTimeout)
 }
 
-// NewProviderService 构建提供商服务。
-func NewProviderService(txRunner TxRunner, settings *repository.SettingsRepo, secretKey []byte) *ProviderService {
-	return &ProviderService{txRunner: txRunner, settings: settings, key: secretKey, prober: networkProber{}}
+// NewProviderService 构建提供商服务，并只保留 provider envelope v2 的派生密钥。
+func NewProviderService(txRunner TxRunner, settings *repository.SettingsRepo, secretKey []byte, logger *slog.Logger) (*ProviderService, error) {
+	key, err := cryptox.DeriveProviderKey(secretKey)
+	if err != nil {
+		return nil, fmt.Errorf("setting: derive provider secret key: %w", err)
+	}
+	return &ProviderService{
+		txRunner: txRunner,
+		settings: settings,
+		key:      append([]byte(nil), key...),
+		prober:   networkProber{},
+		log:      logging.Normalize(logger),
+	}, nil
+}
+
+// AuditSecrets 在启动阶段只读检查所有已知 provider 的密文。
+// 持久化数据问题只产生聚合 warning，不影响应用启动；具体 provider 在实际使用时仍 fail closed。
+func (s *ProviderService) AuditSecrets(ctx context.Context) {
+	type row struct {
+		version    int
+		nonce      []byte
+		ciphertext []byte
+	}
+	var rows []row
+	queryFailures := 0
+	appendRows := func(values []row) {
+		rows = append(rows, values...)
+	}
+	if values, err := s.settings.ListCaptchaProviders(ctx); err != nil {
+		queryFailures++
+	} else {
+		converted := make([]row, 0, len(values))
+		for _, value := range values {
+			converted = append(converted, row{value.SecretKeyVersion, value.SecretNonce, value.SecretCiphertext})
+		}
+		appendRows(converted)
+	}
+	if values, err := s.settings.ListAuthProviders(ctx); err != nil {
+		queryFailures++
+	} else {
+		converted := make([]row, 0, len(values))
+		for _, value := range values {
+			converted = append(converted, row{value.SecretKeyVersion, value.SecretNonce, value.SecretCiphertext})
+		}
+		appendRows(converted)
+	}
+	if values, err := s.settings.ListSpamProviders(ctx); err != nil {
+		queryFailures++
+	} else {
+		converted := make([]row, 0, len(values))
+		for _, value := range values {
+			converted = append(converted, row{value.SecretKeyVersion, value.SecretNonce, value.SecretCiphertext})
+		}
+		appendRows(converted)
+	}
+	if values, err := s.settings.ListNotificationProviders(ctx); err != nil {
+		queryFailures++
+	} else {
+		converted := make([]row, 0, len(values))
+		for _, value := range values {
+			converted = append(converted, row{value.SecretKeyVersion, value.SecretNonce, value.SecretCiphertext})
+		}
+		appendRows(converted)
+	}
+
+	scanned, unsupported, unreadable := 0, 0, 0
+	for _, value := range rows {
+		if len(value.ciphertext) == 0 {
+			continue
+		}
+		scanned++
+		if value.version != int(masterKeyVersion) {
+			unsupported++
+			continue
+		}
+		envelope := make([]byte, 0, 1+len(value.nonce)+len(value.ciphertext))
+		envelope = append(envelope, masterKeyVersion)
+		envelope = append(envelope, value.nonce...)
+		envelope = append(envelope, value.ciphertext...)
+		if _, err := cryptox.Decrypt(s.key, masterKeyVersion, envelope); err != nil {
+			unreadable++
+		}
+	}
+	if queryFailures > 0 || unsupported > 0 || unreadable > 0 {
+		s.log.Warn("providers: startup secret audit found unusable envelopes",
+			slog.Int("scanned", scanned),
+			slog.Int("unsupported_versions", unsupported),
+			slog.Int("unreadable", unreadable),
+			slog.Int("query_failures", queryFailures),
+			slog.Int("expected_version", int(masterKeyVersion)))
+	}
 }
 
 // SetProber 安装自定义连通性 prober。
@@ -1457,13 +1548,25 @@ func decodeConfigFields(raw json.RawMessage, into any) error {
 // decryptSecretEnvelope 重建 envelope（version || nonce || ciphertext），并用当前主密钥解密。
 func (s *ProviderService) decryptSecretEnvelope(version int, nonce, ciphertext []byte, providerKey string) ([]byte, error) {
 	if version != int(masterKeyVersion) {
+		s.log.Warn("providers: secret envelope rejected",
+			slog.String("provider_key", providerKey),
+			slog.Int("stored_version", version),
+			slog.Int("expected_version", int(masterKeyVersion)))
 		return nil, domain.ErrSecretCorrupt
 	}
 	envelope := make([]byte, 0, 1+len(nonce)+len(ciphertext))
 	envelope = append(envelope, masterKeyVersion)
 	envelope = append(envelope, nonce...)
 	envelope = append(envelope, ciphertext...)
-	return cryptox.Decrypt(s.key, masterKeyVersion, envelope)
+	plaintext, err := cryptox.Decrypt(s.key, masterKeyVersion, envelope)
+	if err != nil {
+		s.log.Warn("providers: secret envelope rejected",
+			slog.String("provider_key", providerKey),
+			slog.Int("stored_version", version),
+			slog.Int("expected_version", int(masterKeyVersion)))
+		return nil, domain.ErrSecretCorrupt
+	}
+	return plaintext, nil
 }
 
 // splitConfig 解析并校验 CAPTCHA provider 配置，返回公共 JSON 与待加密的机密 JSON。

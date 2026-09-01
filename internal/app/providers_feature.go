@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"log/slog"
+	"time"
 
 	"furtalk/internal/domain"
 	"furtalk/internal/platform/cache"
@@ -80,7 +81,13 @@ func newServices(
 	oauthFactory identity.OAuthProviderFactory,
 ) (*services, error) {
 	settingsService := setting.NewService(repos.txRunner, repos.settings)
-	providerService := setting.NewProviderService(repos.txRunner, repos.settings, cfg.ProviderSecretKey)
+	providerService, err := setting.NewProviderService(repos.txRunner, repos.settings, cfg.ProviderSecretKey, logger)
+	if err != nil {
+		return nil, err
+	}
+	auditCtx, cancelAudit := context.WithTimeout(context.Background(), 5*time.Second)
+	providerService.AuditSecrets(auditCtx)
+	cancelAudit()
 	settingsService.SetCaptchaValidator(providerService)
 	providerService.SetSettingsInvalidator(settingsService.Invalidate)
 	captchaConfigService := setting.NewCaptchaConfigService(settingsService, providerService)

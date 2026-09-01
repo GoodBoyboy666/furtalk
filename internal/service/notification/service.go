@@ -70,19 +70,43 @@ func (s *Service) Run(ctx context.Context) error {
 	if s.bus == nil {
 		return nil
 	}
+	dispatcher := newMailDispatcher(ctx, s.deliverMail)
+	defer dispatcher.stop()
 	return s.bus.Consume(ctx, func(ev domain.CommentEvent) {
-		s.handle(ctx, ev)
+		s.handleWithSubmitter(ctx, ev, dispatcher.submit)
 	})
 }
 
 func (s *Service) handle(ctx context.Context, ev domain.CommentEvent) {
-	if ev.Type == domain.TypeCommentCreated {
-		s.handleCreated(ctx, ev)
-		return
+	s.handleWithSubmitter(ctx, ev, s.submitSynchronously)
+}
+
+func (s *Service) handleWithSubmitter(ctx context.Context, ev domain.CommentEvent, submitter mailSubmitter) {
+	if submitter == nil {
+		submitter = s.submitSynchronously
 	}
-	if ev.Type == domain.TypeCommentPublished {
-		s.handlePublished(ctx, ev)
-		return
+	dropped := 0
+	submit := func(job mailJob) bool {
+		if job.ctx == nil {
+			job.ctx = ctx
+		}
+		if submitter(job) {
+			return true
+		}
+		dropped++
+		return false
+	}
+	if ev.Type == domain.TypeCommentCreated {
+		s.handleCreated(ctx, ev, submit)
+	} else if ev.Type == domain.TypeCommentPublished {
+		s.handlePublished(ctx, ev, submit)
+	}
+	if dropped > 0 {
+		s.log.Warn("notifications: mail queue full; jobs dropped",
+			logging.ID("site_id", ev.SiteID),
+			logging.ID("comment_id", ev.CommentID),
+			slog.Int("dropped_count", dropped),
+			slog.Int("queue_capacity", mailQueueCapacity))
 	}
 }
 
@@ -90,7 +114,7 @@ func (s *Service) handle(ctx context.Context, ev domain.CommentEvent) {
 // 管理员新评论/待审核邮件受全局通知开关控制；直接发布的回复邮件由本路径发送。
 // 实例级管理员通道仅向 published / pending 状态投递；spam 与 comment.published
 // 事件不进入通道分支。SMTP 缺失时只跳过邮件，通道仍可投递。
-func (s *Service) handleCreated(ctx context.Context, ev domain.CommentEvent) {
+func (s *Service) handleCreated(ctx context.Context, ev domain.CommentEvent, submit mailSubmitter) {
 	current, err := s.settings.Get(ctx)
 	if err != nil {
 		s.log.Warn("notifications: read settings", logging.ID("site_id", ev.SiteID), logging.Error(err))
@@ -108,10 +132,10 @@ func (s *Service) handleCreated(ctx context.Context, ev domain.CommentEvent) {
 	}
 	if s.mailer != nil {
 		if current.Settings.Notifications.Moderation {
-			s.sendModerationMails(ctx, comment, author, ev)
+			s.sendModerationMails(ctx, comment, author, ev, submit)
 		}
 		if comment.Status == domain.CommentStatusPublished {
-			s.sendReplyNotification(ctx, comment, author)
+			s.sendReplyNotification(ctx, comment, author, submit)
 		}
 	}
 	if comment.Status == domain.CommentStatusPublished || comment.Status == domain.CommentStatusPending {
@@ -122,7 +146,7 @@ func (s *Service) handleCreated(ctx context.Context, ev domain.CommentEvent) {
 // sendModerationMails 向全部活跃管理员发送新评论/待审核/垃圾通知。
 // 评论作者本人与已发布回复的父评论作者被排除在收件人之外，其他活跃管理员
 // 仍各自接收通知；父评论作者排除不依赖回复邮件是否实际发送。
-func (s *Service) sendModerationMails(ctx context.Context, comment *domain.Comment, author *domain.User, ev domain.CommentEvent) {
+func (s *Service) sendModerationMails(ctx context.Context, comment *domain.Comment, author *domain.User, ev domain.CommentEvent, submit mailSubmitter) {
 	admins, err := s.users.ListActiveAdmins(ctx)
 	if err != nil {
 		s.log.Warn("notifications: list admins", logging.ID("site_id", ev.SiteID), logging.Error(err))
@@ -130,6 +154,7 @@ func (s *Service) sendModerationMails(ctx context.Context, comment *domain.Comme
 	}
 	excludedParentID := s.replyParentUserID(ctx, comment)
 	pageTitle, pageURL := s.threadPage(ctx, comment)
+	eligible, dropped := 0, 0
 	for _, admin := range admins {
 		if admin.ID == comment.UserID {
 			continue
@@ -140,19 +165,31 @@ func (s *Service) sendModerationMails(ctx context.Context, comment *domain.Comme
 		if strings.TrimSpace(admin.Email) == "" {
 			continue
 		}
+		eligible++
+		if eligible > mailRecipientLimit {
+			dropped++
+			continue
+		}
 		msg, err := s.moderationMail(s.templates, admin.Email, comment, author.Nickname, pageTitle, pageURL)
 		if err != nil {
 			s.log.Warn("notifications: render moderation mail", logging.ID("site_id", ev.SiteID), logging.ID("comment_id", ev.CommentID), logging.Error(err))
 			continue
 		}
-		s.send(ctx, admin.ID, msg, "", false)
+		submit(mailJob{ctx: ctx, userID: admin.ID, message: msg})
+	}
+	if dropped > 0 {
+		s.log.Warn("notifications: moderation recipients truncated",
+			logging.ID("site_id", ev.SiteID),
+			logging.ID("comment_id", ev.CommentID),
+			slog.Int("recipient_limit", mailRecipientLimit),
+			slog.Int("dropped_count", dropped))
 	}
 }
 
 // handlePublished 实现 CommentPublished 邮件规则：向作者发送发布确认，
 // 并在评论为回复时通过共享 helper 向父评论作者发送回复通知。
 // 该事件只服务邮件链路；SMTP 缺失时直接返回，不产生任何通道投递。
-func (s *Service) handlePublished(ctx context.Context, ev domain.CommentEvent) {
+func (s *Service) handlePublished(ctx context.Context, ev domain.CommentEvent, submit mailSubmitter) {
 	if s.mailer == nil {
 		return
 	}
@@ -181,16 +218,16 @@ func (s *Service) handlePublished(ctx context.Context, ev domain.CommentEvent) {
 		if err != nil {
 			s.log.Warn("notifications: render published mail", logging.ID("user_id", ev.UserID), logging.ID("comment_id", ev.CommentID), logging.Error(err))
 		} else {
-			s.send(ctx, author.ID, mailer.Message{
+			submit(mailJob{ctx: ctx, userID: author.ID, message: mailer.Message{
 				To:       author.Email,
 				Subject:  "您的评论已发布",
 				TextBody: "您的评论已发布。",
 				HTMLBody: html,
-			}, unsub, true)
+			}, unsub: unsub, htmlHasUnsub: true})
 		}
 	}
 
-	s.sendReplyNotification(ctx, comment, author)
+	s.sendReplyNotification(ctx, comment, author, submit)
 }
 
 // replyParentUserID 返回已发布回复的父评论作者 ID，供管理员通知排除收件人；
@@ -211,7 +248,7 @@ func (s *Service) replyParentUserID(ctx context.Context, comment *domain.Comment
 // 由 CommentCreated（直接发布的回复）与 CommentPublished（人工审核发布的
 // 回复）两条路径共用，统一遵守全局回复开关、父评论作者、自回复排除、
 // 通知偏好与退订规则。
-func (s *Service) sendReplyNotification(ctx context.Context, comment *domain.Comment, author *domain.User) {
+func (s *Service) sendReplyNotification(ctx context.Context, comment *domain.Comment, author *domain.User, submit mailSubmitter) {
 	if comment.ParentID == nil {
 		return
 	}
@@ -281,7 +318,7 @@ func (s *Service) sendReplyNotification(ctx context.Context, comment *domain.Com
 		TextBody: text,
 		HTMLBody: html,
 	}
-	s.send(ctx, parentAuthor.ID, msg, unsub, true)
+	submit(mailJob{ctx: ctx, userID: parentAuthor.ID, message: msg, unsub: unsub, htmlHasUnsub: true})
 }
 
 // threadPage 读取评论所属线程的页面标题与网址。
@@ -390,19 +427,28 @@ func (s *Service) unsubscribeURL(userID int64, kind string) string {
 // unsub 非空时在纯文本正文追加退订说明；htmlHasUnsub 为 false 时再向 HTML
 // 正文追加退订链接。回复模板已内联该链接，htmlHasUnsub 传 true 不重复追加。
 func (s *Service) send(ctx context.Context, userID int64, msg mailer.Message, unsub string, htmlHasUnsub bool) {
+	s.deliverMail(mailJob{ctx: ctx, userID: userID, message: msg, unsub: unsub, htmlHasUnsub: htmlHasUnsub})
+}
+
+func (s *Service) submitSynchronously(job mailJob) bool {
+	s.deliverMail(job)
+	return true
+}
+
+func (s *Service) deliverMail(job mailJob) {
 	if s.mailer == nil {
 		return
 	}
-	if unsub != "" {
-		msg.TextBody += "\n\n如不再想收到此类邮件，请访问：" + unsub
-		if !htmlHasUnsub {
-			msg.HTMLBody += `<p><a href="` + escapeHTML(unsub) + `">退订</a></p>`
+	if job.unsub != "" {
+		job.message.TextBody += "\n\n如不再想收到此类邮件，请访问：" + job.unsub
+		if !job.htmlHasUnsub {
+			job.message.HTMLBody += `<p><a href="` + escapeHTML(job.unsub) + `">退订</a></p>`
 		}
 	}
-	sendCtx, cancel := context.WithTimeout(ctx, sendTimeout)
+	sendCtx, cancel := context.WithTimeout(job.ctx, sendTimeout)
 	defer cancel()
-	if err := s.mailer.Send(sendCtx, msg); err != nil {
-		s.log.Warn("notifications: mail delivery failed", logging.ID("user_id", userID), logging.Error(err))
+	if err := s.mailer.Send(sendCtx, job.message); err != nil {
+		s.log.Warn("notifications: mail delivery failed", logging.ID("user_id", job.userID), logging.Error(err))
 	}
 }
 

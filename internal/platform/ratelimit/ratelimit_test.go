@@ -7,17 +7,51 @@ import (
 	"time"
 )
 
-// TestAllowNRequestPathDoesNotSweep 证明请求路径不再执行全表扫描：
-// 超过旧阈值数量的活跃桶后，桶数量保持增长而不是被同步清理。
-func TestAllowNRequestPathDoesNotSweep(t *testing.T) {
+// TestAllowNRequestPathEnforcesHardCapacity 证明请求路径不再执行全表扫描，
+// 且活跃桶数量不会超过硬容量。
+func TestAllowNRequestPathEnforcesHardCapacity(t *testing.T) {
 	t.Parallel()
 	l := New(10, 100)
-	// 超过旧 sweepThreshold（10000）只插入桶，不触发清理。
-	for i := 0; i < 10100; i++ {
+	for i := 0; i < DefaultBucketCapacity; i++ {
 		l.AllowN(string(rune('a'+i%26))+itoa(i), 1)
 	}
-	if got := l.BucketCount(); got != 10100 {
-		t.Fatalf("bucket count = %d, want 10100 (request path must not sweep)", got)
+	if got := l.BucketCount(); got != DefaultBucketCapacity {
+		t.Fatalf("bucket count = %d, want %d", got, DefaultBucketCapacity)
+	}
+	if l.AllowN("new-subject", 1) {
+		t.Fatal("new subject must fail closed at capacity")
+	}
+	if got := l.BucketCount(); got != DefaultBucketCapacity {
+		t.Fatalf("bucket count after rejected subject = %d, want %d", got, DefaultBucketCapacity)
+	}
+}
+
+func TestLimiterCapacityKeepsExistingSubjectsAndNormalizesUnknown(t *testing.T) {
+	l := NewWithCapacity(1, 2, 1)
+	if !l.Allow("") || !l.Allow(" ") {
+		t.Fatal("empty subjects must share the unknown bucket")
+	}
+	if l.Allow("new") {
+		t.Fatal("new subject must fail when capacity is full")
+	}
+	if got := l.BucketCount(); got != 1 {
+		t.Fatalf("bucket count = %d, want 1", got)
+	}
+}
+
+func TestLimiterConcurrentAdmissionNeverExceedsCapacity(t *testing.T) {
+	l := NewWithCapacity(1, 1, 8)
+	var wg sync.WaitGroup
+	for i := 0; i < 100; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			l.Allow("subject-" + itoa(i))
+		}(i)
+	}
+	wg.Wait()
+	if got := l.BucketCount(); got > 8 {
+		t.Fatalf("bucket count = %d, exceeds capacity 8", got)
 	}
 }
 

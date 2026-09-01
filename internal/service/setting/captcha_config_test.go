@@ -31,7 +31,10 @@ func newTestProviderService(t *testing.T) (*Service, *ProviderService) {
 		t.Fatalf("auto migrate: %v", err)
 	}
 	svc := NewService(gormtx.NewRunner(db), repository.NewSettingsRepo(db))
-	providers := NewProviderService(gormtx.NewRunner(db), repository.NewSettingsRepo(db), []byte("test-master-key-0123456789abcdef"))
+	providers, err := NewProviderService(gormtx.NewRunner(db), repository.NewSettingsRepo(db), []byte("test-master-key-0123456789abcdef"), nil)
+	if err != nil {
+		t.Fatalf("new provider service: %v", err)
+	}
 	svc.SetCaptchaValidator(providers)
 	providers.SetSettingsInvalidator(svc.Invalidate)
 	return svc, providers

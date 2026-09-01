@@ -49,7 +49,10 @@ func newTestService(t *testing.T) *Service {
 func newTestServiceWithProviders(t *testing.T) (*gorm.DB, *Service, *ProviderService) {
 	t.Helper()
 	db, svc := newTestServiceDB(t)
-	providers := NewProviderService(gormtx.NewRunner(db), repository.NewSettingsRepo(db), []byte("test-master-key-0123456789abcdef"))
+	providers, err := NewProviderService(gormtx.NewRunner(db), repository.NewSettingsRepo(db), []byte("test-master-key-0123456789abcdef"), nil)
+	if err != nil {
+		t.Fatalf("new provider service: %v", err)
+	}
 	svc.SetCaptchaValidator(providers)
 	providers.SetSettingsInvalidator(svc.Invalidate)
 	return db, svc, providers
