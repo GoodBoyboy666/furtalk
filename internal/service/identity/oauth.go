@@ -260,6 +260,9 @@ func (s *Service) FinishOAuth(ctx context.Context, providerKey, state, code stri
 	})
 	if err != nil {
 		logging.FromContext(ctx, s.log).WarnContext(ctx, "oauth exchange/verify failed", "provider", providerKey, logging.Error(err))
+		if oauth.IsResponseTooLarge(err) {
+			return nil, record.Redirect, domain.ErrUnavailable
+		}
 		return nil, record.Redirect, domain.ErrOAuthVerificationFailed
 	}
 	session, err := s.resolveOAuthIdentity(ctx, providerConfig, oauthIdentity, record)

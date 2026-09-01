@@ -118,11 +118,11 @@ func (p *twitterProvider) Exchange(ctx context.Context, req ExchangeRequest) (*I
 	}
 	token, err := p.oauthConfig(req.RedirectURI).Exchange(p.clientContext(ctx), req.Code, opts...)
 	if err != nil {
-		return nil, ErrIdentity
+		return nil, preserveProviderError(err)
 	}
 	user, err := p.fetchUserInfo(ctx, token)
 	if err != nil {
-		return nil, ErrIdentity
+		return nil, preserveProviderError(err)
 	}
 	if user.ID == "" {
 		return nil, ErrIdentity

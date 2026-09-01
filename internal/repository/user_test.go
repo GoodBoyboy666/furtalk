@@ -4,14 +4,20 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"sort"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"furtalk/internal/domain"
 	"furtalk/internal/platform/database"
+	"furtalk/internal/platform/gormtx"
 	"furtalk/internal/repository/model"
 
+	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 // newUserTestDB 打开临时 SQLite 数据库并迁移用户相关表。
@@ -275,6 +281,100 @@ func TestUserRepoSetPassword(t *testing.T) {
 	}
 	if !has {
 		t.Fatal("user with set password must report has_password = true")
+	}
+}
+
+// TestUserRepoBumpSessionVersionConcurrent 验证每次并发会话撤销都获得唯一的
+// 数据库生成代次，避免 PostgreSQL READ COMMITTED 下的读改写丢失递增。
+func TestUserRepoBumpSessionVersionConcurrent(t *testing.T) {
+	db := newUserTestDB(t)
+	repo := NewUserRepo(db)
+	runner := gormtx.NewRunner(db)
+	ctx := context.Background()
+	user := &domain.User{
+		Email:           "concurrent@example.com",
+		EmailNormalized: "concurrent@example.com",
+		Nickname:        "concurrent",
+		Role:            domain.RoleUser,
+		Status:          domain.UserStatusActive,
+	}
+	if err := repo.Create(ctx, user); err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	const workers = 8
+	versions := make([]int64, workers)
+	errs := make([]error, workers)
+	var wg sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			var bumpErr error
+			errs[i] = runner.RunInTx(ctx, func(txctx context.Context) error {
+				versions[i], bumpErr = repo.BumpSessionVersion(txctx, user.ID)
+				return bumpErr
+			})
+		}(i)
+	}
+	wg.Wait()
+	for i, err := range errs {
+		if err != nil {
+			t.Fatalf("worker %d bump session version: %v", i, err)
+		}
+	}
+
+	sort.Slice(versions, func(i, j int) bool { return versions[i] < versions[j] })
+	for i, version := range versions {
+		want := int64(i + 2)
+		if version != want {
+			t.Fatalf("sorted returned version[%d] = %d, want %d; versions=%v", i, version, want, versions)
+		}
+	}
+	fetched, err := repo.FindByID(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("find concurrently bumped user: %v", err)
+	}
+	if fetched.SessionVersion != workers+1 {
+		t.Fatalf("final session version = %d, want %d", fetched.SessionVersion, workers+1)
+	}
+}
+
+// TestUserRepoSessionVersionPostgresSQL 验证 PostgreSQL 方言生成数据库原子递增
+// 与 RETURNING，而不是把当前代次读回 Go 后再写入字面量。测试使用 SQLite 连接
+// 仅作为 GORM DryRun 的 Conn，占位连接不会执行 SQL。
+func TestUserRepoSessionVersionPostgresSQL(t *testing.T) {
+	sqliteDB := newUserTestDB(t)
+	sqlDB, err := sqliteDB.DB()
+	if err != nil {
+		t.Fatalf("get sql.DB: %v", err)
+	}
+	capture := &publicSQLCapture{Interface: logger.Default}
+	postgresDB, err := gorm.Open(postgres.New(postgres.Config{
+		Conn:                 sqlDB,
+		PreferSimpleProtocol: true,
+	}), &gorm.Config{DryRun: true, Logger: capture})
+	if err != nil {
+		t.Fatalf("init postgres dry run db: %v", err)
+	}
+	repo := NewUserRepo(postgresDB)
+	ctx := context.Background()
+	now := time.Date(2026, time.August, 30, 12, 0, 0, 0, time.UTC)
+
+	_, _ = repo.SetPassword(ctx, 7, "hash", now)
+	if !strings.Contains(capture.sql, `"session_version"=session_version +`) || !strings.Contains(capture.sql, `RETURNING "session_version"`) {
+		t.Fatalf("SetPassword SQL must atomically increment and return session_version, got: %s", capture.sql)
+	}
+
+	_, _ = repo.BumpSessionVersion(ctx, 7)
+	if !strings.Contains(capture.sql, `"session_version"=session_version +`) || !strings.Contains(capture.sql, `RETURNING "session_version"`) {
+		t.Fatalf("BumpSessionVersion SQL must atomically increment and return session_version, got: %s", capture.sql)
+	}
+
+	_, _, _ = repo.ResetPasswordByEmail(ctx, "dry@example.com", "hash", now, now)
+	if !strings.Contains(capture.sql, `"session_version"=session_version +`) ||
+		!strings.Contains(capture.sql, `RETURNING "id","session_version"`) {
+		t.Fatalf("ResetPasswordByEmail SQL must atomically increment and return id/version, got: %s", capture.sql)
 	}
 }
 

@@ -114,7 +114,7 @@ func (p *lineProvider) Exchange(ctx context.Context, req ExchangeRequest) (*Iden
 	}
 	token, err := p.oauthConfig(req.RedirectURI).Exchange(p.clientContext(ctx), req.Code, opts...)
 	if err != nil {
-		return nil, ErrIdentity
+		return nil, preserveProviderError(err)
 	}
 	rawIDToken, ok := token.Extra("id_token").(string)
 	if !ok || rawIDToken == "" {
@@ -122,7 +122,7 @@ func (p *lineProvider) Exchange(ctx context.Context, req ExchangeRequest) (*Iden
 	}
 	claims, err := p.verifyIDToken(ctx, rawIDToken, req.Nonce)
 	if err != nil {
-		return nil, ErrIdentity
+		return nil, preserveProviderError(err)
 	}
 	return &Identity{Subject: ScopedSubject(lineIssuer, claims.Subject), VerifiedEmail: ""}, nil
 }

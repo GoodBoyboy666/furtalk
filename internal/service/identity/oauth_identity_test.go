@@ -76,6 +76,34 @@ func oauthStateFromURL(t *testing.T, raw string) string {
 	return state
 }
 
+// TestFinishOAuthOversizedProviderResponseUnavailable 验证 OAuth provider 响应
+// 超过平台上限时映射为 provider unavailable，而不是普通身份校验失败。
+func TestFinishOAuthOversizedProviderResponseUnavailable(t *testing.T) {
+	ctx := context.Background()
+	scripted := &scriptedOAuthProvider{name: "GitHub", err: oauth.ErrResponseTooLarge}
+	db := newCaptchaLoginDB(t)
+	svc := NewService(Dependencies{
+		TxRunner:     gormtx.NewRunner(db),
+		Users:        repository.NewUserRepo(db),
+		Identities:   repository.NewExternalIdentityRepo(db),
+		Cache:        cache.NewMemory(10000),
+		Policy:       configurableEmailPolicy{},
+		Providers:    oauthTestProviders{provider: &AuthProvider{ProviderKey: "github", Kind: domain.ProviderKindOAuth, ClientID: "id", ClientSecret: "secret"}},
+		Signer:       loginTestSigner{lifetime: 7 * 24 * 60 * 60},
+		Templates:    stubTemplateRenderer{},
+		OAuthFactory: (&fakeOAuthFactory{provider: scripted}).build,
+		BaseURL:      "https://example.com",
+	})
+	start, err := svc.BeginOAuth(ctx, "github", oauthPurposeLogin, 0, "")
+	if err != nil {
+		t.Fatalf("BeginOAuth: %v", err)
+	}
+	_, _, err = svc.FinishOAuth(ctx, "github", oauthStateFromURL(t, start.AuthURL), "code")
+	if !errors.Is(err, domain.ErrUnavailable) {
+		t.Fatalf("FinishOAuth oversized response err = %v, want domain.ErrUnavailable", err)
+	}
+}
+
 // TestFinishOAuthBindOnlyBindThenLogin 验证 bind-only provider 可先由登录用户绑定
 // （空 VerifiedEmail 落库），随后同一 subject 无需邮箱即可登录，并刷新 last_login_at。
 func TestFinishOAuthBindOnlyBindThenLogin(t *testing.T) {

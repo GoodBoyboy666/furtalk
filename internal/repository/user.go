@@ -15,6 +15,7 @@ import (
 	"furtalk/internal/repository/model"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // UserRepo 持久化 users 行。
@@ -302,53 +303,45 @@ func (r *UserRepo) CreateWithPassword(ctx context.Context, user *domain.User, pa
 }
 
 // SetPassword 同时更新用户的密码哈希、变更时间并递增会话代次，返回递增后的
-// 新代次。更新前先确认用户行存在，因为 SQLite 只统计实际变更行，缺失行会造出
-// 假 not-found；会话代次基于同一行读取的当前值递增。调用方应在数据库事务内执行，
-// 保证读值与写回原子。
+// 新代次。会话代次由数据库表达式原子递增，并从同一条 UPDATE 的 RETURNING
+// 结果读取，避免并发事务丢失递增。调用方应在数据库事务内执行。
 func (r *UserRepo) SetPassword(ctx context.Context, userID int64, passwordHash string, changedAt time.Time) (int64, error) {
 	var row model.User
-	err := gormtx.DB(ctx, r.db).Where("id = ?", userID).First(&row).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return 0, domain.ErrNotFound
-	}
-	if err != nil {
-		return 0, fmt.Errorf("find user for password: %w", err)
-	}
-	next := row.SessionVersion + 1
 	result := gormtx.DB(ctx, r.db).
-		Model(&model.User{}).
+		Model(&row).
+		Clauses(clause.Returning{Columns: []clause.Column{{Name: "session_version"}}}).
 		Where("id = ?", userID).
 		Updates(map[string]any{
 			"password_hash":       passwordHash,
 			"password_changed_at": changedAt,
-			"session_version":     next,
+			"session_version":     gorm.Expr("session_version + ?", 1),
 		})
 	if result.Error != nil {
 		return 0, fmt.Errorf("set user password: %w", result.Error)
 	}
-	return next, nil
+	if result.RowsAffected == 0 {
+		return 0, domain.ErrNotFound
+	}
+	return row.SessionVersion, nil
 }
 
 // BumpSessionVersion 只递增用户会话代次并返回新代次，用于主动注销全部设备。
-// 先确认用户行存在再更新；调用方应在数据库事务内执行，保证读值与写回原子。
+// 会话代次由数据库表达式原子递增，并从同一条 UPDATE 的 RETURNING 结果读取，
+// 避免并发事务丢失递增。调用方应在数据库事务内执行。
 func (r *UserRepo) BumpSessionVersion(ctx context.Context, userID int64) (int64, error) {
 	var row model.User
-	err := gormtx.DB(ctx, r.db).Where("id = ?", userID).First(&row).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return 0, domain.ErrNotFound
-	}
-	if err != nil {
-		return 0, fmt.Errorf("find user for session bump: %w", err)
-	}
-	next := row.SessionVersion + 1
 	result := gormtx.DB(ctx, r.db).
-		Model(&model.User{}).
+		Model(&row).
+		Clauses(clause.Returning{Columns: []clause.Column{{Name: "session_version"}}}).
 		Where("id = ?", userID).
-		Updates(map[string]any{"session_version": next})
+		Updates(map[string]any{"session_version": gorm.Expr("session_version + ?", 1)})
 	if result.Error != nil {
 		return 0, fmt.Errorf("bump user session version: %w", result.Error)
 	}
-	return next, nil
+	if result.RowsAffected == 0 {
+		return 0, domain.ErrNotFound
+	}
+	return row.SessionVersion, nil
 }
 
 // PasswordHash 返回用户用于认证的密码哈希；未配置密码或用户不存在时返回 domain.ErrNotFound。
@@ -368,32 +361,28 @@ func (r *UserRepo) PasswordHash(ctx context.Context, userID int64) (string, erro
 }
 
 // ResetPasswordByEmail 在单个语句中更新密码哈希、变更时间与会话代次，并只在
-// 邮箱未验证时写入验证时间；已验证邮箱保留原验证时间。返回目标用户 id 与
-// 递增后的新代次。更新前先确认用户行存在，因为 SQLite 只统计实际变更行，
-// 缺失行会造出假 not-found；调用方应在数据库事务内执行。
+// 邮箱未验证时写入验证时间；已验证邮箱保留原验证时间。会话代次由数据库表达式
+// 原子递增，并与目标用户 id 一起从同一条 UPDATE 的 RETURNING 结果读取。调用方
+// 应在数据库事务内执行。
 func (r *UserRepo) ResetPasswordByEmail(ctx context.Context, normalizedEmail, passwordHash string, changedAt, verifiedAt time.Time) (int64, int64, error) {
 	var row model.User
-	err := gormtx.DB(ctx, r.db).Where("email_normalized = ?", normalizedEmail).First(&row).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return 0, 0, domain.ErrNotFound
-	}
-	if err != nil {
-		return 0, 0, fmt.Errorf("find user for password reset: %w", err)
-	}
-	next := row.SessionVersion + 1
 	result := gormtx.DB(ctx, r.db).
-		Model(&model.User{}).
-		Where("id = ?", row.ID).
+		Model(&row).
+		Clauses(clause.Returning{Columns: []clause.Column{{Name: "id"}, {Name: "session_version"}}}).
+		Where("email_normalized = ?", normalizedEmail).
 		Updates(map[string]any{
 			"password_hash":       passwordHash,
 			"password_changed_at": changedAt,
-			"session_version":     next,
+			"session_version":     gorm.Expr("session_version + ?", 1),
 			"email_verified_at":   gorm.Expr("COALESCE(email_verified_at, ?)", verifiedAt),
 		})
 	if result.Error != nil {
 		return 0, 0, fmt.Errorf("reset user password: %w", result.Error)
 	}
-	return row.ID, next, nil
+	if result.RowsAffected == 0 {
+		return 0, 0, domain.ErrNotFound
+	}
+	return row.ID, row.SessionVersion, nil
 }
 
 // MarkEmailVerified 幂等地把用户标记为邮箱已验证：只在邮箱尚未验证时写入

@@ -135,7 +135,7 @@ func (p *microsoftProvider) Exchange(ctx context.Context, req ExchangeRequest) (
 	}
 	token, err := p.oauthConfig(req.RedirectURI).Exchange(p.clientContext(ctx), req.Code, opts...)
 	if err != nil {
-		return nil, ErrIdentity
+		return nil, preserveProviderError(err)
 	}
 	rawIDToken, ok := token.Extra("id_token").(string)
 	if !ok || rawIDToken == "" {
@@ -162,7 +162,7 @@ func (p *microsoftProvider) verifyIDToken(ctx context.Context, raw string, nonce
 	}
 	keys, err := p.signingKeys(ctx)
 	if err != nil {
-		return nil, ErrIdentity
+		return nil, preserveProviderError(err)
 	}
 	signingKey, ok := keys[kid]
 	if !ok {

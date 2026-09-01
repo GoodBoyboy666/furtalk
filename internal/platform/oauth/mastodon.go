@@ -151,7 +151,7 @@ func (p *mastodonProvider) BuildAuthURL(ctx context.Context, req AuthorizationRe
 func (p *mastodonProvider) Exchange(ctx context.Context, req ExchangeRequest) (*Identity, error) {
 	config, err := p.oauthConfig(ctx, req.RedirectURI)
 	if err != nil {
-		return nil, ErrIdentity
+		return nil, preserveProviderError(err)
 	}
 	opts := make([]oauth2.AuthCodeOption, 0, 1)
 	if req.Verifier != "" {
@@ -159,15 +159,15 @@ func (p *mastodonProvider) Exchange(ctx context.Context, req ExchangeRequest) (*
 	}
 	token, err := config.Exchange(p.clientContext(ctx), req.Code, opts...)
 	if err != nil {
-		return nil, ErrIdentity
+		return nil, preserveProviderError(err)
 	}
 	doc, err := p.discovery(ctx)
 	if err != nil {
-		return nil, ErrIdentity
+		return nil, preserveProviderError(err)
 	}
 	subject, err := p.resolveActor(ctx, doc, token)
 	if err != nil {
-		return nil, ErrIdentity
+		return nil, preserveProviderError(err)
 	}
 	if subject == "" {
 		return nil, ErrIdentity

@@ -136,7 +136,7 @@ func (p *appleProvider) Exchange(ctx context.Context, req ExchangeRequest) (*Ide
 		IDToken string `json:"id_token"`
 	}
 	if err := postForm(ctx, p.httpClient, p.tokenURL, form, &body); err != nil {
-		return nil, ErrIdentity
+		return nil, preserveProviderError(err)
 	}
 	if body.IDToken == "" {
 		return nil, ErrIdentity
@@ -160,7 +160,7 @@ func (p *appleProvider) verifyIDToken(ctx context.Context, raw string, nonce str
 	verifier := oidc.NewVerifier(appleIssuer, keySet, &oidc.Config{ClientID: p.clientID})
 	idToken, err := verifier.Verify(ctx, raw)
 	if err != nil {
-		return nil, ErrIdentity
+		return nil, preserveProviderError(err)
 	}
 	// go-oidc 的 Verify 不校验 nonce：必须与 ID token 的 nonce claim 恒定时间
 	// 比较；流程发送了 nonce 时，缺失或不等一律拒绝。

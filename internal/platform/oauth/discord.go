@@ -105,11 +105,11 @@ func (p *discordProvider) BuildAuthURL(ctx context.Context, req AuthorizationReq
 func (p *discordProvider) Exchange(ctx context.Context, req ExchangeRequest) (*Identity, error) {
 	token, err := p.oauthConfig(req.RedirectURI).Exchange(p.clientContext(ctx), req.Code)
 	if err != nil {
-		return nil, ErrIdentity
+		return nil, preserveProviderError(err)
 	}
 	user, err := p.fetchUserInfo(ctx, token)
 	if err != nil {
-		return nil, ErrIdentity
+		return nil, preserveProviderError(err)
 	}
 	if user.ID == "" {
 		return nil, ErrIdentity

@@ -92,13 +92,7 @@ type Config struct {
 // （google/自定义 OIDC）走通用 OIDC 适配器。
 // 其他任何组合一律以 ErrUnsupported 拒绝。
 func New(cfg Config) (Provider, error) {
-	client := cfg.HTTPClient
-	if client == nil {
-		client = http.DefaultClient
-	}
-	if cfg.Timeout > 0 {
-		client = &http.Client{Timeout: cfg.Timeout}
-	}
+	client := boundedClient(cfg.HTTPClient, cfg.Timeout)
 	switch cfg.Kind {
 	case "oauth":
 		switch cfg.ProviderKey {

@@ -118,7 +118,7 @@ func (p *oidcProvider) BuildAuthURL(ctx context.Context, req AuthorizationReques
 func (p *oidcProvider) Exchange(ctx context.Context, req ExchangeRequest) (*Identity, error) {
 	config, err := p.oauthConfig(ctx, req.RedirectURI)
 	if err != nil {
-		return nil, ErrIdentity
+		return nil, preserveProviderError(err)
 	}
 	opts := make([]oauth2.AuthCodeOption, 0, 1)
 	if req.Verifier != "" {
@@ -126,7 +126,7 @@ func (p *oidcProvider) Exchange(ctx context.Context, req ExchangeRequest) (*Iden
 	}
 	token, err := config.Exchange(p.clientContext(ctx), req.Code, opts...)
 	if err != nil {
-		return nil, ErrIdentity
+		return nil, preserveProviderError(err)
 	}
 	rawIDToken, ok := token.Extra("id_token").(string)
 	if !ok || rawIDToken == "" {
@@ -134,12 +134,12 @@ func (p *oidcProvider) Exchange(ctx context.Context, req ExchangeRequest) (*Iden
 	}
 	provider, err := p.discovery(ctx)
 	if err != nil {
-		return nil, ErrIdentity
+		return nil, preserveProviderError(err)
 	}
 	tokenVerifier := provider.Verifier(&oidc.Config{ClientID: p.clientID})
 	idToken, err := tokenVerifier.Verify(ctx, rawIDToken)
 	if err != nil {
-		return nil, ErrIdentity
+		return nil, preserveProviderError(err)
 	}
 	// go-oidc 的 Verify 不校验 nonce：当流程发送了 nonce 时，必须与 ID token 的
 	// nonce claim 恒定时间比较；缺失或不等一律拒绝。
@@ -162,7 +162,7 @@ func (p *oidcProvider) Exchange(ctx context.Context, req ExchangeRequest) (*Iden
 	} else {
 		verifiedEmail, err = p.fetchUserInfoVerifiedEmail(ctx, token, idToken.Subject)
 		if err != nil {
-			return nil, ErrIdentity
+			return nil, preserveProviderError(err)
 		}
 	}
 	return &Identity{Subject: idToken.Subject, VerifiedEmail: verifiedEmail}, nil

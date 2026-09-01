@@ -86,15 +86,15 @@ func (p *githubProvider) Exchange(ctx context.Context, req ExchangeRequest) (*Id
 	}
 	token, err := p.oauthConfig(req.RedirectURI).Exchange(p.httpContext(ctx), req.Code, opts...)
 	if err != nil {
-		return nil, ErrIdentity
+		return nil, preserveProviderError(err)
 	}
 	user, err := p.fetchUser(ctx, token)
 	if err != nil {
-		return nil, ErrIdentity
+		return nil, preserveProviderError(err)
 	}
 	email, err := p.fetchVerifiedEmail(ctx, token)
 	if err != nil {
-		return nil, ErrIdentity
+		return nil, preserveProviderError(err)
 	}
 	if user.subject() == "" || email == "" {
 		return nil, ErrIdentity
