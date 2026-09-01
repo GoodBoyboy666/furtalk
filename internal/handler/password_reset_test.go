@@ -70,7 +70,7 @@ func newPasswordResetFixture(t *testing.T, policy map[string]bool, verifier iden
 	}
 	router := gin.New()
 	router.Use(httpx.ErrorWriter(translator))
-	RegisterAuth(router.Group("/api/v1"), svc)
+	RegisterAuthWithAdmission(router.Group("/api/v1"), svc, nil)
 	return router, store, users, mailer
 }
 

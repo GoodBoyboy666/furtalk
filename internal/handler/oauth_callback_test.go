@@ -112,7 +112,7 @@ func newOAuthCallbackRouter(t *testing.T, scripted *oauth.Identity) *oauthCallba
 	}
 	router := gin.New()
 	router.Use(httpx.ErrorWriter(translator))
-	RegisterAuth(router.Group("/api/v1"), svc)
+	RegisterAuthWithAdmission(router.Group("/api/v1"), svc, nil)
 	return &oauthCallbackFixture{router: router, svc: svc, users: repository.NewUserRepo(db), identities: repository.NewExternalIdentityRepo(db)}
 }
 

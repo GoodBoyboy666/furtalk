@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"furtalk/internal/domain"
-	"furtalk/internal/platform/value"
+	"furtalk/internal/platform/gravatar"
 )
 
 // ListByOwner 返回当前用户本人的评论，支持站点与状态筛选以及页码分页，并返回匹配总数。
@@ -70,7 +70,7 @@ func (s *Service) ListOwnerSites(ctx context.Context, ownerID int64) ([]OwnerSit
 func toOwnerCommentView(row *domain.OwnerComment, gravatarBase string) OwnerCommentView {
 	return OwnerCommentView{
 		CommentView: toCommentViewWithReply(&row.Comment, row.AuthorNickname, row.AuthorWebsite, row.AuthorRole,
-			value.GravatarURL(row.AuthorEmailNormalized, gravatarBase), row.ReplyToNickname, 0, false),
+			gravatar.URL(row.AuthorEmailNormalized, gravatarBase), row.ReplyToNickname, 0, false),
 		SiteName:  row.SiteName,
 		PageKey:   row.PageKey,
 		PageURL:   row.PageURL,

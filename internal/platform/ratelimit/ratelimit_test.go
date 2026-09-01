@@ -156,18 +156,6 @@ func TestPolicyRegistryCopiesDefinitionsAndHasOneCleanupLoop(t *testing.T) {
 	}
 }
 
-func TestDefaultPoliciesIncludePasswordLoginBudgets(t *testing.T) {
-	policies := DefaultPolicies()
-	for name, want := range map[string]Config{
-		PolicyPasswordLoginIP:    {Rate: 0.5, Burst: 5},
-		PolicyPasswordLoginEmail: {Rate: 0.2, Burst: 3},
-	} {
-		if got := policies[name]; got != want {
-			t.Fatalf("policy %q = %+v, want %+v", name, got, want)
-		}
-	}
-}
-
 // itoa 是测试用的小整数转字符串（不依赖 strconv）。
 func itoa(i int) string {
 	if i == 0 {

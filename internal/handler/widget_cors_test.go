@@ -302,10 +302,7 @@ func (testUserGate) RequireUser(context.Context, domain.Principal) error { retur
 
 type testUserWriter struct{}
 
-func (testUserWriter) CreateUser(context.Context, *domain.User) error { return nil }
-func (testUserWriter) FindUserByEmailNormalized(context.Context, string) (*domain.User, error) {
-	return nil, domain.ErrNotFound
-}
+func (testUserWriter) CreateUser(context.Context, *domain.User) error                  { return nil }
 func (testUserWriter) UpdateUserProfile(context.Context, int64, string, *string) error { return nil }
 
 type testSigner struct{}

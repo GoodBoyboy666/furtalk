@@ -10,7 +10,6 @@ import (
 	"furtalk/internal/platform/gormtx"
 	"furtalk/internal/platform/oauth"
 	"furtalk/internal/repository"
-	"furtalk/internal/service/setting"
 )
 
 // configurableEmailPolicy 返回可配置的邮箱域名名单与头像基址。
@@ -61,6 +60,44 @@ func TestCheckEmailDomainAllowed(t *testing.T) {
 	}
 	if err := svc.checkEmailDomainAllowed(ctx, "no-at-sign"); err == nil {
 		t.Fatal("malformed email must error")
+	}
+}
+
+func TestDefaultNickname(t *testing.T) {
+	if got := defaultNickname("person@example.com"); got != "person" {
+		t.Fatalf("defaultNickname = %q, want person", got)
+	}
+	if got := defaultNickname("@example.com"); got != "user" {
+		t.Fatalf("empty local defaultNickname = %q, want user", got)
+	}
+}
+
+func TestCreateUserAppliesIdentityRegistrationPolicy(t *testing.T) {
+	ctx := context.Background()
+	svc := emailDomainTestService(t, configurableEmailPolicy{blacklist: []string{"blocked.com"}})
+	blocked := &domain.User{
+		Email:           "new@blocked.com",
+		EmailNormalized: "new@blocked.com",
+		Nickname:        "new",
+		Role:            domain.RoleUser,
+		Status:          domain.UserStatusActive,
+	}
+	if err := svc.CreateUser(ctx, blocked); !errors.Is(err, domain.ErrEmailDomainNotAllowed) {
+		t.Fatalf("blocked CreateUser error = %v", err)
+	}
+	if _, err := svc.users.FindByEmailNormalized(ctx, blocked.EmailNormalized); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("blocked user must not exist: %v", err)
+	}
+
+	allowed := &domain.User{
+		Email:           "new@ok.com",
+		EmailNormalized: "new@ok.com",
+		Nickname:        "new",
+		Role:            domain.RoleUser,
+		Status:          domain.UserStatusActive,
+	}
+	if err := svc.CreateUser(ctx, allowed); err != nil {
+		t.Fatalf("allowed CreateUser: %v", err)
 	}
 }
 
@@ -159,7 +196,7 @@ func TestRegisterOAuthUserRejectsDisallowedDomain(t *testing.T) {
 		Signer:     loginTestSigner{lifetime: 7 * 24 * 60 * 60},
 	})
 	ctx := context.Background()
-	provider := &setting.AuthProvider{ProviderKey: "github"}
+	provider := &AuthProvider{ProviderKey: "github"}
 	oauthIdentity := &oauth.Identity{Subject: "sub-1", VerifiedEmail: "new@blocked.com"}
 	record := OAuthState{Purpose: oauthPurposeLogin}
 

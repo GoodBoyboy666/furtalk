@@ -1631,15 +1631,14 @@ func splitAuthConfig(providerKey string, kind domain.ProviderKind, raw json.RawM
 	return public, secret, nil
 }
 
-// customOIDCSpec 未知 key 的默认配置模式：任意 key + oidc，注册模式为可信邮箱。
+// customOIDCSpec 未知 key 的默认配置模式：任意 key + oidc。
 var customOIDCSpec = oauth.ProviderSpec{
-	Key:          "custom-oidc",
-	Name:         "Custom OIDC",
-	Kind:         "oidc",
-	Registration: oauth.RegistrationVerifiedEmail,
-	PKCE:         true,
-	Nonce:        true,
-	Callback:     oauth.CallbackQuery,
+	Key:      "custom-oidc",
+	Name:     "Custom OIDC",
+	Kind:     "oidc",
+	PKCE:     true,
+	Nonce:    true,
+	Callback: oauth.CallbackQuery,
 	Config: oauth.ConfigSpec{
 		PublicFields: []string{"client_id", "issuer_url"},
 		SecretField:  "client_secret",

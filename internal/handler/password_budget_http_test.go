@@ -25,7 +25,7 @@ func TestPasswordLoginBudgetHTTPMapsTo429(t *testing.T) {
 	}
 	router := gin.New()
 	router.Use(httpx.ErrorWriter(translator), httpx.ClientIP(nil))
-	RegisterAuth(router.Group("/api/v1"), svc)
+	RegisterAuthWithAdmission(router.Group("/api/v1"), svc, nil)
 
 	rec := postJSON(router, "/api/v1/auth/password/login", `{"email":"user@example.com","password":"password"}`, nil)
 	if rec.Code != http.StatusTooManyRequests {

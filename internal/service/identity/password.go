@@ -12,7 +12,6 @@ import (
 
 	"furtalk/internal/domain"
 	"furtalk/internal/platform/crypto"
-	"furtalk/internal/platform/ratelimit"
 	"furtalk/internal/platform/value"
 
 	"golang.org/x/crypto/argon2"
@@ -25,6 +24,12 @@ const (
 	argon2Threads = 2
 	argon2KeyLen  = 32
 	argon2SaltLen = 16
+)
+
+// identity 拥有的公开密码登录流程预算名称。
+const (
+	PolicyPasswordLoginIP    = "password_login_ip"
+	PolicyPasswordLoginEmail = "password_login_email"
 )
 
 // publicPasswordLoginConcurrency 单进程公开密码登录的 Argon2 并发上限。
@@ -132,11 +137,11 @@ func (s *Service) admitPasswordLogin(normalized, clientIP string) error {
 	if ip == "" {
 		ip = "unknown"
 	}
-	if !s.admission.Allow(ratelimit.PolicyPasswordLoginIP, "ip:"+ip) {
+	if !s.admission.Allow(PolicyPasswordLoginIP, "ip:"+ip) {
 		return domain.ErrRateLimited
 	}
 	emailSubject := "email:" + cryptox.SHA256Hex([]byte(normalized))
-	if !s.admission.Allow(ratelimit.PolicyPasswordLoginEmail, emailSubject) {
+	if !s.admission.Allow(PolicyPasswordLoginEmail, emailSubject) {
 		return domain.ErrRateLimited
 	}
 	return nil

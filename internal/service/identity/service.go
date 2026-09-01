@@ -14,7 +14,6 @@ import (
 	"furtalk/internal/platform/logging"
 	"furtalk/internal/platform/mailer"
 	"furtalk/internal/repository"
-	"furtalk/internal/service/setting"
 )
 
 // mapEphemeralError keeps cache capacity details out of the HTTP contract and
@@ -199,8 +198,23 @@ type OAuthProviderReader interface {
 	OAuthProvider(ctx context.Context, providerKey string) (*AuthProvider, error)
 }
 
-// AuthProvider 解密后的 OAuth/OIDC 提供商配置，由 setting 层提供。
-type AuthProvider = setting.AuthProvider
+// AuthProvider 是 identity 消费的 OAuth/OIDC 提供商投影。
+// 具体 setting DTO 由组合根逐字段转换，避免 sibling feature 类型泄漏。
+type AuthProvider struct {
+	ProviderKey     string
+	Kind            domain.ProviderKind
+	Enabled         bool
+	Configured      bool
+	ClientID        string
+	ClientSecret    string
+	AuthURL         string
+	TokenURL        string
+	IssuerURL       string
+	InstanceURL     string
+	AppleTeamID     string
+	AppleKeyID      string
+	ApplePrivateKey string
+}
 
 // TxRunner 身份用例使用的事务边界。
 type TxRunner interface {

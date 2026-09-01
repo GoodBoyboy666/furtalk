@@ -11,6 +11,7 @@ import (
 
 	"furtalk/internal/domain"
 	"furtalk/internal/platform/clientip"
+	"furtalk/internal/platform/gravatar"
 	"furtalk/internal/platform/markdown"
 	"furtalk/internal/platform/value"
 )
@@ -184,13 +185,6 @@ func (s *Service) resolveAndSyncActor(ctx context.Context, pol domain.CommentPol
 	} else {
 		user, err = s.users.FindByEmailNormalized(ctx, normalized)
 		if errors.Is(err, domain.ErrNotFound) {
-			emailDomain, derr := value.EmailDomain(normalized)
-			if derr != nil {
-				return 0, fmt.Errorf("%w: %v", domain.ErrValidation, derr)
-			}
-			if !value.EmailDomainAllowed(emailDomain, pol.EmailDomainWhitelist, pol.EmailDomainBlacklist) {
-				return 0, domain.ErrEmailDomainNotAllowed
-			}
 			created := &domain.User{
 				Email:           original,
 				EmailNormalized: normalized,
@@ -447,7 +441,7 @@ func (s *Service) viewFor(ctx context.Context, comment *domain.Comment) (*Commen
 	if err != nil {
 		return nil, err
 	}
-	view := toCommentView(comment, user.Nickname, user.WebsiteURL, user.Role, value.GravatarURL(user.EmailNormalized, gravatarBase))
+	view := toCommentView(comment, user.Nickname, user.WebsiteURL, user.Role, gravatar.URL(user.EmailNormalized, gravatarBase))
 	nickname, err := s.replyToNickname(ctx, comment)
 	if err != nil {
 		return nil, err

@@ -7,7 +7,7 @@ import (
 
 	"furtalk/internal/domain"
 	pkgcaptcha "furtalk/internal/platform/captcha"
-	"furtalk/internal/platform/value"
+	"furtalk/internal/platform/gravatar"
 )
 
 // ListPublic 返回线程的扁平评论列表，带稳定的游标分页。
@@ -63,7 +63,7 @@ func (s *Service) ListPublic(ctx context.Context, siteID int64, pageKey, cursorR
 	}
 	for i := range rows {
 		view.Comments = append(view.Comments, toCommentViewWithReply(&rows[i].Comment, rows[i].AuthorNickname, rows[i].AuthorWebsite, rows[i].AuthorRole,
-			value.GravatarURL(rows[i].AuthorEmailNormalized, pol.GravatarBaseURL), rows[i].ReplyToNickname, rows[i].LikeCount, rows[i].LikedByMe))
+			gravatar.URL(rows[i].AuthorEmailNormalized, pol.GravatarBaseURL), rows[i].ReplyToNickname, rows[i].LikeCount, rows[i].LikedByMe))
 	}
 	if hasMore && len(rows) > 0 {
 		last := rows[len(rows)-1]
@@ -108,7 +108,7 @@ func (s *Service) ListLatestPublic(ctx context.Context, siteID int64, limit int)
 			AuthorNickname:  rows[i].AuthorNickname,
 			AuthorWebsite:   rows[i].AuthorWebsite,
 			AuthorRole:      rows[i].AuthorRole,
-			AuthorAvatarURL: value.GravatarURL(rows[i].AuthorEmailNormalized, pol.GravatarBaseURL),
+			AuthorAvatarURL: gravatar.URL(rows[i].AuthorEmailNormalized, pol.GravatarBaseURL),
 			ReplyToUserID:   rows[i].ReplyToUserID,
 			ReplyToNickname: rows[i].ReplyToNickname,
 			CreatedAt:       rows[i].CreatedAt,

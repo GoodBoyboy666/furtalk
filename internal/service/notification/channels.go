@@ -13,13 +13,30 @@ import (
 	"furtalk/internal/domain"
 	"furtalk/internal/platform/logging"
 	"furtalk/internal/platform/notifier"
-	"furtalk/internal/service/setting"
 )
+
+// ChannelConfig 是 notification 投递消费的通道配置投影。
+type ChannelConfig struct {
+	BotToken           string
+	ChatID             string
+	WebhookURL         string
+	ServerURL          string
+	DeviceKey          string
+	ChannelAccessToken string
+	TargetID           string
+	SigningSecret      *string
+}
+
+// ChannelProvider 是已启用通知通道的消费方投影。
+type ChannelProvider struct {
+	ProviderKey string
+	Config      ChannelConfig
+}
 
 // ChannelProviderReader 读取已启用通知通道的解密配置。
 // 由 setting.ProviderService 实现，通知服务通过窄接口消费，便于测试替换。
 type ChannelProviderReader interface {
-	EnabledNotificationProviders(ctx context.Context) ([]setting.NotificationProvider, error)
+	EnabledNotificationProviders(ctx context.Context) ([]ChannelProvider, error)
 }
 
 // ChannelDispatcher 向单个平台通道执行一次有界的投递。
@@ -98,7 +115,7 @@ func (s *Service) sendChannels(ctx context.Context, comment *domain.Comment, aut
 	var wg sync.WaitGroup
 	for _, provider := range providers {
 		wg.Add(1)
-		go func(p setting.NotificationProvider) {
+		go func(p ChannelProvider) {
 			defer wg.Done()
 			s.dispatchChannel(ctx, p, *msg, comment)
 		}(provider)
@@ -107,7 +124,7 @@ func (s *Service) sendChannels(ctx context.Context, comment *domain.Comment, aut
 }
 
 // dispatchChannel 对单个通道执行一次有界投递并记录脱敏结果。
-func (s *Service) dispatchChannel(ctx context.Context, provider setting.NotificationProvider, msg notifier.Message, comment *domain.Comment) {
+func (s *Service) dispatchChannel(ctx context.Context, provider ChannelProvider, msg notifier.Message, comment *domain.Comment) {
 	cfg, err := s.channelConfig(provider)
 	if err != nil {
 		s.log.Warn("notifications: channel config", slog.String("provider_key", provider.ProviderKey), logging.Error(err))
@@ -228,7 +245,7 @@ func channelLabels(status domain.CommentStatus) (label, notifType string) {
 }
 
 // channelConfig 把解密后的通知配置映射为 notifier 类型化配置。
-func (s *Service) channelConfig(provider setting.NotificationProvider) (notifier.Config, error) {
+func (s *Service) channelConfig(provider ChannelProvider) (notifier.Config, error) {
 	platform, err := notifier.ParsePlatform(provider.ProviderKey)
 	if err != nil {
 		return notifier.Config{}, err
@@ -249,11 +266,11 @@ func (s *Service) channelConfig(provider setting.NotificationProvider) (notifier
 // TestChannel 向指定通知通道发送一条显式标记的测试消息，供管理员测试端点使用。
 // 测试允许在通道停用时执行，但要求配置完整：配置无效返回 domain.ErrValidation，
 // 远程投递失败返回 domain.ErrUnavailable，错误不含目标或远程正文。
-func (s *Service) TestChannel(ctx context.Context, providerKey string, cfg setting.NotificationConfig) error {
+func (s *Service) TestChannel(ctx context.Context, providerKey string, cfg ChannelConfig) error {
 	if s.dispatcher == nil {
 		return domain.ErrUnavailable
 	}
-	notifCfg, err := s.channelConfig(setting.NotificationProvider{ProviderKey: providerKey, Config: cfg})
+	notifCfg, err := s.channelConfig(ChannelProvider{ProviderKey: providerKey, Config: cfg})
 	if err != nil {
 		return domain.ErrValidation
 	}

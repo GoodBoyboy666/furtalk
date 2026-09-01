@@ -467,7 +467,7 @@ func (i *Importer) resolveUsers(ctx context.Context, comments []*preparedComment
 		if !ok {
 			nickname := comment.source.nick()
 			if nickname == "" {
-				nickname = value.DefaultNickname(normalized)
+				nickname = fallbackNickname(normalized)
 			}
 			user = &sourceUser{
 				email:      email,
@@ -536,6 +536,14 @@ func (i *Importer) resolveUsers(ctx context.Context, comments []*preparedComment
 		}
 	}
 	return users, nil
+}
+
+func fallbackNickname(normalizedEmail string) string {
+	local := strings.SplitN(normalizedEmail, "@", 2)[0]
+	if strings.TrimSpace(local) == "" {
+		return "user"
+	}
+	return local
 }
 
 func (i *Importer) resolveThreads(ctx context.Context, comments []*preparedComment, sites map[string]*sourceSite, report *Report) (map[string]*sourceThread, error) {

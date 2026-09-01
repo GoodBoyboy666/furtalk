@@ -6,19 +6,19 @@ Enforces the layered architecture:
   domain/         -> must not import any internal package (only stdlib)
   repository/     -> gorm boundary; may import domain + platform + model
   repository/model -> gorm rows; may import domain + gorm + stdlib only
-  service/        -> business layer; may import domain + repository + platform
+  service/        -> business layer; may import domain + repository + platform, never sibling features
   middleware/     -> auth gates; may import service + domain + platform/httpx + gin
   handler/        -> HTTP layer; may import service + middleware + domain + platform/httpx + gin
-  router/         -> generic router; may import handler + platform + gin; never service directly
+  router/         -> generic router; may import handler + platform + gin; only generic health paths
   platform/       -> must not import service / handler / middleware / router / app / domain
 
 Enforcement rules:
 1. `domain` imports nothing internal (zero dependency).
 2. `repository` is the only layer allowed to import `repository/model` and gorm outside platform.
-3. `service` must not import gin / gorm / httpx / router / middleware / handler.
+3. `service` must not import gin / gorm / httpx / router / middleware / handler or sibling services.
 4. `middleware` must not import repository or model.
 5. `handler` must not import repository or model or service/repo internals.
-6. `router` must not import service directly.
+6. `router` must not import service directly or register feature-specific HTTP paths.
 7. `platform/*` must not import any feature layer (service/handler/middleware/router/app/domain).
 8. Uber Fx / Dig may only be imported by `internal/app`.
 9. Forbidden: `fx.Populate`, `dig.Container` / `fx.Container`, global `shared`/`common`/`utils` packages.
@@ -56,6 +56,16 @@ BOOTSTRAP_PACKAGE = "internal/service/bootstrap/"
 
 # 生产代码禁止在 logging 包外出现的 slog 构造/默认调用。
 SLOG_CONSTRUCTION_RE = re.compile(r"slog\.(?:New|NewJSONHandler|NewTextHandler|Default)\s*\(")
+ROUTER_ROUTE_RE = re.compile(
+    r'\.(?:GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD)\s*\(\s*"([^"]+)"'
+)
+DOMAIN_FUNCTION_RE = re.compile(r"(?m)^func\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(")
+ALLOWED_DOMAIN_FUNCTIONS = {
+    "NormalizeAdminSort",
+    "OffsetForPage",
+    "ValidCommentSort",
+    "ValidPublicCommentSort",
+}
 
 LAYERS = ("domain", "repository", "service", "middleware", "handler", "router")
 
@@ -74,6 +84,35 @@ def run_logging_rule_self_test() -> list[str]:
     # 合法调用（统一模块）不得被误判。
     if SLOG_CONSTRUCTION_RE.search("logging.New(io.Discard)"):
         errors.append("logging self-test: legitimate logging.New matched the forbidden regex")
+    return errors
+
+
+def router_feature_paths(text: str) -> list[str]:
+    """Return direct router registrations outside the generic health namespace."""
+    return [path for path in ROUTER_ROUTE_RE.findall(text) if not path.startswith("/health/")]
+
+
+def run_router_route_rule_self_test() -> list[str]:
+    """Ensure the semantic router-path rule catches feature routes only."""
+    errors: list[str] = []
+    if router_feature_paths('engine.POST("/oauth/callback/:provider", handler)') != [
+        "/oauth/callback/:provider"
+    ]:
+        errors.append("router route self-test failed to match a feature path")
+    if router_feature_paths('engine.GET("/health/live", handler)'):
+        errors.append("router route self-test rejected a generic health path")
+    return errors
+
+
+def run_domain_function_rule_self_test() -> list[str]:
+    """Ensure top-level domain behavior is distinguishable from value methods."""
+    errors: list[str] = []
+    if DOMAIN_FUNCTION_RE.findall("func ProductPolicy() bool { return true }") != [
+        "ProductPolicy"
+    ]:
+        errors.append("domain function self-test failed to match top-level behavior")
+    if DOMAIN_FUNCTION_RE.findall("func (v Value) Valid() bool { return true }"):
+        errors.append("domain function self-test incorrectly matched a value method")
     return errors
 
 
@@ -141,6 +180,8 @@ def main() -> int:
                         errors.append(f"{pkg} (service) imports forbidden: {dep}")
             # service 可依赖 repository / domain / platform；禁止依赖 handler/middleware/router。
             for dep in deps:
+                if dep.startswith("furtalk/internal/service/") and dep != pkg:
+                    errors.append(f"{pkg} (service) imports sibling service: {dep}")
                 if dep.startswith("furtalk/internal/handler"):
                     errors.append(f"{pkg} (service) imports handler: {dep}")
                 if dep.startswith("furtalk/internal/middleware"):
@@ -198,6 +239,19 @@ def main() -> int:
         if "dig.Container" in text or "fx.Container" in text:
             errors.append(f"{relative} reaches into the DI container (forbidden)")
 
+        if relative.startswith("internal/router/") and not relative.endswith("_test.go"):
+            for route_path in router_feature_paths(text):
+                errors.append(
+                    f"{relative} registers feature-specific router path: {route_path}"
+                )
+
+        if relative.startswith("internal/domain/") and not relative.endswith("_test.go"):
+            for function_name in DOMAIN_FUNCTION_RE.findall(text):
+                if function_name not in ALLOWED_DOMAIN_FUNCTIONS:
+                    errors.append(
+                        f"{relative} adds executable domain policy function: {function_name}"
+                    )
+
     # 禁止手写组合根返回。
     for path in (ROOT / "internal" / "app").glob("*.go"):
         text = path.read_text(encoding="utf-8")
@@ -235,6 +289,8 @@ def main() -> int:
 
     # 日志规则自测，保证扫描正则本身可命中违规样本。
     errors.extend(run_logging_rule_self_test())
+    errors.extend(run_router_route_rule_self_test())
+    errors.extend(run_domain_function_rule_self_test())
 
     if errors:
         print("Architecture violations:")

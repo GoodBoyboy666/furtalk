@@ -14,7 +14,6 @@ import (
 	"furtalk/internal/platform/logging"
 	"furtalk/internal/platform/mailer"
 	"furtalk/internal/repository"
-	"furtalk/internal/service/setting"
 )
 
 // UnsubscribeSigner 签名并验证通知邮件中嵌入的通知退订令牌。
@@ -51,16 +50,27 @@ type Service struct {
 	channels   ChannelProviderReader
 	dispatcher ChannelDispatcher
 	prefW      domain.PreferenceWriter
-	settings   *setting.Service
+	settings   SettingsReader
 	signer     UnsubscribeSigner
 	baseURL    string
 	log        *slog.Logger
 }
 
 // NewService 构建通知服务。
-func NewService(users *repository.UserRepo, comments *repository.CommentRepo, threads *repository.ThreadRepo, prefs *repository.PreferenceRepo, prefW domain.PreferenceWriter, settings *setting.Service, sites *repository.SiteRepo, channels ChannelProviderReader, dispatcher ChannelDispatcher, bus *eventbus.Bus[domain.CommentEvent], mailer mailer.Mailer, templates mailer.TemplateRenderer, signer UnsubscribeSigner, baseURL string, log *slog.Logger) *Service {
+func NewService(users *repository.UserRepo, comments *repository.CommentRepo, threads *repository.ThreadRepo, prefs *repository.PreferenceRepo, prefW domain.PreferenceWriter, settings SettingsReader, sites *repository.SiteRepo, channels ChannelProviderReader, dispatcher ChannelDispatcher, bus *eventbus.Bus[domain.CommentEvent], mailer mailer.Mailer, templates mailer.TemplateRenderer, signer UnsubscribeSigner, baseURL string, log *slog.Logger) *Service {
 	log = logging.Normalize(log)
 	return &Service{bus: bus, mailer: mailer, templates: templates, users: users, comments: comments, threads: threads, prefs: prefs, prefW: prefW, settings: settings, sites: sites, channels: channels, dispatcher: dispatcher, signer: signer, baseURL: baseURL, log: log}
+}
+
+// Settings 是 notification 消费的最小全局通知开关快照。
+type Settings struct {
+	Moderation bool
+	Replies    bool
+}
+
+// SettingsReader 提供 notification 用例所需的动态设置投影。
+type SettingsReader interface {
+	NotificationSettings(ctx context.Context) (Settings, error)
 }
 
 // Run 阻塞并消费评论事件，直到 ctx 取消或事件总线关闭。
@@ -114,7 +124,7 @@ func (s *Service) handleWithSubmitter(ctx context.Context, ev domain.CommentEven
 // 实例级管理员通道仅向 published / pending 状态投递；spam 与 comment.published
 // 事件不进入通道分支。SMTP 缺失时只跳过邮件，通道仍可投递。
 func (s *Service) handleCreated(ctx context.Context, ev domain.CommentEvent, submit mailSubmitter) {
-	current, err := s.settings.Get(ctx)
+	current, err := s.settings.NotificationSettings(ctx)
 	if err != nil {
 		s.log.Warn("notifications: read settings", logging.ID("site_id", ev.SiteID), logging.Error(err))
 		return
@@ -130,7 +140,7 @@ func (s *Service) handleCreated(ctx context.Context, ev domain.CommentEvent, sub
 		return
 	}
 	if s.mailer != nil {
-		if current.Settings.Notifications.Moderation {
+		if current.Moderation {
 			s.sendModerationMails(ctx, comment, author, ev, submit)
 		}
 		if comment.Status == domain.CommentStatusPublished {
@@ -251,12 +261,12 @@ func (s *Service) sendReplyNotification(ctx context.Context, comment *domain.Com
 	if comment.ParentID == nil {
 		return
 	}
-	current, err := s.settings.Get(ctx)
+	current, err := s.settings.NotificationSettings(ctx)
 	if err != nil {
 		s.log.Warn("notifications: read settings", logging.ID("site_id", comment.SiteID), logging.ID("comment_id", comment.ID), logging.Error(err))
 		return
 	}
-	if !current.Settings.Notifications.Replies {
+	if !current.Replies {
 		return
 	}
 	parent, err := s.comments.FindBySiteAndID(ctx, comment.SiteID, *comment.ParentID)

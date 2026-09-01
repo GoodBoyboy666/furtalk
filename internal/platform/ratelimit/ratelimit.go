@@ -15,40 +15,6 @@ type Config struct {
 	Burst int     // 可累积的最大令牌数
 }
 
-// 应用中固定流量准入策略的名称。使用字符串类型，处理函数可以声明式地选择策略，而无需引入应用配置。
-const (
-	PolicyPasskeyLoginOptions        = "passkey_login_options"
-	PolicyOAuthStart                 = "oauth_start"
-	PolicyOAuthHandoff               = "oauth_handoff"
-	PolicyPasskeyRegistrationOptions = "passkey_registration_options"
-	PolicyWidgetAuthCode             = "widget_auth_code"
-	PolicyPasswordLoginIP            = "password_login_ip"
-	PolicyPasswordLoginEmail         = "password_login_email"
-
-	// 保留这些短别名，供偏好流程命名的调用方使用。
-	PasskeyLoginOptionsPolicy        = PolicyPasskeyLoginOptions
-	OAuthStartPolicy                 = PolicyOAuthStart
-	OAuthHandoffPolicy               = PolicyOAuthHandoff
-	PasskeyRegistrationOptionsPolicy = PolicyPasskeyRegistrationOptions
-	WidgetAuthCodePolicy             = PolicyWidgetAuthCode
-	PasswordLoginIPPolicy            = PolicyPasswordLoginIP
-	PasswordLoginEmailPolicy         = PolicyPasswordLoginEmail
-)
-
-// DefaultPolicies 返回各流程的限流预算，以及公开密码登录的专用预算。
-// 每次调用都返回全新的 map，避免调用方在构造后改动注册表。
-func DefaultPolicies() map[string]Config {
-	return map[string]Config{
-		PolicyPasskeyLoginOptions:        {Rate: 0.5, Burst: 5},
-		PolicyOAuthStart:                 {Rate: 0.2, Burst: 5},
-		PolicyOAuthHandoff:               {Rate: 0.5, Burst: 5},
-		PolicyPasskeyRegistrationOptions: {Rate: 0.2, Burst: 3},
-		PolicyWidgetAuthCode:             {Rate: 1, Burst: 10},
-		PolicyPasswordLoginIP:            {Rate: 0.5, Burst: 5},
-		PolicyPasswordLoginEmail:         {Rate: 0.2, Burst: 3},
-	}
-}
-
 const (
 	idleTimeout   = 10 * time.Minute
 	cleanupPeriod = 1 * time.Minute
@@ -94,11 +60,6 @@ func NewPolicyRegistry(configs map[string]Config) *PolicyRegistry {
 		registry.policies[name] = NewFromConfig(cfg)
 	}
 	return registry
-}
-
-// NewDefaultPolicyRegistry 构建应用的流程注册表。
-func NewDefaultPolicyRegistry() *PolicyRegistry {
-	return NewPolicyRegistry(DefaultPolicies())
 }
 
 // Allow 报告 subject 在指定策略下是否有一个令牌可用。未知策略一律拒绝（fail closed）。

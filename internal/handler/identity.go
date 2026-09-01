@@ -8,15 +8,9 @@ import (
 	"furtalk/internal/domain"
 	"furtalk/internal/middleware"
 	"furtalk/internal/platform/httpx"
-	"furtalk/internal/platform/ratelimit"
 	"furtalk/internal/service/identity"
 	"github.com/gin-gonic/gin"
 )
-
-// RegisterAuth 挂载认证端点。
-func RegisterAuth(api *gin.RouterGroup, service *identity.Service, csrf ...gin.HandlerFunc) {
-	registerAuth(api, service, nil, csrf...)
-}
 
 // RegisterAuthWithAdmission 挂载认证端点并为会创建临时状态的公开流程
 // 安装专用准入预算。
@@ -32,16 +26,11 @@ func registerAuth(api *gin.RouterGroup, service *identity.Service, admission Flo
 	auth.POST("/password/reset-codes", passwordResetCode(service))
 	auth.POST("/password/reset", passwordResetConfirm(service))
 	auth.POST("/logout", append(csrf, logout(service))...)
-	auth.POST("/passkeys/login/options", flowAdmission(admission, ratelimit.PolicyPasskeyLoginOptions, clientIPSubject), passkeyLoginOptions(service))
+	auth.POST("/passkeys/login/options", flowAdmission(admission, PolicyPasskeyLoginOptions, clientIPSubject), passkeyLoginOptions(service))
 	auth.POST("/passkeys/login/verify", passkeyLoginVerify(service))
 	auth.GET("/providers", listProviders(service))
-	auth.GET("/oauth/:provider/start", flowAdmission(admission, ratelimit.PolicyOAuthStart, clientIPSubject), oauthStart(service))
+	auth.GET("/oauth/:provider/start", flowAdmission(admission, PolicyOAuthStart, clientIPSubject), oauthStart(service))
 	auth.POST("/oauth/:provider/complete", oauthComplete(service))
-}
-
-// RegisterMe 挂载 /me 子路由，并挂载用户门禁。
-func RegisterMe(api *gin.RouterGroup, service *identity.Service, userGate middleware.UserGate, csrf ...gin.HandlerFunc) {
-	registerMe(api, service, userGate, nil, csrf...)
 }
 
 // RegisterMeWithAdmission 为会创建 Passkey 注册挑战的用户流程安装专用准入预算。
@@ -57,7 +46,7 @@ func registerMe(api *gin.RouterGroup, service *identity.Service, userGate middle
 	me.PATCH("/notification-preferences", meUpdateNotificationPreferences(service))
 	me.POST("/password", meSetPassword(service))
 	me.POST("/sessions/revoke", meRevokeAllSessions(service))
-	me.POST("/passkeys/options", flowAdmission(admission, ratelimit.PolicyPasskeyRegistrationOptions, principalSubject), mePasskeyRegistrationOptions(service))
+	me.POST("/passkeys/options", flowAdmission(admission, PolicyPasskeyRegistrationOptions, principalSubject), mePasskeyRegistrationOptions(service))
 	me.POST("/passkeys", meFinishPasskeyRegistration(service))
 	me.PATCH("/passkeys/:passkey_id", meRenamePasskey(service))
 	me.DELETE("/passkeys/:passkey_id", meDeletePasskey(service))

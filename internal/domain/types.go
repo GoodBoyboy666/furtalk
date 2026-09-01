@@ -419,9 +419,6 @@ func (e *ResourceError) Unwrap() error {
 	return e.Err
 }
 
-// BatchItemError  ResourceError 的语义别名，便于调用方按批量语境命名。
-type BatchItemError = ResourceError
-
 // OwnerFilter 收窄当前用户本人的评论列表。nil 字段表示"不过滤"。
 type OwnerFilter struct {
 	SiteID *int64
@@ -453,18 +450,16 @@ type OwnerSite struct {
 
 // CommentPolicy 评论用例所需的动态实例策略数据。
 type CommentPolicy struct {
-	Mode                 string
-	Epoch                int64
-	Moderation           string
-	UserDeleteMode       string
-	MaxReplyDepth        int
-	PublicRegistration   bool
-	CaptchaPolicy        map[string]bool
-	Privacy              PrivacyPolicy
-	EmailDomainWhitelist []string
-	EmailDomainBlacklist []string
-	GravatarBaseURL      string
-	CommentSort          string
+	Mode               string
+	Epoch              int64
+	Moderation         string
+	UserDeleteMode     string
+	MaxReplyDepth      int
+	PublicRegistration bool
+	CaptchaPolicy      map[string]bool
+	Privacy            PrivacyPolicy
+	GravatarBaseURL    string
+	CommentSort        string
 	// EmojiCatalogURL 可选的 widget 远程表情目录地址；空串表示不配置。
 	EmojiCatalogURL string
 }

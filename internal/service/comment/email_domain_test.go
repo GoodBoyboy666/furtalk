@@ -28,6 +28,19 @@ type widgetDomainTestVerifier struct{}
 
 func (widgetDomainTestVerifier) Verify(context.Context, string, string) error { return nil }
 
+type widgetDomainIdentityPolicy struct {
+	whitelist []string
+	blacklist []string
+}
+
+func (p widgetDomainIdentityPolicy) Policy(context.Context) (bool, string, error) {
+	return true, domain.CommentModeAnonymous, nil
+}
+
+func (p widgetDomainIdentityPolicy) EmailPolicy(context.Context) ([]string, []string, string, error) {
+	return p.whitelist, p.blacklist, "https://www.gravatar.com/avatar", nil
+}
+
 // seedWidgetDomainSite 插入一个带允许来源的活跃站点。
 func seedWidgetDomainSite(t *testing.T, db *gorm.DB) int64 {
 	t.Helper()
@@ -43,11 +56,12 @@ func seedWidgetDomainSite(t *testing.T, db *gorm.DB) int64 {
 }
 
 // widgetDomainCommentService 装配匿名评论创建用例所需的评论服务与真实用户仓储。
-func widgetDomainCommentService(t *testing.T, db *gorm.DB, pol domain.CommentPolicy) *Service {
+func widgetDomainCommentService(t *testing.T, db *gorm.DB, pol domain.CommentPolicy, identityPolicy identity.PolicyReader) *Service {
 	t.Helper()
 	userW := identity.NewService(identity.Dependencies{
 		TxRunner: gormtx.NewRunner(db),
 		Users:    repository.NewUserRepo(db),
+		Policy:   identityPolicy,
 	})
 	return NewService(Dependencies{
 		TxRunner: gormtx.NewRunner(db),
@@ -68,12 +82,11 @@ func TestCreateAnonymousRejectsDisallowedDomain(t *testing.T) {
 	db := newReplyTestDB(t)
 	siteID := seedWidgetDomainSite(t, db)
 	svc := widgetDomainCommentService(t, db, domain.CommentPolicy{
-		Mode:                 domain.CommentModeAnonymous,
-		PublicRegistration:   true,
-		CaptchaPolicy:        map[string]bool{},
-		EmailDomainBlacklist: []string{"blocked.com"},
-		Privacy:              domain.PrivacyPolicy{IPMode: "none", UAMode: "none"},
-	})
+		Mode:               domain.CommentModeAnonymous,
+		PublicRegistration: true,
+		CaptchaPolicy:      map[string]bool{},
+		Privacy:            domain.PrivacyPolicy{IPMode: "none", UAMode: "none"},
+	}, widgetDomainIdentityPolicy{blacklist: []string{"blocked.com"}})
 
 	_, err := svc.Create(context.Background(), CreateInput{
 		SiteID:       siteID,
@@ -98,13 +111,11 @@ func TestCreateAnonymousAllowsWhitelistedDomain(t *testing.T) {
 	siteID := seedWidgetDomainSite(t, db)
 	ctx := context.Background()
 	svc := widgetDomainCommentService(t, db, domain.CommentPolicy{
-		Mode:                 domain.CommentModeAnonymous,
-		PublicRegistration:   true,
-		CaptchaPolicy:        map[string]bool{},
-		EmailDomainWhitelist: []string{"ok.com"},
-		EmailDomainBlacklist: []string{"blocked.com"},
-		Privacy:              domain.PrivacyPolicy{IPMode: "none", UAMode: "none"},
-	})
+		Mode:               domain.CommentModeAnonymous,
+		PublicRegistration: true,
+		CaptchaPolicy:      map[string]bool{},
+		Privacy:            domain.PrivacyPolicy{IPMode: "none", UAMode: "none"},
+	}, widgetDomainIdentityPolicy{whitelist: []string{"ok.com"}, blacklist: []string{"blocked.com"}})
 
 	view, err := svc.Create(ctx, CreateInput{
 		SiteID:       siteID,

@@ -288,10 +288,6 @@ type AdminThreadBatchInput struct {
 	Confirm bool
 }
 
-// ThreadBatchAction/ThreadBatchInput 是简短别名，便于其他层复用相同契约。
-type ThreadBatchAction = AdminThreadBatchAction
-type ThreadBatchInput = AdminThreadBatchInput
-
 // OwnerCommentView 当前用户本人评论的展示视图，不含邮箱/IP/UA。
 type OwnerCommentView struct {
 	CommentView

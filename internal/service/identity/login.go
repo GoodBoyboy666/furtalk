@@ -37,14 +37,6 @@ type EmailCodeStore interface {
 	AtomicVerifyEmailCode(ctx context.Context, purpose, normalizedEmail, submittedHash string, maxAttempts int) (bool, error)
 }
 
-// EphemeralStore is retained as the legacy narrow contract for callers that
-// provide one-off challenge stores. Production identity flows use the bounded
-// cache.Namespace adapters instead.
-type EphemeralStore interface {
-	Set(ctx context.Context, key string, value any, ttl time.Duration) error
-	AtomicConsume(ctx context.Context, key string) (string, error)
-}
-
 // cacheEmailCodeStore 基于缓存存储实现带用途前缀的邮箱验证码存取。
 type cacheEmailCodeStore struct {
 	store cache.Store
@@ -231,7 +223,7 @@ func (s *Service) registerOnCodeLogin(ctx context.Context, normalized string) (*
 	user := &domain.User{
 		Email:           normalized,
 		EmailNormalized: normalized,
-		Nickname:        value.DefaultNickname(normalized),
+		Nickname:        defaultNickname(normalized),
 		Role:            domain.RoleUser,
 		Status:          domain.UserStatusActive,
 		EmailVerifiedAt: &now,

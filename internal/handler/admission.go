@@ -16,6 +16,15 @@ type FlowAdmission interface {
 	Allow(policy, subject string) bool
 }
 
+// HTTP 边界拥有的固定流程预算名称。
+const (
+	PolicyPasskeyLoginOptions        = "passkey_login_options"
+	PolicyOAuthStart                 = "oauth_start"
+	PolicyOAuthHandoff               = "oauth_handoff"
+	PolicyPasskeyRegistrationOptions = "passkey_registration_options"
+	PolicyWidgetAuthCode             = "widget_auth_code"
+)
+
 // flowAdmission rejects a request before the handler can allocate ephemeral
 // state. Missing subjects use one stable fail-closed bucket.
 func flowAdmission(admission FlowAdmission, policy string, subject func(*gin.Context) string) gin.HandlerFunc {

@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"furtalk/internal/platform/httpx"
-	"furtalk/internal/platform/ratelimit"
 	"furtalk/internal/service/identity"
 	"github.com/gin-gonic/gin"
 )
@@ -88,7 +87,7 @@ func TestAuthStateRoutesDenyBeforeServiceAllocation(t *testing.T) {
 			}
 		})
 	}
-	if admission.policy != ratelimit.PolicyOAuthStart {
-		t.Fatalf("last admission policy = %q, want %q", admission.policy, ratelimit.PolicyOAuthStart)
+	if admission.policy != PolicyOAuthStart {
+		t.Fatalf("last admission policy = %q, want %q", admission.policy, PolicyOAuthStart)
 	}
 }

@@ -16,7 +16,7 @@ import (
 func TestAuthRoutesApplyCSRFOnlyToSessionWrites(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	RegisterAuth(router.Group("/api/v1"), &identity.Service{}, middleware.CSRFProtection())
+	RegisterAuthWithAdmission(router.Group("/api/v1"), &identity.Service{}, nil, middleware.CSRFProtection())
 
 	for _, path := range []string{
 		"/api/v1/auth/logout",
@@ -42,7 +42,7 @@ func TestAuthRoutesApplyCSRFOnlyToSessionWrites(t *testing.T) {
 func TestLogoutClearsSessionAndCSRFCookies(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	RegisterAuth(router.Group("/api/v1"), &identity.Service{}, middleware.CSRFProtection())
+	RegisterAuthWithAdmission(router.Group("/api/v1"), &identity.Service{}, nil, middleware.CSRFProtection())
 	token := strings.Repeat("a", 43)
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
 	request.AddCookie(&http.Cookie{Name: middleware.CSRFCookieName, Value: token})
@@ -75,8 +75,8 @@ func TestLegacyPasswordRegisterRemoved(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	userGate := stubUserGate{}
-	RegisterAuth(router.Group("/api/v1"), &identity.Service{}, middleware.CSRFProtection())
-	RegisterMe(router.Group("/api/v1"), &identity.Service{}, userGate, middleware.CSRFProtection())
+	RegisterAuthWithAdmission(router.Group("/api/v1"), &identity.Service{}, nil, middleware.CSRFProtection())
+	RegisterMeWithAdmission(router.Group("/api/v1"), &identity.Service{}, userGate, nil, middleware.CSRFProtection())
 
 	rec := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/password/register", strings.NewReader(`{"password":"x"}`))

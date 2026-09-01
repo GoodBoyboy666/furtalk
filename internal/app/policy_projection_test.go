@@ -10,8 +10,80 @@ import (
 	"furtalk/internal/platform/gormtx"
 	"furtalk/internal/repository"
 	"furtalk/internal/repository/model"
+	"furtalk/internal/service/identity"
+	"furtalk/internal/service/notification"
 	"furtalk/internal/service/setting"
 )
+
+func TestProjectAuthProviderCopiesEveryConsumerField(t *testing.T) {
+	source := setting.AuthProvider{
+		ProviderKey:     "apple",
+		Kind:            domain.ProviderKindOIDC,
+		Enabled:         true,
+		Configured:      true,
+		ClientID:        "client-id",
+		ClientSecret:    "client-secret",
+		AuthURL:         "https://example.com/auth",
+		TokenURL:        "https://example.com/token",
+		IssuerURL:       "https://example.com",
+		InstanceURL:     "https://instance.example.com",
+		AppleTeamID:     "team",
+		AppleKeyID:      "key",
+		ApplePrivateKey: "private-key",
+	}
+	want := identity.AuthProvider{
+		ProviderKey:     source.ProviderKey,
+		Kind:            source.Kind,
+		Enabled:         source.Enabled,
+		Configured:      source.Configured,
+		ClientID:        source.ClientID,
+		ClientSecret:    source.ClientSecret,
+		AuthURL:         source.AuthURL,
+		TokenURL:        source.TokenURL,
+		IssuerURL:       source.IssuerURL,
+		InstanceURL:     source.InstanceURL,
+		AppleTeamID:     source.AppleTeamID,
+		AppleKeyID:      source.AppleKeyID,
+		ApplePrivateKey: source.ApplePrivateKey,
+	}
+	if got := projectAuthProvider(source); got != want {
+		t.Fatalf("projectAuthProvider() = %#v, want %#v", got, want)
+	}
+}
+
+func TestProjectNotificationConfigCopiesEveryConsumerField(t *testing.T) {
+	secret := "signing-secret"
+	source := setting.NotificationConfig{
+		BotToken:           "bot-token",
+		ChatID:             "chat-id",
+		WebhookURL:         "https://example.com/webhook",
+		ServerURL:          "https://example.com/server",
+		DeviceKey:          "device-key",
+		ChannelAccessToken: "channel-token",
+		TargetID:           "target-id",
+		SigningSecret:      &secret,
+	}
+	want := notification.ChannelConfig{
+		BotToken:           source.BotToken,
+		ChatID:             source.ChatID,
+		WebhookURL:         source.WebhookURL,
+		ServerURL:          source.ServerURL,
+		DeviceKey:          source.DeviceKey,
+		ChannelAccessToken: source.ChannelAccessToken,
+		TargetID:           source.TargetID,
+		SigningSecret:      source.SigningSecret,
+	}
+	got := projectNotificationConfig(source)
+	if got.BotToken != want.BotToken || got.ChatID != want.ChatID || got.WebhookURL != want.WebhookURL ||
+		got.ServerURL != want.ServerURL || got.DeviceKey != want.DeviceKey ||
+		got.ChannelAccessToken != want.ChannelAccessToken || got.TargetID != want.TargetID ||
+		got.SigningSecret == nil || *got.SigningSecret != *want.SigningSecret {
+		t.Fatalf("projectNotificationConfig() = %#v, want %#v", got, want)
+	}
+	if got.SigningSecret == source.SigningSecret {
+		t.Fatal("signing secret pointer was not copied")
+	}
+}
 
 // TestCommentPolicyProjectsCommentSort 验证组合根的策略适配器把动态设置中的
 // comment_sort 逐字段投影到 CommentPolicy，构成 settings -> runtime-config ->
@@ -33,6 +105,14 @@ func TestCommentPolicyProjectsCommentSort(t *testing.T) {
 
 	svc := setting.NewService(gormtx.NewRunner(db), repository.NewSettingsRepo(db))
 	reader := commentPolicyReader{svc: svc}
+	notificationReader := notificationSettingsReader{svc: svc}
+	notificationSettings, err := notificationReader.NotificationSettings(context.Background())
+	if err != nil {
+		t.Fatalf("notification settings: %v", err)
+	}
+	if !notificationSettings.Moderation || !notificationSettings.Replies {
+		t.Fatalf("notification settings = %+v, want both defaults enabled", notificationSettings)
+	}
 
 	// 默认 asc 投影。
 	pol, err := reader.CommentPolicy(context.Background())

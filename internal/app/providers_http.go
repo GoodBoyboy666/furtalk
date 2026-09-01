@@ -78,24 +78,8 @@ func provideRegisters(s *services) ([]router.Register, error) {
 	return registers, nil
 }
 
-// provideRouter 构建 Gin engine 与全局中间件。
-func provideRouter(
-	readiness *readinessState,
-	cfg config.HTTPConfig,
-	logger *slog.Logger,
-	limiter *ratelimit.Limiter,
-	translator *httpx.Translator,
-	authentication []gin.HandlerFunc,
-	registers []router.Register,
-	identityService *identity.Service,
-	runtimeOptions webRuntimeOptions,
-) (*gin.Engine, error) {
-	return provideRouterWithAdmission(readiness, cfg, logger, limiter, translator, authentication, registers, identityService, runtimeOptions, nil)
-}
-
 // provideRouterWithAdmission is the production router provider with the
-// feature-specific temporary-state admission registry. The legacy wrapper
-// above keeps focused router tests independent of the Fx graph.
+// feature-specific temporary-state admission registry.
 func provideRouterWithAdmission(
 	readiness *readinessState,
 	cfg config.HTTPConfig,
@@ -114,7 +98,7 @@ func provideRouterWithAdmission(
 		return nil, err
 	}
 	// Apple form_post 桥必须注册在 SPA NoRoute 回退之前。
-	router.RegisterOAuthCallbackBridgeWithAdmission(engine, identityService.CreateOAuthHandoff, admission)
+	handler.RegisterOAuthCallbackBridgeWithAdmission(engine, identityService.CreateOAuthHandoff, admission)
 	if !runtimeOptions.Enabled {
 		return engine, nil
 	}

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"furtalk/internal/domain"
+	"furtalk/internal/platform/gravatar"
 	"furtalk/internal/platform/value"
 )
 
@@ -176,7 +177,7 @@ func (s *Service) profileOf(ctx context.Context, user *domain.User) (*Profile, e
 		EmailVerified: user.EmailVerifiedAt != nil,
 		HasPassword:   hasPassword,
 		Preferences:   prefs,
-		AvatarURL:     value.GravatarURL(user.EmailNormalized, gravatarBase),
+		AvatarURL:     gravatar.URL(user.EmailNormalized, gravatarBase),
 		CreatedAt:     user.CreatedAt,
 		UpdatedAt:     user.UpdatedAt,
 		DeletedAt:     user.DeletedAt,

@@ -11,12 +11,10 @@ import (
 
 	"furtalk/internal/domain"
 	"furtalk/internal/platform/database"
-	"furtalk/internal/platform/gormtx"
 	"furtalk/internal/platform/logging"
 	"furtalk/internal/platform/mailer"
 	"furtalk/internal/repository"
 	"furtalk/internal/repository/model"
-	"furtalk/internal/service/setting"
 
 	"gorm.io/gorm"
 )
@@ -82,7 +80,7 @@ type notificationFixture struct {
 }
 
 // newNotificationHarness 打开临时 SQLite 数据库，迁移全部通知相关表并装配服务。
-func newNotificationHarness(t *testing.T) (*gorm.DB, *Service, *captureMailer, *recordingRenderer, *setting.Service) {
+func newNotificationHarness(t *testing.T) (*gorm.DB, *Service, *captureMailer, *recordingRenderer, *fakeSettingsReader) {
 	t.Helper()
 	dsn := filepath.Join(t.TempDir(), "notification-test.db")
 	db, err := database.Connect(database.Config{Dialect: "sqlite", Path: dsn})
@@ -94,7 +92,7 @@ func newNotificationHarness(t *testing.T) (*gorm.DB, *Service, *captureMailer, *
 			_ = sqlDB.Close()
 		}
 	})
-	if err := database.AutoMigrate(db, &model.User{}, &model.Site{}, &model.SiteOrigin{}, &model.Thread{}, &model.Comment{}, &model.CommentLike{}, &model.NotificationPreferences{}, &model.DynamicSetting{}); err != nil {
+	if err := database.AutoMigrate(db, &model.User{}, &model.Site{}, &model.SiteOrigin{}, &model.Thread{}, &model.Comment{}, &model.CommentLike{}, &model.NotificationPreferences{}); err != nil {
 		t.Fatalf("auto migrate: %v", err)
 	}
 
@@ -102,12 +100,12 @@ func newNotificationHarness(t *testing.T) (*gorm.DB, *Service, *captureMailer, *
 	comments := repository.NewCommentRepo(db)
 	threads := repository.NewThreadRepo(db)
 	prefs := repository.NewPreferenceRepo(db)
-	settingsSvc := setting.NewService(gormtx.NewRunner(db), repository.NewSettingsRepo(db))
+	settings := newFakeSettingsReader()
 
 	mailer := &captureMailer{}
 	renderer := &recordingRenderer{}
-	svc := NewService(users, comments, threads, prefs, nil, settingsSvc, nil, nil, nil, nil, mailer, renderer, fakeSigner{}, "https://furtalk.example.com", nil)
-	return db, svc, mailer, renderer, settingsSvc
+	svc := NewService(users, comments, threads, prefs, nil, settings, nil, nil, nil, nil, mailer, renderer, fakeSigner{}, "https://furtalk.example.com", nil)
+	return db, svc, mailer, renderer, settings
 }
 
 // seedNotificationData 插入站点、线程、管理员、作者、父评论作者与两条评论。
@@ -372,7 +370,7 @@ func TestHandleCreatedSkipsAdminAuthorButKeepsOtherAdmins(t *testing.T) {
 // TestHandleCreatedSkipsAdminAuthorInReviewMode 证明审核模式下管理员作者的
 // 待审核根评论不会通知作者本人，但仍会通知其他活跃管理员。
 func TestHandleCreatedSkipsAdminAuthorInReviewMode(t *testing.T) {
-	db, svc, mailer, _, settingsSvc := newNotificationHarness(t)
+	db, svc, mailer, _, _ := newNotificationHarness(t)
 	fx := seedNotificationData(t, db)
 	ctx := context.Background()
 	users := repository.NewUserRepo(db)
@@ -389,12 +387,6 @@ func TestHandleCreatedSkipsAdminAuthorInReviewMode(t *testing.T) {
 	if err := users.Create(ctx, otherAdmin); err != nil {
 		t.Fatalf("create other admin: %v", err)
 	}
-	if _, err := settingsSvc.Patch(ctx, []setting.SettingItem{
-		{Key: setting.SettingKeyModeration, Type: setting.SettingTypeString, Value: domain.ModerationReview},
-	}, 1); err != nil {
-		t.Fatalf("patch moderation: %v", err)
-	}
-
 	now := time.Date(2026, time.August, 7, 12, 0, 0, 0, time.UTC)
 	root := &domain.Comment{
 		SiteID:       fx.SiteID,
@@ -440,13 +432,8 @@ func TestHandleCreatedSkipsAdminAuthorInReviewMode(t *testing.T) {
 // TestHandleCreatedAwaitingModeration 证明审核模式为 review 时主题与模板数据
 // 切换为待审核；待审核评论不产生回复通知。
 func TestHandleCreatedAwaitingModeration(t *testing.T) {
-	db, svc, mailer, renderer, settingsSvc := newNotificationHarness(t)
+	db, svc, mailer, renderer, _ := newNotificationHarness(t)
 	fx := seedNotificationData(t, db)
-	if _, err := settingsSvc.Patch(context.Background(), []setting.SettingItem{
-		{Key: setting.SettingKeyModeration, Type: setting.SettingTypeString, Value: domain.ModerationReview},
-	}, 1); err != nil {
-		t.Fatalf("patch moderation: %v", err)
-	}
 	// review 模式下新评论持久化为 pending，把种子状态修正为 pending 后触发创建事件。
 	comments := repository.NewCommentRepo(db)
 	if err := comments.UpdateStatus(context.Background(), fx.SiteID, fx.CommentID, domain.CommentStatusPending, nil, nil, nil); err != nil {
@@ -507,13 +494,9 @@ func TestHandleCreatedSpamWording(t *testing.T) {
 // TestHandleCreatedSkipsModerationMailsButKeepsReplyNotifications 证明关闭
 // 管理员审核通知开关只跳过审核邮件，direct 发布的回复通知仍经创建路径发送。
 func TestHandleCreatedSkipsModerationMailsButKeepsReplyNotifications(t *testing.T) {
-	db, svc, mailer, _, settingsSvc := newNotificationHarness(t)
+	db, svc, mailer, _, settings := newNotificationHarness(t)
 	fx := seedNotificationData(t, db)
-	if _, err := settingsSvc.Patch(context.Background(), []setting.SettingItem{
-		{Key: setting.SettingKeyNotifications, Type: setting.SettingTypeJSON, Value: map[string]any{"moderation": false, "replies": true}},
-	}, 1); err != nil {
-		t.Fatalf("patch notifications: %v", err)
-	}
+	settings.set(Settings{Moderation: false, Replies: true})
 
 	svc.handle(context.Background(), domain.CommentEvent{
 		Type:      domain.TypeCommentCreated,
@@ -776,18 +759,14 @@ func TestHandleCreatedDedupesAdminParentFromModerationMail(t *testing.T) {
 // 开关时，父评论作者（管理员）既收不到回复邮件，也因结构性排除收不到该评论
 // 的管理员新评论邮件；其他活跃管理员的新评论邮件保留（R1/R4）。
 func TestHandleCreatedAdminParentReplySuppressedSkipsBothMails(t *testing.T) {
-	db, svc, mailer, _, settingsSvc := newNotificationHarness(t)
+	db, svc, mailer, _, settings := newNotificationHarness(t)
 	fx := seedNotificationData(t, db)
 	ctx := context.Background()
 	users := repository.NewUserRepo(db)
 	if err := users.UpdateRoleStatus(ctx, fx.ParentUserID, domain.RoleAdmin, domain.UserStatusActive); err != nil {
 		t.Fatalf("promote parent user to admin: %v", err)
 	}
-	if _, err := settingsSvc.Patch(ctx, []setting.SettingItem{
-		{Key: setting.SettingKeyNotifications, Type: setting.SettingTypeJSON, Value: map[string]any{"moderation": true, "replies": false}},
-	}, 1); err != nil {
-		t.Fatalf("patch notifications: %v", err)
-	}
+	settings.set(Settings{Moderation: true, Replies: false})
 
 	svc.handle(ctx, domain.CommentEvent{
 		Type:      domain.TypeCommentCreated,
@@ -844,13 +823,9 @@ func TestHandleCreatedAdminParentReplyDisabledSkipsBothMails(t *testing.T) {
 // direct 模式创建路径不再向普通父评论作者发送回复邮件，管理员新评论邮件保留
 // （R4）。
 func TestHandleCreatedRepliesOffSkipsReplyToNormalParent(t *testing.T) {
-	db, svc, mailer, _, settingsSvc := newNotificationHarness(t)
+	db, svc, mailer, _, settings := newNotificationHarness(t)
 	fx := seedNotificationData(t, db)
-	if _, err := settingsSvc.Patch(context.Background(), []setting.SettingItem{
-		{Key: setting.SettingKeyNotifications, Type: setting.SettingTypeJSON, Value: map[string]any{"moderation": true, "replies": false}},
-	}, 1); err != nil {
-		t.Fatalf("patch notifications: %v", err)
-	}
+	settings.set(Settings{Moderation: true, Replies: false})
 
 	svc.handle(context.Background(), domain.CommentEvent{
 		Type:      domain.TypeCommentCreated,
@@ -944,13 +919,9 @@ func TestHandleCreatedReplyDisabledPersonalSkipsReply(t *testing.T) {
 // TestHandlePublishedRepliesOffSkipsReplyMail 证明关闭全局回复开关时，review
 // 模式发布路径仍发送发布确认邮件，但不再向父评论作者发送回复邮件（R4）。
 func TestHandlePublishedRepliesOffSkipsReplyMail(t *testing.T) {
-	db, svc, mailer, _, settingsSvc := newNotificationHarness(t)
+	db, svc, mailer, _, settings := newNotificationHarness(t)
 	fx := seedNotificationData(t, db)
-	if _, err := settingsSvc.Patch(context.Background(), []setting.SettingItem{
-		{Key: setting.SettingKeyNotifications, Type: setting.SettingTypeJSON, Value: map[string]any{"moderation": true, "replies": false}},
-	}, 1); err != nil {
-		t.Fatalf("patch notifications: %v", err)
-	}
+	settings.set(Settings{Moderation: true, Replies: false})
 
 	svc.handle(context.Background(), domain.CommentEvent{
 		Type:      domain.TypeCommentPublished,

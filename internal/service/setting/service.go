@@ -12,7 +12,7 @@ import (
 	"sync"
 
 	"furtalk/internal/domain"
-	"furtalk/internal/platform/value"
+	"furtalk/internal/platform/gravatar"
 	"furtalk/internal/repository"
 )
 
@@ -169,7 +169,7 @@ func DefaultSettings() domain.Settings {
 		CaptchaProvider:      "",
 		EmailDomainWhitelist: []string{},
 		EmailDomainBlacklist: []string{},
-		GravatarBaseURL:      value.DefaultGravatarBaseURL,
+		GravatarBaseURL:      defaultGravatarBaseURL,
 		CommentSort:          string(domain.CommentSortAsc),
 		EmojiCatalogURL:      "",
 		UserAgreementURL:     "",
@@ -204,31 +204,31 @@ func Validate(s domain.Settings) error {
 			return fmt.Errorf("%w: captcha action keys must not be empty", domain.ErrValidation)
 		}
 	}
-	if _, err := value.NormalizeEmailDomains(s.EmailDomainWhitelist); err != nil {
+	if _, err := normalizeEmailDomains(s.EmailDomainWhitelist); err != nil {
 		return fmt.Errorf("%w: %v", domain.ErrValidation, err)
 	}
-	if _, err := value.NormalizeEmailDomains(s.EmailDomainBlacklist); err != nil {
+	if _, err := normalizeEmailDomains(s.EmailDomainBlacklist); err != nil {
 		return fmt.Errorf("%w: %v", domain.ErrValidation, err)
 	}
-	if err := value.ValidateGravatarBaseURL(s.GravatarBaseURL); err != nil {
+	if err := gravatar.ValidateBaseURL(s.GravatarBaseURL); err != nil {
 		return fmt.Errorf("%w: %v", domain.ErrValidation, err)
 	}
 	if !domain.ValidPublicCommentSort(s.CommentSort) {
 		return fmt.Errorf("%w: comment sort must be asc, desc or hot", domain.ErrValidation)
 	}
-	if err := value.ValidateEmojiCatalogURL(s.EmojiCatalogURL); err != nil {
+	if err := validateEmojiCatalogURL(s.EmojiCatalogURL); err != nil {
 		return fmt.Errorf("%w: %v", domain.ErrValidation, err)
 	}
-	if err := value.ValidateHTTPSURL(s.UserAgreementURL); err != nil {
+	if err := validatePublicHTTPSURL(s.UserAgreementURL); err != nil {
 		return fmt.Errorf("%w: user agreement url: %v", domain.ErrValidation, err)
 	}
-	if err := value.ValidateHTTPSURL(s.PrivacyPolicyURL); err != nil {
+	if err := validatePublicHTTPSURL(s.PrivacyPolicyURL); err != nil {
 		return fmt.Errorf("%w: privacy policy url: %v", domain.ErrValidation, err)
 	}
 	if s.LegalConsentVersion <= 0 {
 		return fmt.Errorf("%w: legal consent version must be positive", domain.ErrValidation)
 	}
-	if err := value.ValidateHexColor(s.BrandPrimaryColor); err != nil {
+	if err := validateHexColor(s.BrandPrimaryColor); err != nil {
 		return fmt.Errorf("%w: brand primary color: %v", domain.ErrValidation, err)
 	}
 	return nil
@@ -399,7 +399,7 @@ func applyItems(s *domain.Settings, items []SettingItem) error {
 			if err := decodeInto(item.Value, &raw); err != nil {
 				return fmt.Errorf("setting: decode email domain whitelist: %w", err)
 			}
-			domains, err := value.NormalizeEmailDomains(raw)
+			domains, err := normalizeEmailDomains(raw)
 			if err != nil {
 				return fmt.Errorf("%w: %v", domain.ErrValidation, err)
 			}
@@ -409,7 +409,7 @@ func applyItems(s *domain.Settings, items []SettingItem) error {
 			if err := decodeInto(item.Value, &raw); err != nil {
 				return fmt.Errorf("setting: decode email domain blacklist: %w", err)
 			}
-			domains, err := value.NormalizeEmailDomains(raw)
+			domains, err := normalizeEmailDomains(raw)
 			if err != nil {
 				return fmt.Errorf("%w: %v", domain.ErrValidation, err)
 			}
@@ -421,13 +421,13 @@ func applyItems(s *domain.Settings, items []SettingItem) error {
 		case SettingKeyEmojiCatalogURL:
 			s.EmojiCatalogURL = strings.TrimSpace(item.Value.(string))
 		case SettingKeyUserAgreementURL:
-			url, err := value.NormalizeHTTPSURL(item.Value.(string))
+			url, err := normalizePublicHTTPSURL(item.Value.(string))
 			if err != nil {
 				return fmt.Errorf("%w: user agreement url: %v", domain.ErrValidation, err)
 			}
 			s.UserAgreementURL = url
 		case SettingKeyPrivacyPolicyURL:
-			url, err := value.NormalizeHTTPSURL(item.Value.(string))
+			url, err := normalizePublicHTTPSURL(item.Value.(string))
 			if err != nil {
 				return fmt.Errorf("%w: privacy policy url: %v", domain.ErrValidation, err)
 			}
@@ -439,7 +439,7 @@ func applyItems(s *domain.Settings, items []SettingItem) error {
 			}
 			s.LegalConsentVersion = int64(number)
 		case SettingKeyBrandPrimaryColor:
-			color, err := value.NormalizeHexColor(item.Value.(string))
+			color, err := normalizeHexColor(item.Value.(string))
 			if err != nil {
 				return fmt.Errorf("%w: brand primary color: %v", domain.ErrValidation, err)
 			}

@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"furtalk/internal/domain"
-	"furtalk/internal/platform/value"
+	"furtalk/internal/platform/gravatar"
 )
 
 // adminAction 标识一个审核转换。
@@ -64,7 +64,7 @@ func (s *Service) AdminList(ctx context.Context, filter domain.AdminFilter, page
 	for _, r := range rows {
 		result.Comments = append(result.Comments, AdminCommentView{
 			CommentView: toCommentViewWithReply(&r.Comment, r.AuthorNickname, r.AuthorWebsite, r.AuthorRole,
-				value.GravatarURL(r.AuthorEmailNormalized, gravatarBase), r.ReplyToNickname, 0, false),
+				gravatar.URL(r.AuthorEmailNormalized, gravatarBase), r.ReplyToNickname, 0, false),
 			Email:     r.AuthorEmail,
 			IPMode:    r.IPMode,
 			IPValue:   r.IPValue,
@@ -234,7 +234,7 @@ func (s *Service) adminViewFor(ctx context.Context, comment *domain.Comment) (*A
 	if err != nil {
 		return nil, err
 	}
-	view := toCommentView(comment, user.Nickname, user.WebsiteURL, user.Role, value.GravatarURL(user.EmailNormalized, gravatarBase))
+	view := toCommentView(comment, user.Nickname, user.WebsiteURL, user.Role, gravatar.URL(user.EmailNormalized, gravatarBase))
 	replyNickname, err := s.replyToNickname(ctx, comment)
 	if err != nil {
 		return nil, err

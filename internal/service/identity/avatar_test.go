@@ -6,7 +6,7 @@ import (
 
 	"furtalk/internal/platform/database"
 	"furtalk/internal/platform/gormtx"
-	"furtalk/internal/platform/value"
+	"furtalk/internal/platform/gravatar"
 	"furtalk/internal/repository"
 	"furtalk/internal/repository/model"
 )
@@ -32,7 +32,7 @@ func TestProfileOfDerivesAvatarURL(t *testing.T) {
 	if err != nil {
 		t.Fatalf("profileOf: %v", err)
 	}
-	want := value.GravatarURL(user.EmailNormalized, "https://www.gravatar.com/avatar")
+	want := gravatar.URL(user.EmailNormalized, "https://www.gravatar.com/avatar")
 	if profile.AvatarURL != want {
 		t.Fatalf("avatar = %q, want %q", profile.AvatarURL, want)
 	}
@@ -54,7 +54,7 @@ func TestProfileOfDerivesAvatarURL(t *testing.T) {
 	if err != nil {
 		t.Fatalf("profileOf second: %v", err)
 	}
-	wantSwitched := value.GravatarURL(user.EmailNormalized, "https://avatars.example.com/avatar/")
+	wantSwitched := gravatar.URL(user.EmailNormalized, "https://avatars.example.com/avatar/")
 	if second.AvatarURL != wantSwitched {
 		t.Fatalf("avatar after base switch = %q, want %q", second.AvatarURL, wantSwitched)
 	}

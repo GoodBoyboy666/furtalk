@@ -92,7 +92,7 @@ func newAuthorizationContextRouter(t *testing.T) *gin.Engine {
 	router.Use(httpx.ErrorWriter(translator))
 	router.Use(middleware.JWTVerification(signer))
 	router.Use(middleware.PrincipalResolution(testPrincipalStore{}))
-	RegisterFirstPartyCommentAuthorization(router.Group("/api/v1"), svc, testUserGate{})
+	RegisterFirstPartyCommentAuthorizationWithAdmission(router.Group("/api/v1"), svc, testUserGate{}, nil)
 	return router
 }
 
@@ -174,7 +174,7 @@ func TestAuthorizationContextRejectsInAnonymousMode(t *testing.T) {
 	router.Use(httpx.ErrorWriter(translator))
 	router.Use(middleware.JWTVerification(signer))
 	router.Use(middleware.PrincipalResolution(principals))
-	RegisterFirstPartyCommentAuthorization(router.Group("/api/v1"), service, userGate)
+	RegisterFirstPartyCommentAuthorizationWithAdmission(router.Group("/api/v1"), service, userGate, nil)
 	login := firstPartyCookie(t)
 
 	rec := getAuthorizationContext(router, login, "/api/v1/comment-authorizations/context?site_id=1&origin=https://site.example")

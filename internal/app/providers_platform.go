@@ -4,12 +4,14 @@ import (
 	"log/slog"
 
 	"furtalk/internal/domain"
+	"furtalk/internal/handler"
 	"furtalk/internal/platform/cache"
 	"furtalk/internal/platform/database"
 	"furtalk/internal/platform/eventbus"
 	"furtalk/internal/platform/mailer"
 	"furtalk/internal/platform/passkey"
 	"furtalk/internal/platform/ratelimit"
+	"furtalk/internal/service/identity"
 	"go.uber.org/fx"
 	"gorm.io/gorm"
 )
@@ -48,7 +50,19 @@ func newRateLimiter(cfg ratelimit.Config) *ratelimit.Limiter {
 
 // newFlowAdmission constructs the fixed F-03 per-flow admission registry.
 func newFlowAdmission() *ratelimit.PolicyRegistry {
-	return ratelimit.NewDefaultPolicyRegistry()
+	return ratelimit.NewPolicyRegistry(defaultFlowPolicies())
+}
+
+func defaultFlowPolicies() map[string]ratelimit.Config {
+	return map[string]ratelimit.Config{
+		handler.PolicyPasskeyLoginOptions:        {Rate: 0.5, Burst: 5},
+		handler.PolicyOAuthStart:                 {Rate: 0.2, Burst: 5},
+		handler.PolicyOAuthHandoff:               {Rate: 0.5, Burst: 5},
+		handler.PolicyPasskeyRegistrationOptions: {Rate: 0.2, Burst: 3},
+		handler.PolicyWidgetAuthCode:             {Rate: 1, Burst: 10},
+		identity.PolicyPasswordLoginIP:           {Rate: 0.5, Burst: 5},
+		identity.PolicyPasswordLoginEmail:        {Rate: 0.2, Burst: 3},
+	}
 }
 
 // newEventBus 构建业务评论事件的有界、非阻塞进程内事件总线。

@@ -75,7 +75,7 @@ type OAuthFactoryConfig struct {
 }
 
 // OAuthProviderConfig  OAuthProviderFactory 的完整配置输入，
-// 对应 setting.AuthProvider 的全部解密字段（含 Apple 私钥与自托管实例地址）。
+// 对应 identity.AuthProvider 的全部消费字段（含 Apple 私钥与自托管实例地址）。
 type OAuthProviderConfig struct {
 	ProviderKey     string
 	Kind            string
@@ -142,13 +142,22 @@ func (s *Service) OAuthProviders(ctx context.Context) ([]ProviderMeta, error) {
 	return out, nil
 }
 
-// registrationMode 返回固定 provider 的注册模式；
+type registrationMode uint8
+
+const (
+	registrationVerifiedEmail registrationMode = iota
+	registrationBindOnly
+)
+
+// providerRegistrationMode 返回 identity 拥有的固定 provider 注册策略；
 // 未知 key（自定义 OIDC）默认按已验证邮箱注册处理。
-func registrationMode(providerKey string) oauth.RegistrationMode {
-	if spec, ok := oauth.LookupProvider(providerKey); ok {
-		return spec.Registration
+func providerRegistrationMode(providerKey string) registrationMode {
+	switch providerKey {
+	case "line", "mastodon", "microsoft":
+		return registrationBindOnly
+	default:
+		return registrationVerifiedEmail
 	}
-	return oauth.RegistrationVerifiedEmail
 }
 
 // BeginOAuth 启动 Authorization Code + PKCE 流程。
@@ -160,7 +169,7 @@ func (s *Service) BeginOAuth(ctx context.Context, providerKey, purpose string, u
 	if purpose != oauthPurposeLogin && purpose != oauthPurposeRegister && purpose != oauthPurposeBind {
 		return nil, domain.ErrValidation
 	}
-	if purpose == oauthPurposeRegister && registrationMode(providerKey) == oauth.RegistrationBindOnly {
+	if purpose == oauthPurposeRegister && providerRegistrationMode(providerKey) == registrationBindOnly {
 		return nil, domain.ErrInvalidCredentials
 	}
 	if purpose == oauthPurposeBind && userID <= 0 {
@@ -378,7 +387,7 @@ func (s *Service) resolveOAuthIdentity(ctx context.Context, providerConfig *Auth
 
 	// 5. 无绑定且 provider 为 bind-only：拒绝。不做邮箱查找、不注册、
 	// 不做域名校验、不写库，也不泄露身份是否存在。
-	if registrationMode(providerConfig.ProviderKey) == oauth.RegistrationBindOnly {
+	if providerRegistrationMode(providerConfig.ProviderKey) == registrationBindOnly {
 		return nil, domain.ErrInvalidCredentials
 	}
 
@@ -421,7 +430,7 @@ func (s *Service) registerOAuthUser(ctx context.Context, providerConfig *AuthPro
 		user := &domain.User{
 			Email:           normalized,
 			EmailNormalized: normalized,
-			Nickname:        value.DefaultNickname(normalized),
+			Nickname:        defaultNickname(normalized),
 			Role:            domain.RoleUser,
 			Status:          domain.UserStatusActive,
 			EmailVerifiedAt: &now,

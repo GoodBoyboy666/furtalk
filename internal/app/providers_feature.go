@@ -13,6 +13,7 @@ import (
 	"furtalk/internal/platform/passkey"
 	"furtalk/internal/platform/ratelimit"
 	"furtalk/internal/service/bootstrap"
+	servicecaptcha "furtalk/internal/service/captcha"
 	"furtalk/internal/service/comment"
 	"furtalk/internal/service/identity"
 	"furtalk/internal/service/notification"
@@ -95,7 +96,7 @@ func newServices(
 	sitesService := site.NewService(repos.sites)
 	smtpService := setting.NewSMTPProbe(smtpConfig)
 
-	captchaGateway := comment.NewCaptchaGateway(captchaGatewayReader{svc: providerService})
+	captchaGateway := servicecaptcha.NewGateway(captchaProviderReader{svc: providerService})
 
 	identityService := identity.NewService(identity.Dependencies{
 		TxRunner:       repos.txRunner,
@@ -106,7 +107,7 @@ func newServices(
 		Cache:          store,
 		Policy:         policyReader{svc: settingsService},
 		CaptchaPolicy:  captchaPolicyReader{svc: settingsService},
-		Captcha:        identityCaptchaVerifier{gateway: captchaGateway},
+		Captcha:        captchaGateway,
 		Providers:      oauthProviderReader{svc: providerService},
 		Signer:         signer,
 		Mailer:         smtp.Mailer,
@@ -133,7 +134,7 @@ func newServices(
 		Sites:     repos.sites,
 		Users:     repos.users,
 		Settings:  commentPolicyReader{svc: settingsService},
-		Providers: captchaGatewayReader{svc: providerService},
+		Providers: commentCaptchaProviderReader{svc: providerService},
 		UserW:     identityService,
 		Captcha:   captchaGateway,
 		Authz:     identityService,
@@ -146,7 +147,23 @@ func newServices(
 	})
 
 	notifierDispatcher := notifier.NewDispatcher()
-	notificationsService := notification.NewService(repos.users, repos.comments, repos.threads, repos.prefs, identityService, settingsService, repos.sites, providerService, notifierDispatcher, bus, smtp.Mailer, templates, signer, cfg.PublicBaseURL, logger)
+	notificationsService := notification.NewService(
+		repos.users,
+		repos.comments,
+		repos.threads,
+		repos.prefs,
+		identityService,
+		notificationSettingsReader{svc: settingsService},
+		repos.sites,
+		notificationProviderReader{svc: providerService},
+		notifierDispatcher,
+		bus,
+		smtp.Mailer,
+		templates,
+		signer,
+		cfg.PublicBaseURL,
+		logger,
+	)
 	providerService.SetNotificationTester(notificationTesterAdapter{svc: notificationsService})
 
 	// identity 与 comment 相互引用，清理接线通过 setter 在两侧装配完成后进行。
@@ -193,7 +210,7 @@ type notificationTesterAdapter struct {
 
 // TestNotification 向指定通知通道发送显式标记的测试消息。
 func (a notificationTesterAdapter) TestNotification(ctx context.Context, providerKey string, cfg setting.NotificationConfig) error {
-	return a.svc.TestChannel(ctx, providerKey, cfg)
+	return a.svc.TestChannel(ctx, providerKey, projectNotificationConfig(cfg))
 }
 
 // provideNotificationJob 贡献通知消费任务。任务只要事件总线存在就运行，

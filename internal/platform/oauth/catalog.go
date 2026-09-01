@@ -1,15 +1,5 @@
 package oauth
 
-// RegistrationMode 固定 provider 的注册模式。
-type RegistrationMode string
-
-const (
-	// RegistrationVerifiedEmail 未绑定身份在适配器返回可信已验证邮箱时的注册路径。
-	RegistrationVerifiedEmail RegistrationMode = "verified_email"
-	// RegistrationBindOnly 未绑定身份只能由已登录用户主动绑定，不能注册或按邮箱匹配。
-	RegistrationBindOnly RegistrationMode = "bind_only"
-)
-
 // CallbackMode 授权回调的接收方式。
 type CallbackMode string
 
@@ -43,8 +33,6 @@ type ProviderSpec struct {
 	Name string
 	// Kind 必需的 provider 类型（"oauth" 或 "oidc"）。
 	Kind string
-	// Registration 注册模式。
-	Registration RegistrationMode
 	// PKCE 授权码流程是否使用 S256 PKCE。
 	PKCE bool
 	// Nonce 返回 ID Token 的流程是否发送并校验 nonce。
@@ -59,39 +47,36 @@ type ProviderSpec struct {
 // 未知 key 不在目录中，上层按自定义 OIDC 处理。
 var Catalog = []ProviderSpec{
 	{
-		Key:          "apple",
-		Name:         "Apple",
-		Kind:         "oidc",
-		Registration: RegistrationVerifiedEmail,
-		PKCE:         false,
-		Nonce:        true,
-		Callback:     CallbackFormPost,
+		Key:      "apple",
+		Name:     "Apple",
+		Kind:     "oidc",
+		PKCE:     false,
+		Nonce:    true,
+		Callback: CallbackFormPost,
 		Config: ConfigSpec{
 			PublicFields: []string{"client_id", "team_id", "key_id"},
 			SecretField:  "private_key",
 		},
 	},
 	{
-		Key:          "discord",
-		Name:         "Discord",
-		Kind:         "oauth",
-		Registration: RegistrationVerifiedEmail,
-		PKCE:         false,
-		Nonce:        false,
-		Callback:     CallbackQuery,
+		Key:      "discord",
+		Name:     "Discord",
+		Kind:     "oauth",
+		PKCE:     false,
+		Nonce:    false,
+		Callback: CallbackQuery,
 		Config: ConfigSpec{
 			PublicFields: []string{"client_id"},
 			SecretField:  "client_secret",
 		},
 	},
 	{
-		Key:          "gitea",
-		Name:         "Gitea",
-		Kind:         "oidc",
-		Registration: RegistrationVerifiedEmail,
-		PKCE:         true,
-		Nonce:        true,
-		Callback:     CallbackQuery,
+		Key:      "gitea",
+		Name:     "Gitea",
+		Kind:     "oidc",
+		PKCE:     true,
+		Nonce:    true,
+		Callback: CallbackQuery,
 		Config: ConfigSpec{
 			PublicFields:        []string{"client_id", "instance_url"},
 			SecretField:         "client_secret",
@@ -99,13 +84,12 @@ var Catalog = []ProviderSpec{
 		},
 	},
 	{
-		Key:          "github",
-		Name:         "GitHub",
-		Kind:         "oauth",
-		Registration: RegistrationVerifiedEmail,
-		PKCE:         true,
-		Nonce:        false,
-		Callback:     CallbackQuery,
+		Key:      "github",
+		Name:     "GitHub",
+		Kind:     "oauth",
+		PKCE:     true,
+		Nonce:    false,
+		Callback: CallbackQuery,
 		Config: ConfigSpec{
 			PublicFields: []string{"client_id", "auth_url", "token_url"},
 			SecretField:  "client_secret",
@@ -116,13 +100,12 @@ var Catalog = []ProviderSpec{
 		},
 	},
 	{
-		Key:          "gitlab",
-		Name:         "GitLab",
-		Kind:         "oidc",
-		Registration: RegistrationVerifiedEmail,
-		PKCE:         true,
-		Nonce:        true,
-		Callback:     CallbackQuery,
+		Key:      "gitlab",
+		Name:     "GitLab",
+		Kind:     "oidc",
+		PKCE:     true,
+		Nonce:    true,
+		Callback: CallbackQuery,
 		Config: ConfigSpec{
 			PublicFields:       []string{"client_id", "instance_url"},
 			SecretField:        "client_secret",
@@ -130,13 +113,12 @@ var Catalog = []ProviderSpec{
 		},
 	},
 	{
-		Key:          "google",
-		Name:         "Google",
-		Kind:         "oidc",
-		Registration: RegistrationVerifiedEmail,
-		PKCE:         true,
-		Nonce:        true,
-		Callback:     CallbackQuery,
+		Key:      "google",
+		Name:     "Google",
+		Kind:     "oidc",
+		PKCE:     true,
+		Nonce:    true,
+		Callback: CallbackQuery,
 		Config: ConfigSpec{
 			PublicFields: []string{"client_id", "issuer_url"},
 			SecretField:  "client_secret",
@@ -146,26 +128,24 @@ var Catalog = []ProviderSpec{
 		},
 	},
 	{
-		Key:          "line",
-		Name:         "LINE",
-		Kind:         "oidc",
-		Registration: RegistrationBindOnly,
-		PKCE:         true,
-		Nonce:        true,
-		Callback:     CallbackQuery,
+		Key:      "line",
+		Name:     "LINE",
+		Kind:     "oidc",
+		PKCE:     true,
+		Nonce:    true,
+		Callback: CallbackQuery,
 		Config: ConfigSpec{
 			PublicFields: []string{"client_id"},
 			SecretField:  "client_secret",
 		},
 	},
 	{
-		Key:          "mastodon",
-		Name:         "Mastodon",
-		Kind:         "oauth",
-		Registration: RegistrationBindOnly,
-		PKCE:         true,
-		Nonce:        false,
-		Callback:     CallbackQuery,
+		Key:      "mastodon",
+		Name:     "Mastodon",
+		Kind:     "oauth",
+		PKCE:     true,
+		Nonce:    false,
+		Callback: CallbackQuery,
 		Config: ConfigSpec{
 			PublicFields:        []string{"client_id", "instance_url"},
 			SecretField:         "client_secret",
@@ -173,26 +153,24 @@ var Catalog = []ProviderSpec{
 		},
 	},
 	{
-		Key:          "microsoft",
-		Name:         "Microsoft",
-		Kind:         "oidc",
-		Registration: RegistrationBindOnly,
-		PKCE:         true,
-		Nonce:        true,
-		Callback:     CallbackQuery,
+		Key:      "microsoft",
+		Name:     "Microsoft",
+		Kind:     "oidc",
+		PKCE:     true,
+		Nonce:    true,
+		Callback: CallbackQuery,
 		Config: ConfigSpec{
 			PublicFields: []string{"client_id"},
 			SecretField:  "client_secret",
 		},
 	},
 	{
-		Key:          "twitter",
-		Name:         "Twitter",
-		Kind:         "oauth",
-		Registration: RegistrationVerifiedEmail,
-		PKCE:         true,
-		Nonce:        false,
-		Callback:     CallbackQuery,
+		Key:      "twitter",
+		Name:     "Twitter",
+		Kind:     "oauth",
+		PKCE:     true,
+		Nonce:    false,
+		Callback: CallbackQuery,
 		Config: ConfigSpec{
 			PublicFields: []string{"client_id"},
 			SecretField:  "client_secret",

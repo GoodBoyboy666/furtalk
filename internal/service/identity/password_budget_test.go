@@ -8,7 +8,6 @@ import (
 
 	"furtalk/internal/domain"
 	"furtalk/internal/platform/crypto"
-	"furtalk/internal/platform/ratelimit"
 )
 
 type passwordAdmissionCall struct {
@@ -72,11 +71,11 @@ func TestPasswordLoginAdmissionUsesDigestAndTrustedIP(t *testing.T) {
 	if len(admission.calls) != 2 {
 		t.Fatalf("admission calls = %+v, want IP and email", admission.calls)
 	}
-	if admission.calls[0].policy != ratelimit.PolicyPasswordLoginIP || admission.calls[0].subject != "ip:203.0.113.7" {
+	if admission.calls[0].policy != PolicyPasswordLoginIP || admission.calls[0].subject != "ip:203.0.113.7" {
 		t.Fatalf("IP admission = %+v", admission.calls[0])
 	}
 	wantDigest := cryptox.SHA256Hex([]byte("user@example.com"))
-	if admission.calls[1].policy != ratelimit.PolicyPasswordLoginEmail || admission.calls[1].subject != "email:"+wantDigest {
+	if admission.calls[1].policy != PolicyPasswordLoginEmail || admission.calls[1].subject != "email:"+wantDigest {
 		t.Fatalf("email admission = %+v, want digest subject", admission.calls[1])
 	}
 	if strings.Contains(admission.calls[1].subject, "user@example.com") {

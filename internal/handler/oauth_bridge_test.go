@@ -1,4 +1,4 @@
-package router
+package handler
 
 import (
 	"context"
@@ -7,6 +7,8 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+
+	"furtalk/internal/platform/httpx"
 
 	"github.com/gin-gonic/gin"
 )
@@ -17,10 +19,10 @@ func TestOAuthCallbackBridgeFormPost(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	var gotProvider, gotState, gotCode, gotErr string
 	engine := gin.New()
-	RegisterOAuthCallbackBridge(engine, func(_ context.Context, provider, state, code, errMsg string) (string, error) {
+	RegisterOAuthCallbackBridgeWithAdmission(engine, func(_ context.Context, provider, state, code, errMsg string) (string, error) {
 		gotProvider, gotState, gotCode, gotErr = provider, state, code, errMsg
 		return "handoff-token", nil
-	})
+	}, nil)
 
 	form := url.Values{"state": {"state-1"}, "code": {"code-1"}}
 	rec := httptest.NewRecorder()
@@ -47,10 +49,10 @@ func TestOAuthCallbackBridgeRejectsInvalid(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	calls := 0
 	engine := gin.New()
-	RegisterOAuthCallbackBridge(engine, func(context.Context, string, string, string, string) (string, error) {
+	RegisterOAuthCallbackBridgeWithAdmission(engine, func(context.Context, string, string, string, string) (string, error) {
 		calls++
 		return "handoff-token", nil
-	})
+	}, nil)
 
 	tests := []struct {
 		name string
@@ -80,10 +82,10 @@ func TestOAuthCallbackBridgeRejectsNonAppleProvider(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	calls := 0
 	engine := gin.New()
-	RegisterOAuthCallbackBridge(engine, func(context.Context, string, string, string, string) (string, error) {
+	RegisterOAuthCallbackBridgeWithAdmission(engine, func(context.Context, string, string, string, string) (string, error) {
 		calls++
 		return "handoff-token", nil
-	})
+	}, nil)
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/oauth/callback/github", strings.NewReader("state=s&code=c"))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -93,5 +95,33 @@ func TestOAuthCallbackBridgeRejectsNonAppleProvider(t *testing.T) {
 	}
 	if calls != 0 {
 		t.Fatalf("handoff calls = %d, want 0", calls)
+	}
+}
+
+func TestOAuthCallbackBridgeAdmissionDeniesBeforeHandoff(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	admission := &recordingAdmission{}
+	calls := 0
+	engine := gin.New()
+	engine.Use(httpx.ClientIP(nil))
+	RegisterOAuthCallbackBridgeWithAdmission(engine, func(context.Context, string, string, string, string) (string, error) {
+		calls++
+		return "handoff-token", nil
+	}, admission)
+
+	req := httptest.NewRequest(http.MethodPost, "/oauth/callback/apple", strings.NewReader("state=s&code=c"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.RemoteAddr = "192.0.2.9:1234"
+	rec := httptest.NewRecorder()
+	engine.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("status = %d, want 429", rec.Code)
+	}
+	if calls != 0 {
+		t.Fatalf("handoff calls = %d, want 0", calls)
+	}
+	if admission.policy != PolicyOAuthHandoff || admission.subject != "192.0.2.9" {
+		t.Fatalf("admission = %q/%q", admission.policy, admission.subject)
 	}
 }

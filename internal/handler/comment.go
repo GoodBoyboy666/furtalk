@@ -10,7 +10,6 @@ import (
 	"furtalk/internal/domain"
 	"furtalk/internal/middleware"
 	"furtalk/internal/platform/httpx"
-	"furtalk/internal/platform/ratelimit"
 	"furtalk/internal/service/comment"
 	"github.com/gin-gonic/gin"
 )
@@ -74,11 +73,6 @@ func RegisterWidget(api *gin.RouterGroup, service *comment.Service, verifier com
 	widget.OPTIONS("/session", httpx.CORSForCredentialContext())
 }
 
-// RegisterFirstPartyCommentAuthorization 挂载第一方评论授权签发端点。
-func RegisterFirstPartyCommentAuthorization(api *gin.RouterGroup, service *comment.Service, userGate middleware.UserGate, csrf ...gin.HandlerFunc) {
-	registerFirstPartyCommentAuthorization(api, service, userGate, nil, csrf...)
-}
-
 // RegisterFirstPartyCommentAuthorizationWithAdmission 为授权码签发安装
 // 按当前第一方用户限额的流程准入预算。
 func RegisterFirstPartyCommentAuthorizationWithAdmission(api *gin.RouterGroup, service *comment.Service, userGate middleware.UserGate, admission FlowAdmission, csrf ...gin.HandlerFunc) {
@@ -89,7 +83,7 @@ func registerFirstPartyCommentAuthorization(api *gin.RouterGroup, service *comme
 	issueGroup := api.Group("/comment-authorizations")
 	issueGroup.Use(append([]gin.HandlerFunc{middleware.RequireUser(userGate)}, csrf...)...)
 	issueGroup.GET("/context", firstPartyAuthorizationContext(service))
-	issueGroup.POST("", flowAdmission(admission, ratelimit.PolicyWidgetAuthCode, principalSubject), firstPartyIssueAuthorization(service))
+	issueGroup.POST("", flowAdmission(admission, PolicyWidgetAuthCode, principalSubject), firstPartyIssueAuthorization(service))
 }
 
 // RegisterFirstParty 挂载第一方评论端点。
