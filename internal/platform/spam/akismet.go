@@ -50,12 +50,14 @@ func (a *Akismet) Check(ctx context.Context, input Input) (Result, error) {
 	form.Set("comment_content", input.Body)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, a.endpoint(), strings.NewReader(form.Encode()))
 	if err != nil {
-		return ResultPass, fmt.Errorf("%w: build request: %v", ErrUnavailable, err)
+		return ResultPass, fmt.Errorf("%w: request construction failed", ErrUnavailable)
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	resp, err := a.client.Do(req)
 	if err != nil {
-		return ResultPass, fmt.Errorf("%w: %v", ErrUnavailable, err)
+		// The request URL contains the provider API key in its hostname. Do not
+		// wrap the standard-library error because it may retain that URL.
+		return ResultPass, fmt.Errorf("%w: transport failure", ErrUnavailable)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
@@ -63,7 +65,7 @@ func (a *Akismet) Check(ctx context.Context, input Input) (Result, error) {
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 64))
 	if err != nil {
-		return ResultPass, fmt.Errorf("%w: read response: %v", ErrUnavailable, err)
+		return ResultPass, fmt.Errorf("%w: response read failed", ErrUnavailable)
 	}
 	switch strings.TrimSpace(string(body)) {
 	case "true":

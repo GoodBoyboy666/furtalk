@@ -341,7 +341,7 @@ func (s *Service) createComment(ctx context.Context, cfg domain.CommentPolicy, s
 	var replyToUserID *int64
 	depth := 0
 	if parentID != nil {
-		parent, err := s.comments.FindBySiteAndID(ctx, siteID, *parentID)
+		parent, err := s.comments.FindBySiteAndIDLocked(ctx, siteID, *parentID)
 		if err != nil {
 			if errors.Is(err, domain.ErrNotFound) {
 				return nil, domain.ErrParentNotFound
@@ -353,6 +353,9 @@ func (s *Service) createComment(ctx context.Context, cfg domain.CommentPolicy, s
 		}
 		if parent.Status == domain.CommentStatusDeleted {
 			return nil, domain.ErrParentDeleted
+		}
+		if parent.Status != domain.CommentStatusPublished {
+			return nil, domain.ErrConflict
 		}
 		if parent.Depth >= cfg.MaxReplyDepth {
 			return nil, domain.ErrDepthExceeded

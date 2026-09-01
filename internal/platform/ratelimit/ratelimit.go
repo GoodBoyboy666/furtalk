@@ -25,6 +25,8 @@ const (
 	PolicyOAuthHandoff               = "oauth_handoff"
 	PolicyPasskeyRegistrationOptions = "passkey_registration_options"
 	PolicyWidgetAuthCode             = "widget_auth_code"
+	PolicyPasswordLoginIP            = "password_login_ip"
+	PolicyPasswordLoginEmail         = "password_login_email"
 
 	// Short aliases are retained for callers that prefer the flow name.
 	PasskeyLoginOptionsPolicy        = PolicyPasskeyLoginOptions
@@ -32,9 +34,12 @@ const (
 	OAuthHandoffPolicy               = PolicyOAuthHandoff
 	PasskeyRegistrationOptionsPolicy = PolicyPasskeyRegistrationOptions
 	WidgetAuthCodePolicy             = PolicyWidgetAuthCode
+	PasswordLoginIPPolicy            = PolicyPasswordLoginIP
+	PasswordLoginEmailPolicy         = PolicyPasswordLoginEmail
 )
 
-// DefaultPolicies returns the five F-03 flow budgets.  It returns a fresh map
+// DefaultPolicies returns the F-03 flow budgets plus dedicated public password
+// login budgets. It returns a fresh map
 // on every call so callers cannot mutate a registry after construction.
 func DefaultPolicies() map[string]Config {
 	return map[string]Config{
@@ -43,6 +48,8 @@ func DefaultPolicies() map[string]Config {
 		PolicyOAuthHandoff:               {Rate: 0.5, Burst: 5},
 		PolicyPasskeyRegistrationOptions: {Rate: 0.2, Burst: 3},
 		PolicyWidgetAuthCode:             {Rate: 1, Burst: 10},
+		PolicyPasswordLoginIP:            {Rate: 0.5, Burst: 5},
+		PolicyPasswordLoginEmail:         {Rate: 0.2, Burst: 3},
 	}
 }
 

@@ -284,6 +284,25 @@ func (r *CommentRepo) FindBySiteAndID(ctx context.Context, siteID, id int64) (*d
 	return &out, nil
 }
 
+// FindBySiteAndIDLocked 在写事务内按站点与主键读取评论，并在支持的
+// 方言上锁定该父行。SQLite 不支持 FOR UPDATE，沿用事务的单写者/忙等待语义。
+func (r *CommentRepo) FindBySiteAndIDLocked(ctx context.Context, siteID, id int64) (*domain.Comment, error) {
+	db := gormtx.DB(ctx, r.db)
+	if db.Dialector.Name() != "sqlite" {
+		db = db.Clauses(clause.Locking{Strength: "UPDATE"})
+	}
+	var row model.Comment
+	err := db.Where("site_id = ? AND id = ?", siteID, id).First(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, domain.ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("find comment locked by site and id: %w", err)
+	}
+	out := row.ToComment()
+	return &out, nil
+}
+
 // FindGlobalByID 按全局主键返回一条评论，不限站点。
 func (r *CommentRepo) FindGlobalByID(ctx context.Context, id int64) (*domain.Comment, error) {
 	var row model.Comment

@@ -26,6 +26,7 @@ func errorMappings() []httpx.Mapping {
 		{Target: domain.ErrAnonymousRestricted, Status: http.StatusForbidden, Code: "anonymous_mode_restricted", Message: "匿名模式下不可使用第一方访问"},
 		{Target: domain.ErrRegistrationClosed, Status: http.StatusUnprocessableEntity, Code: "registration_closed", Message: "公开注册已关闭"},
 		{Target: domain.ErrMailUnavailable, Status: http.StatusServiceUnavailable, Code: "mail_unavailable", Message: "邮件服务暂不可用"},
+		{Target: domain.ErrRateLimited, Status: http.StatusTooManyRequests, Code: "rate_limited", Message: "请求过于频繁"},
 		{Target: domain.ErrLastAdmin, Status: http.StatusConflict, Code: "conflict", Message: "不能移除最后一个管理员"},
 		{Target: domain.ErrLastLoginMethod, Status: http.StatusConflict, Code: "conflict", Message: "不能移除最后一个登录方式"},
 		{Target: domain.ErrCacheInvalidation, Status: http.StatusInternalServerError, Code: "cache_invalidation_failed", Message: "授权缓存失效失败"},

@@ -25,6 +25,7 @@ func TestComposedErrorTranslatorCompatibility(t *testing.T) {
 	}{
 		{name: "protocol", err: httpx.ErrMalformedBody, status: http.StatusBadRequest, code: "invalid_request_body", message: "请求体格式错误"},
 		{name: "identity", err: domain.ErrInvalidCredentials, status: http.StatusUnauthorized, code: "invalid_credentials", message: "账号或密码错误"},
+		{name: "rate limited", err: domain.ErrRateLimited, status: http.StatusTooManyRequests, code: "rate_limited", message: "请求过于频繁"},
 		{name: "disabled", err: domain.ErrDisabled, status: http.StatusForbidden, code: "forbidden", message: "账号已被禁用"},
 		{name: "comment wrapped", err: fmt.Errorf("create: %w", domain.ErrParentNotFound), status: http.StatusNotFound, code: "not_found", message: "父评论不存在"},
 		{name: "site", err: domain.ErrConfirmationRequired, status: http.StatusUnprocessableEntity, code: "invalid_input", message: "破坏性操作需要显式确认"},

@@ -156,7 +156,10 @@ func passwordLogin(service *identity.Service) gin.HandlerFunc {
 			writeError(c, err)
 			return
 		}
-		session, err := service.LoginWithPassword(c.Request.Context(), req.Email, req.Password, req.CaptchaToken)
+		session, err := service.LoginWithPasswordFromInput(c.Request.Context(), identity.PasswordLoginInput{
+			Email: req.Email, Password: req.Password, CaptchaToken: req.CaptchaToken,
+			ClientIP: c.GetString(httpx.ClientIPKey),
+		})
 		if err != nil {
 			writeError(c, err)
 			return

@@ -80,6 +80,8 @@ type Service struct {
 	failFast       func(error)
 	commentDeleter domain.CommentDeleter
 	authzLocks     authzLockRegistry
+	admission      PasswordLoginAdmission
+	passwordBudget *argon2Budget
 }
 
 // Dependencies 是 identity 模块构建函数的装配输入。
@@ -102,7 +104,14 @@ type Dependencies struct {
 	BaseURL        string
 	FailFast       func(error)
 	CommentDeleter domain.CommentDeleter
+	Admission      PasswordLoginAdmission
 	Logger         *slog.Logger
+}
+
+// PasswordLoginAdmission 是公开密码登录使用的窄流程预算端口。
+// 生产实现由 app 注入共享的 ratelimit.PolicyRegistry。
+type PasswordLoginAdmission interface {
+	Allow(policy, subject string) bool
 }
 
 // NewService 构建身份服务。
@@ -138,6 +147,8 @@ func NewService(deps Dependencies) *Service {
 		baseURL:        deps.BaseURL,
 		failFast:       deps.FailFast,
 		commentDeleter: deps.CommentDeleter,
+		admission:      deps.Admission,
+		passwordBudget: newArgon2Budget(publicPasswordLoginConcurrency),
 	}
 }
 

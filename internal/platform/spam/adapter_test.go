@@ -4,11 +4,20 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
 	"testing"
 )
+
+type errorTransport struct {
+	err error
+}
+
+func (t errorTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	return nil, t.err
+}
 
 // fakeTransport 返回固定响应并记录请求，供外部渠道适配器测试。
 type fakeTransport struct {
@@ -265,5 +274,21 @@ func TestExternalErrorsHideSecrets(t *testing.T) {
 				t.Fatalf("%T error leaks %q: %v", adapter, secret, err)
 			}
 		}
+	}
+}
+
+func TestAkismetTransportErrorHidesURLAndAPIKey(t *testing.T) {
+	apiKey := "ak-secret"
+	rawURL := "https://" + apiKey + ".rest.akismet.com/1.1/comment-check"
+	adapter := NewAkismet(&http.Client{Transport: errorTransport{err: errors.New("dial tcp " + rawURL + ": connect: refused")}}, AkismetConfig{APIKey: apiKey})
+	_, err := adapter.Check(context.Background(), Input{Body: "hello"})
+	if err == nil {
+		t.Fatal("expected transport error")
+	}
+	if !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("error = %v, want ErrUnavailable", err)
+	}
+	if strings.Contains(err.Error(), apiKey) || strings.Contains(err.Error(), rawURL) {
+		t.Fatalf("transport error leaks secret or URL: %v", err)
 	}
 }

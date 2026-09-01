@@ -66,6 +66,8 @@ var (
 
 	// ErrUnavailable 在外部服务不可用时返回。
 	ErrUnavailable = errors.New("domain: unavailable")
+	// ErrRateLimited 在业务流程预算或并发容量耗尽时返回。
+	ErrRateLimited = errors.New("domain: rate limited")
 	// ErrSecretCorrupt 在 provider 配置的密文损坏或版本不符时返回。
 	ErrSecretCorrupt = errors.New("domain: secret corrupt")
 

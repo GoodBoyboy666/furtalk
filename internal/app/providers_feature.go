@@ -108,6 +108,7 @@ func newServices(
 		BaseURL:        cfg.PublicBaseURL,
 		FailFast:       fatal.Fatal,
 		Logger:         logger,
+		Admission:      admission,
 	})
 
 	bootstrapService, err := bootstrap.NewService(repos.txRunner, identityService, repos.bootstrap, logger)

@@ -1,7 +1,9 @@
 package comment
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -12,7 +14,16 @@ import (
 	"testing"
 
 	"furtalk/internal/domain"
+	"furtalk/internal/platform/logging"
 )
+
+type spamErrorTransport struct {
+	err error
+}
+
+func (t spamErrorTransport) RoundTrip(*http.Request) (*http.Response, error) {
+	return nil, t.err
+}
 
 // fakeSpamReader 返回固定的已启用垃圾检测 provider 配置。
 type fakeSpamReader struct {
@@ -337,5 +348,24 @@ func TestSpamGatewayFingerprint(t *testing.T) {
 	}
 	if dA == dB {
 		t.Fatal("different fingerprint must build a new detector")
+	}
+}
+
+func TestSpamGatewayAkismetTransportLogHidesAPIKeyAndURL(t *testing.T) {
+	apiKey := "ak-secret"
+	rawURL := "https://" + apiKey + ".rest.akismet.com/1.1/comment-check"
+	var logs bytes.Buffer
+	g := NewSpamGateway(fakeSpamReader{providers: []SpamProviderConfig{
+		{ProviderKey: "spam.akismet", Enabled: true, Action: "spam", APIKey: apiKey},
+	}}, logging.New(&logs))
+	g.httpClient = &http.Client{Transport: spamErrorTransport{err: fmt.Errorf("dial tcp %s: connect: refused", rawURL)}}
+	if got := checkSpam(g, "hello"); got != nil {
+		t.Fatalf("override = %v, want nil on provider outage", got)
+	}
+	if strings.Contains(logs.String(), apiKey) || strings.Contains(logs.String(), rawURL) {
+		t.Fatalf("spam log leaks API key or URL: %s", logs.String())
+	}
+	if !strings.Contains(logs.String(), "detector check failed") || !strings.Contains(logs.String(), "unavailable") {
+		t.Fatalf("spam log missing sanitized diagnostic: %s", logs.String())
 	}
 }
