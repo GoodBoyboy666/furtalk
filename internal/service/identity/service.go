@@ -5,6 +5,7 @@ package identity
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"time"
 
@@ -15,6 +16,16 @@ import (
 	"furtalk/internal/repository"
 	"furtalk/internal/service/setting"
 )
+
+// mapEphemeralError keeps cache capacity details out of the HTTP contract and
+// logs only the fixed namespace name. Cache records and keys are never logged.
+func (s *Service) mapEphemeralError(ctx context.Context, namespace string, err error) error {
+	if errors.Is(err, cache.ErrCapacity) {
+		logging.FromContext(ctx, s.log).WarnContext(ctx, "ephemeral namespace capacity exhausted", "namespace", namespace)
+		return domain.ErrUnavailable
+	}
+	return err
+}
 
 // 邮箱验证码与密码策略的进程常量。
 const (
@@ -48,7 +59,9 @@ type Service struct {
 	identities     *repository.ExternalIdentityRepo
 	prefs          *repository.PreferenceRepo
 	emailCodes     EmailCodeStore
-	ephemeral      EphemeralStore
+	passkeyStore   *cache.Namespace
+	oauthState     *cache.Namespace
+	oauthHandoff   *cache.Namespace
 	cache          cache.Store
 	policy         PolicyReader
 	captchaPolicy  CaptchaPolicyReader
@@ -105,7 +118,9 @@ func NewService(deps Dependencies) *Service {
 		identities:     deps.Identities,
 		prefs:          deps.Prefs,
 		emailCodes:     cacheEmailCodeStore{store: deps.Cache},
-		ephemeral:      deps.Cache,
+		passkeyStore:   cache.NewNamespace(deps.Cache, "passkey", passkeyKeyPrefix, 2000),
+		oauthState:     cache.NewNamespace(deps.Cache, "oauth_state", oauthStatePrefix, 2000),
+		oauthHandoff:   cache.NewNamespace(deps.Cache, "oauth_handoff", oauthHandoffPrefix, 500),
 		cache:          deps.Cache,
 		policy:         deps.Policy,
 		captchaPolicy:  deps.CaptchaPolicy,

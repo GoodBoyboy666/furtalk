@@ -229,9 +229,8 @@ func (s *Service) storePasskeySession(ctx context.Context, session []byte) (stri
 	if err := json.Unmarshal(session, &parsed); err != nil || parsed.Challenge == "" {
 		return "", domain.ErrInvalidCredentials
 	}
-	key := passkeyKeyPrefix + parsed.Challenge
-	if err := s.ephemeral.Set(ctx, key, session, passkeyChallengeTTL); err != nil {
-		return "", err
+	if err := s.passkeyStore.Set(ctx, parsed.Challenge, session, passkeyChallengeTTL); err != nil {
+		return "", s.mapEphemeralError(ctx, "passkey", err)
 	}
 	return parsed.Challenge, nil
 }
@@ -240,7 +239,7 @@ func (s *Service) consumePasskeySession(ctx context.Context, challenge string) (
 	if challenge == "" {
 		return nil, domain.ErrInvalidCredentials
 	}
-	raw, err := s.ephemeral.AtomicConsume(ctx, passkeyKeyPrefix+challenge)
+	raw, err := s.passkeyStore.AtomicConsume(ctx, challenge)
 	if err != nil {
 		return nil, domain.ErrInvalidCredentials
 	}

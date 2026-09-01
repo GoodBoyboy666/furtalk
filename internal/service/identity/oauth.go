@@ -211,8 +211,8 @@ func (s *Service) BeginOAuth(ctx context.Context, providerKey, purpose string, u
 	if err != nil {
 		return nil, err
 	}
-	if err := s.ephemeral.Set(ctx, oauthStatePrefix+state, string(recordJSON), oauthStateTTL); err != nil {
-		return nil, err
+	if err := s.oauthState.Set(ctx, state, string(recordJSON), oauthStateTTL); err != nil {
+		return nil, s.mapEphemeralError(ctx, "oauth_state", err)
 	}
 	authURL, err := provider.BuildAuthURL(ctx, oauth.AuthorizationRequest{
 		State:       state,
@@ -236,7 +236,7 @@ func (s *Service) FinishOAuth(ctx context.Context, providerKey, state, code stri
 	if s.oauth == nil {
 		return nil, "", domain.ErrOAuthVerificationFailed
 	}
-	raw, err := s.ephemeral.AtomicConsume(ctx, oauthStatePrefix+state)
+	raw, err := s.oauthState.AtomicConsume(ctx, state)
 	if err != nil {
 		return nil, "", domain.ErrOAuthCallbackInvalid
 	}
@@ -274,7 +274,7 @@ func (s *Service) FinishOAuth(ctx context.Context, providerKey, state, code stri
 // 不创建绑定、不签发会话、不创建用户。未知或 provider 不匹配的 state
 // 返回 ErrOAuthCallbackInvalid，不泄露回调细节。
 func (s *Service) OAuthAccessDenied(ctx context.Context, providerKey, state string) (string, error) {
-	raw, err := s.ephemeral.AtomicConsume(ctx, oauthStatePrefix+state)
+	raw, err := s.oauthState.AtomicConsume(ctx, state)
 	if err != nil {
 		return "", domain.ErrOAuthCallbackInvalid
 	}
@@ -289,8 +289,28 @@ func (s *Service) OAuthAccessDenied(ctx context.Context, providerKey, state stri
 // 返回不透明 token。state 必填；code/error 按实际载荷可有可无。
 // 授权码绝不进入任何 URL。
 func (s *Service) CreateOAuthHandoff(ctx context.Context, providerKey, state, code, errMsg string) (string, error) {
-	if providerKey == "" || state == "" {
+	if state == "" {
 		return "", domain.ErrValidation
+	}
+	if providerKey != "apple" {
+		return "", domain.ErrOAuthCallbackInvalid
+	}
+	var encodedState json.RawMessage
+	if err := s.oauthState.Get(ctx, state, &encodedState); err != nil {
+		return "", domain.ErrOAuthCallbackInvalid
+	}
+	var stateRecord OAuthState
+	// BeginOAuth stores the serialized record as a string for compatibility with
+	// AtomicConsume. Accept the raw object form as well for backend/test doubles.
+	var rawState string
+	if len(encodedState) > 0 && encodedState[0] == '"' {
+		if err := json.Unmarshal(encodedState, &rawState); err != nil {
+			return "", domain.ErrOAuthCallbackInvalid
+		}
+		encodedState = json.RawMessage(rawState)
+	}
+	if err := json.Unmarshal(encodedState, &stateRecord); err != nil || stateRecord.Provider != "apple" {
+		return "", domain.ErrOAuthCallbackInvalid
 	}
 	token, err := cryptox.RandomToken(handoffBytes)
 	if err != nil {
@@ -301,8 +321,8 @@ func (s *Service) CreateOAuthHandoff(ctx context.Context, providerKey, state, co
 	if err != nil {
 		return "", err
 	}
-	if err := s.ephemeral.Set(ctx, oauthHandoffPrefix+token, string(recordJSON), oauthHandoffTTL); err != nil {
-		return "", err
+	if err := s.oauthHandoff.Set(ctx, token, string(recordJSON), oauthHandoffTTL); err != nil {
+		return "", s.mapEphemeralError(ctx, "oauth_handoff", err)
 	}
 	return token, nil
 }
@@ -310,7 +330,7 @@ func (s *Service) CreateOAuthHandoff(ctx context.Context, providerKey, state, co
 // ConsumeOAuthHandoff 原子消费一次性 handoff 记录。
 // 缺失、过期、重放或损坏的 token 返回 ErrOAuthCallbackInvalid。
 func (s *Service) ConsumeOAuthHandoff(ctx context.Context, handoff string) (OAuthHandoff, error) {
-	raw, err := s.ephemeral.AtomicConsume(ctx, oauthHandoffPrefix+handoff)
+	raw, err := s.oauthHandoff.AtomicConsume(ctx, handoff)
 	if err != nil {
 		return OAuthHandoff{}, domain.ErrOAuthCallbackInvalid
 	}

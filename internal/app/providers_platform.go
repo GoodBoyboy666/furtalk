@@ -22,6 +22,7 @@ func platformModule() fx.Option {
 		newDatabase,
 		newCacheStore,
 		newRateLimiter,
+		newFlowAdmission,
 		newEventBus,
 		provideSMTPDelivery,
 		provideTemplates,
@@ -43,6 +44,11 @@ func newCacheStore(cfg cache.Config, logger *slog.Logger) (cache.Store, error) {
 // newRateLimiter 从限流配置构建令牌桶限流器。
 func newRateLimiter(cfg ratelimit.Config) *ratelimit.Limiter {
 	return ratelimit.NewFromConfig(cfg)
+}
+
+// newFlowAdmission constructs the fixed F-03 per-flow admission registry.
+func newFlowAdmission() *ratelimit.PolicyRegistry {
+	return ratelimit.NewDefaultPolicyRegistry()
 }
 
 // newEventBus 构建业务评论事件的有界、非阻塞进程内事件总线。

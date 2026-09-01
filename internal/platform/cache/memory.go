@@ -22,11 +22,12 @@ type memoryItem struct {
 // 存活条目数达到上限时先淘汰过期条目；没有可淘汰的过期条目时，
 // 用 ErrCapacity 拒绝新的写入，让使用方安全失败而不是无限增长。
 type Memory struct {
-	mu    sync.Mutex
-	items map[string]memoryItem
-	limit int
-	now   func() time.Time
-	group singleflight.Group
+	mu         sync.Mutex
+	items      map[string]memoryItem
+	limit      int
+	now        func() time.Time
+	group      singleflight.Group
+	namespaces map[string]map[string]time.Time
 }
 
 // NewMemory 构建一个有界内存存储。limit <= 0 时使用默认值。
@@ -35,9 +36,10 @@ func NewMemory(limit int) *Memory {
 		limit = DefaultMemoryLimit
 	}
 	return &Memory{
-		items: make(map[string]memoryItem),
-		limit: limit,
-		now:   time.Now,
+		items:      make(map[string]memoryItem),
+		limit:      limit,
+		now:        time.Now,
+		namespaces: make(map[string]map[string]time.Time),
 	}
 }
 
@@ -46,8 +48,9 @@ func (s *Memory) Get(ctx context.Context, key string, out any) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	item, ok := s.items[key]
-	if !ok || s.now().After(item.expires) {
+	if !ok || !s.now().Before(item.expires) {
 		delete(s.items, key)
+		s.removeNamespaceMembershipLocked(key)
 		return ErrNotFound
 	}
 	return json.Unmarshal(item.data, out)
@@ -78,6 +81,7 @@ func (s *Memory) Delete(ctx context.Context, key string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.items, key)
+	s.removeNamespaceMembershipLocked(key)
 	return nil
 }
 
@@ -86,11 +90,13 @@ func (s *Memory) AtomicConsume(ctx context.Context, key string) (string, error) 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	item, ok := s.items[key]
-	if !ok || s.now().After(item.expires) {
+	if !ok || !s.now().Before(item.expires) {
 		delete(s.items, key)
+		s.removeNamespaceMembershipLocked(key)
 		return "", ErrNotFound
 	}
 	delete(s.items, key)
+	s.removeNamespaceMembershipLocked(key)
 	var value string
 	if err := json.Unmarshal(item.data, &value); err != nil {
 		return "", err
@@ -100,8 +106,9 @@ func (s *Memory) AtomicConsume(ctx context.Context, key string) (string, error) 
 
 func (s *Memory) evictExpired(now time.Time) {
 	for key, item := range s.items {
-		if now.After(item.expires) {
+		if !now.Before(item.expires) {
 			delete(s.items, key)
+			s.removeNamespaceMembershipLocked(key)
 		}
 	}
 }
@@ -119,19 +126,23 @@ func (s *Memory) AtomicEmailCodeVerify(ctx context.Context, key, submittedHash s
 	var record EmailCodeRecord
 	if err := json.Unmarshal(item.data, &record); err != nil {
 		delete(s.items, key)
+		s.removeNamespaceMembershipLocked(key)
 		return EmailCodeInvalid, nil
 	}
-	if s.now().After(record.ExpiresAt) || record.Attempts >= maxAttempts {
+	if !s.now().Before(record.ExpiresAt) || record.Attempts >= maxAttempts {
 		delete(s.items, key)
+		s.removeNamespaceMembershipLocked(key)
 		return EmailCodeInvalid, nil
 	}
 	if subtle.ConstantTimeCompare([]byte(record.Hash), []byte(submittedHash)) == 1 {
 		delete(s.items, key)
+		s.removeNamespaceMembershipLocked(key)
 		return EmailCodeConsumed, nil
 	}
 	record.Attempts++
 	if record.Attempts >= maxAttempts {
 		delete(s.items, key)
+		s.removeNamespaceMembershipLocked(key)
 		return EmailCodeInvalid, nil
 	}
 	updated, err := json.Marshal(record)

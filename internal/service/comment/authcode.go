@@ -14,19 +14,17 @@ import (
 // authCodeKeyPrefix 是一次性授权码的存储键前缀。
 const authCodeKeyPrefix = "authcode:"
 
+var errAuthCodeCapacity = errors.New("comment: widget authorization namespace capacity")
+
 // cacheAuthCodeStore 基于缓存存储实现一次性授权码存取。
 // 底层缓存负责 TTL 与原子消费（内存后端互斥，Redis 后端 GETDEL）。
 type cacheAuthCodeStore struct {
-	cache cache.Store
-}
-
-func authCodeKey(codeHash string) string {
-	return authCodeKeyPrefix + codeHash
+	cache *cache.Namespace
 }
 
 // NewAuthCodeStore 在缓存存储之上构建授权码存取实现。
-func NewAuthCodeStore(cache cache.Store) AuthCodeStore {
-	return cacheAuthCodeStore{cache: cache}
+func NewAuthCodeStore(store cache.Store) AuthCodeStore {
+	return cacheAuthCodeStore{cache: cache.NewNamespace(store, "widget_auth_code", authCodeKeyPrefix, 1000)}
 }
 
 // SetAuthCode 在缓存中写入一次性授权码记录。
@@ -35,12 +33,18 @@ func (a cacheAuthCodeStore) SetAuthCode(ctx context.Context, codeHash string, re
 	if err != nil {
 		return fmt.Errorf("comment: encode auth code record: %w", err)
 	}
-	return a.cache.Set(ctx, authCodeKey(codeHash), string(data), ttl)
+	if err := a.cache.Set(ctx, codeHash, string(data), ttl); err != nil {
+		if errors.Is(err, cache.ErrCapacity) {
+			return fmt.Errorf("%w: %w", domain.ErrUnavailable, errAuthCodeCapacity)
+		}
+		return err
+	}
+	return nil
 }
 
 // ConsumeAuthCode 原子消费一次授权码记录。
 func (a cacheAuthCodeStore) ConsumeAuthCode(ctx context.Context, codeHash string) (AuthCodeRecord, error) {
-	raw, err := a.cache.AtomicConsume(ctx, authCodeKey(codeHash))
+	raw, err := a.cache.AtomicConsume(ctx, codeHash)
 	if errors.Is(err, cache.ErrNotFound) {
 		return AuthCodeRecord{}, domain.ErrInvalidCredentials
 	}

@@ -75,3 +75,23 @@ func TestOAuthCallbackBridgeRejectsInvalid(t *testing.T) {
 		t.Fatalf("handoff created %d times, want 0", calls)
 	}
 }
+
+func TestOAuthCallbackBridgeRejectsNonAppleProvider(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	calls := 0
+	engine := gin.New()
+	RegisterOAuthCallbackBridge(engine, func(context.Context, string, string, string, string) (string, error) {
+		calls++
+		return "handoff-token", nil
+	})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/oauth/callback/github", strings.NewReader("state=s&code=c"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	engine.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+	if calls != 0 {
+		t.Fatalf("handoff calls = %d, want 0", calls)
+	}
+}

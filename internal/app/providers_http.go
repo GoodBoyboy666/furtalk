@@ -23,7 +23,7 @@ func httpModule() fx.Option {
 		handler.NewTranslator,
 		provideAuthMiddleware,
 		provideRegisters,
-		provideRouter,
+		provideRouterWithAdmission,
 		provideHTTPServer,
 	)
 }
@@ -49,11 +49,11 @@ func provideRegisters(s *services) ([]router.Register, error) {
 			handler.RegisterPublicConfig(api, s.settings)
 		},
 		func(api *gin.RouterGroup) {
-			handler.RegisterAuth(api, s.identity, csrfMiddleware)
-			handler.RegisterMe(api, s.identity, s.identity, csrfMiddleware)
+			handler.RegisterAuthWithAdmission(api, s.identity, s.admission, csrfMiddleware)
+			handler.RegisterMeWithAdmission(api, s.identity, s.identity, s.admission, csrfMiddleware)
 		},
 		func(api *gin.RouterGroup) {
-			handler.RegisterFirstPartyCommentAuthorization(api, s.comment, s.identity, csrfMiddleware)
+			handler.RegisterFirstPartyCommentAuthorizationWithAdmission(api, s.comment, s.identity, s.admission, csrfMiddleware)
 			handler.RegisterMeComments(api, s.comment, s.identity, csrfMiddleware)
 			handler.RegisterWidget(
 				api,
@@ -90,13 +90,31 @@ func provideRouter(
 	identityService *identity.Service,
 	runtimeOptions webRuntimeOptions,
 ) (*gin.Engine, error) {
+	return provideRouterWithAdmission(readiness, cfg, logger, limiter, translator, authentication, registers, identityService, runtimeOptions, nil)
+}
+
+// provideRouterWithAdmission is the production router provider with the
+// feature-specific temporary-state admission registry. The legacy wrapper
+// above keeps focused router tests independent of the Fx graph.
+func provideRouterWithAdmission(
+	readiness *readinessState,
+	cfg config.HTTPConfig,
+	logger *slog.Logger,
+	limiter *ratelimit.Limiter,
+	translator *httpx.Translator,
+	authentication []gin.HandlerFunc,
+	registers []router.Register,
+	identityService *identity.Service,
+	runtimeOptions webRuntimeOptions,
+	admission *ratelimit.PolicyRegistry,
+) (*gin.Engine, error) {
 	gin.SetMode(gin.ReleaseMode)
 	engine, err := router.New(readiness.IsReady, cfg, logger, limiter, translator, authentication, registers)
 	if err != nil {
 		return nil, err
 	}
 	// Apple form_post 桥必须注册在 SPA NoRoute 回退之前。
-	router.RegisterOAuthCallbackBridge(engine, identityService.CreateOAuthHandoff)
+	router.RegisterOAuthCallbackBridgeWithAdmission(engine, identityService.CreateOAuthHandoff, admission)
 	if !runtimeOptions.Enabled {
 		return engine, nil
 	}

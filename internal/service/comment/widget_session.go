@@ -10,6 +10,7 @@ import (
 
 	"furtalk/internal/domain"
 	"furtalk/internal/platform/crypto"
+	"furtalk/internal/platform/logging"
 	jwt "furtalk/internal/platform/token"
 )
 
@@ -44,6 +45,9 @@ func (s *Service) IssueAuthorization(ctx context.Context, input IssueInput) (*Au
 		CredentialMode: pol.Mode,
 	}
 	if err := s.codes.SetAuthCode(ctx, cryptox.SHA256Hex([]byte(code)), record, s.codeTTL); err != nil {
+		if errors.Is(err, errAuthCodeCapacity) {
+			logging.FromContext(ctx, s.log).WarnContext(ctx, "ephemeral namespace capacity exhausted", "namespace", "widget_auth_code")
+		}
 		return nil, err
 	}
 	return &AuthCodeResult{Code: code, RequestID: input.RequestID, ExpiresAt: expiresAt}, nil

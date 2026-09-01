@@ -74,6 +74,54 @@ func TestCleanupLoopConcurrentSafe(t *testing.T) {
 	wg.Wait()
 }
 
+func TestPolicyRegistryKeepsIndependentBuckets(t *testing.T) {
+	r := NewPolicyRegistry(map[string]Config{
+		"one": {Rate: 1, Burst: 2},
+		"two": {Rate: 1, Burst: 1},
+	})
+	if !r.Allow("one", "user-1") || !r.Allow("one", "user-1") || r.Allow("one", "user-1") {
+		t.Fatal("one policy did not enforce its burst")
+	}
+	if !r.Allow("two", "user-1") {
+		t.Fatal("one policy exhausted another policy")
+	}
+	if !r.Allow("one", "user-2") {
+		t.Fatal("subjects unexpectedly shared a bucket")
+	}
+	if r.Allow("missing", "user-1") {
+		t.Fatal("unknown policy allowed a request")
+	}
+	if !r.Allow("two", "") || r.Allow("two", "") {
+		t.Fatal("empty subject did not use the stable unknown bucket")
+	}
+}
+
+func TestPolicyRegistryCopiesDefinitionsAndHasOneCleanupLoop(t *testing.T) {
+	now := time.Now()
+	configs := map[string]Config{"policy": {Rate: 1, Burst: 1}}
+	r := NewPolicyRegistry(configs)
+	configs["other"] = Config{Rate: 1, Burst: 1}
+	if got := r.PolicyNames(); len(got) != 1 || got[0] != "policy" {
+		t.Fatalf("registry policy names = %v, want [policy]", got)
+	}
+	r.now = func() time.Time { return now }
+	if !r.Allow("policy", "idle") {
+		t.Fatal("initial policy admission rejected")
+	}
+	now = now.Add(idleTimeout + time.Minute)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := r.CleanupLoop(ctx); err != nil {
+		t.Fatalf("cleanup after cancel = %v", err)
+	}
+	// Trigger an explicit sweep through the per-policy limiter to keep this
+	// test deterministic without waiting for the minute ticker.
+	r.Limiter("policy").sweep(now)
+	if got := r.BucketCount("policy"); got != 0 {
+		t.Fatalf("bucket count after sweep = %d, want 0", got)
+	}
+}
+
 // itoa 是测试用的小整数转字符串（不依赖 strconv）。
 func itoa(i int) string {
 	if i == 0 {

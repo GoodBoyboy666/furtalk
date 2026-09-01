@@ -4,6 +4,8 @@ package ratelimit
 
 import (
 	"context"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -12,6 +14,36 @@ import (
 type Config struct {
 	Rate  float64 // 每秒补充的令牌数
 	Burst int     // 可累积的最大令牌数
+}
+
+// Names of the fixed flow-admission policies used by the application.  They
+// are strings so handlers can keep policy selection declarative without
+// importing application configuration.
+const (
+	PolicyPasskeyLoginOptions        = "passkey_login_options"
+	PolicyOAuthStart                 = "oauth_start"
+	PolicyOAuthHandoff               = "oauth_handoff"
+	PolicyPasskeyRegistrationOptions = "passkey_registration_options"
+	PolicyWidgetAuthCode             = "widget_auth_code"
+
+	// Short aliases are retained for callers that prefer the flow name.
+	PasskeyLoginOptionsPolicy        = PolicyPasskeyLoginOptions
+	OAuthStartPolicy                 = PolicyOAuthStart
+	OAuthHandoffPolicy               = PolicyOAuthHandoff
+	PasskeyRegistrationOptionsPolicy = PolicyPasskeyRegistrationOptions
+	WidgetAuthCodePolicy             = PolicyWidgetAuthCode
+)
+
+// DefaultPolicies returns the five F-03 flow budgets.  It returns a fresh map
+// on every call so callers cannot mutate a registry after construction.
+func DefaultPolicies() map[string]Config {
+	return map[string]Config{
+		PolicyPasskeyLoginOptions:        {Rate: 0.5, Burst: 5},
+		PolicyOAuthStart:                 {Rate: 0.2, Burst: 5},
+		PolicyOAuthHandoff:               {Rate: 0.5, Burst: 5},
+		PolicyPasskeyRegistrationOptions: {Rate: 0.2, Burst: 3},
+		PolicyWidgetAuthCode:             {Rate: 1, Burst: 10},
+	}
 }
 
 // 限流器后台清理参数：空闲淘汰时长与清扫周期。
@@ -32,6 +64,118 @@ type Limiter struct {
 	mu      sync.Mutex
 	buckets map[string]*bucket
 	now     func() time.Time
+}
+
+// PolicyRegistry is an immutable collection of independent token buckets.
+// Each policy has its own buckets, so a subject exhausting one flow does not
+// consume tokens from another.  CleanupLoop is the only background loop and
+// sweeps every policy on one shared ticker.
+type PolicyRegistry struct {
+	policies map[string]*Limiter
+	now      func() time.Time
+}
+
+// NewPolicyRegistry builds a registry from policy definitions.  Definitions
+// with a non-positive rate or burst are omitted and therefore fail closed when
+// requested.  The input map is copied; later caller mutation has no effect.
+func NewPolicyRegistry(configs map[string]Config) *PolicyRegistry {
+	registry := &PolicyRegistry{
+		policies: make(map[string]*Limiter, len(configs)),
+		now:      time.Now,
+	}
+	for name, cfg := range configs {
+		if strings.TrimSpace(name) == "" || cfg.Rate <= 0 || cfg.Burst <= 0 {
+			continue
+		}
+		registry.policies[name] = NewFromConfig(cfg)
+	}
+	return registry
+}
+
+// NewDefaultPolicyRegistry constructs the application F-03 flow registry.
+func NewDefaultPolicyRegistry() *PolicyRegistry {
+	return NewPolicyRegistry(DefaultPolicies())
+}
+
+// Allow reports whether policy has one token available for subject.  Unknown
+// policies fail closed. Empty subjects use one stable unknown bucket, so a
+// caller cannot bypass admission merely by omitting its identity.
+func (r *PolicyRegistry) Allow(policy, subject string) bool {
+	return r.AllowN(policy, subject, 1)
+}
+
+// AllowN is the policy-registry equivalent of Limiter.AllowN.
+func (r *PolicyRegistry) AllowN(policy, subject string, n int) bool {
+	if n <= 0 {
+		return true
+	}
+	if r == nil {
+		return false
+	}
+	l, ok := r.policies[policy]
+	if !ok || l == nil {
+		return false
+	}
+	return l.AllowN(normalizeSubject(subject), n)
+}
+
+// Limiter returns the named limiter for integration points that already
+// accept the lower-level Limiter type.  The returned pointer must be treated
+// as read-only configuration; its buckets remain safe for concurrent use.
+func (r *PolicyRegistry) Limiter(policy string) *Limiter {
+	if r == nil {
+		return nil
+	}
+	return r.policies[policy]
+}
+
+// PolicyNames returns sorted policy names for diagnostics and tests.
+func (r *PolicyRegistry) PolicyNames() []string {
+	if r == nil {
+		return nil
+	}
+	names := make([]string, 0, len(r.policies))
+	for name := range r.policies {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// BucketCount reports the number of buckets held by one policy.
+func (r *PolicyRegistry) BucketCount(policy string) int {
+	if l := r.Limiter(policy); l != nil {
+		return l.BucketCount()
+	}
+	return 0
+}
+
+// CleanupLoop is the registry's single managed cleanup task.
+func (r *PolicyRegistry) CleanupLoop(ctx context.Context) error {
+	if r == nil {
+		<-ctx.Done()
+		return nil
+	}
+	ticker := time.NewTicker(cleanupPeriod)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+			now := r.now()
+			for _, limiter := range r.policies {
+				limiter.sweep(now)
+			}
+		}
+	}
+}
+
+func normalizeSubject(subject string) string {
+	if subject = strings.TrimSpace(subject); subject != "" {
+		return subject
+	}
+	return "unknown"
 }
 
 // NewFromConfig 按静态限流配置构建限流器。

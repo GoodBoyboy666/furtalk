@@ -37,7 +37,9 @@ type EmailCodeStore interface {
 	AtomicVerifyEmailCode(ctx context.Context, purpose, normalizedEmail, submittedHash string, maxAttempts int) (bool, error)
 }
 
-// EphemeralStore 是一次性挑战与状态的存取边界。
+// EphemeralStore is retained as the legacy narrow contract for callers that
+// provide one-off challenge stores. Production identity flows use the bounded
+// cache.Namespace adapters instead.
 type EphemeralStore interface {
 	Set(ctx context.Context, key string, value any, ttl time.Duration) error
 	AtomicConsume(ctx context.Context, key string) (string, error)

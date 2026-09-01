@@ -33,6 +33,7 @@ func featureModule() fx.Option {
 		provideNotificationJob,
 		provideCacheMonitorJob,
 		provideRateLimitCleanupJob,
+		provideFlowRateLimitCleanupJob,
 	)
 }
 
@@ -47,6 +48,7 @@ type services struct {
 	identity      *identity.Service
 	comment       *comment.Service
 	notifications *notification.Service
+	admission     *ratelimit.PolicyRegistry
 
 	signer            *identity.Signer
 	widgetSigner      *comment.WidgetSigner
@@ -68,6 +70,7 @@ func newServices(
 	bus *eventbus.Bus[domain.CommentEvent],
 	logger *slog.Logger,
 	fatal *fatalCoordinator,
+	admission *ratelimit.PolicyRegistry,
 	smtp smtpDelivery,
 	templates mailer.TemplateRenderer,
 	signer *identity.Signer,
@@ -153,6 +156,7 @@ func newServices(
 		signer:            signer,
 		widgetSigner:      widgetSigner,
 		widgetJWTVerifier: widgetJWTVerifier,
+		admission:         admission,
 	}, nil
 }
 
@@ -202,4 +206,10 @@ func provideCacheMonitorJob(store cache.Store, logger *slog.Logger) jobContribut
 // 清理循环随 Fx 生命周期启动、取消与等待，应用退出时不泄漏 goroutine。
 func provideRateLimitCleanupJob(limiter *ratelimit.Limiter) jobContribution {
 	return jobContribution{Jobs: []BackgroundJob{{Name: "rate-limit-cleanup", Run: limiter.CleanupLoop}}}
+}
+
+// provideFlowRateLimitCleanupJob contributes the single managed cleanup loop
+// for F-03 named flow-admission buckets.
+func provideFlowRateLimitCleanupJob(admission *ratelimit.PolicyRegistry) jobContribution {
+	return jobContribution{Jobs: []BackgroundJob{{Name: "flow-rate-limit-cleanup", Run: admission.CleanupLoop}}}
 }
