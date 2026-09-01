@@ -9,15 +9,13 @@ import (
 	"time"
 )
 
-// maxOAuthResponseBytes 是所有 OAuth/OIDC 响应共用的硬字节上限。
-// 它与现有 CAPTCHA、Spam 预算及 x/oauth2 token 响应上限保持一致。
+// maxOAuthResponseBytes 所有 OAuth/OIDC 响应共用的字节上限。
 const maxOAuthResponseBytes int64 = 1 << 20
 
-// defaultOAuthClientTimeout 是平台层直接构造 OAuth client 时的安全兜底。
+// defaultOAuthClientTimeout 默认OAuth客户端超时时间。
 const defaultOAuthClientTimeout = 10 * time.Second
 
-// ErrResponseTooLarge 表示 OAuth/OIDC provider 响应超过 maxOAuthResponseBytes。
-// sentinel 不携带 endpoint 或 body，调用方可分类错误而不会泄露 provider 细节。
+// ErrResponseTooLarge OAuth/OIDC provider 响应超过 maxOAuthResponseBytes。
 var ErrResponseTooLarge = errors.New("oauth: provider response too large")
 
 // isResponseTooLarge 即使依赖使用 %v 格式化而非包装 sentinel，也能识别该类别。
@@ -32,7 +30,7 @@ func IsResponseTooLarge(err error) bool {
 	return isResponseTooLarge(err)
 }
 
-// preserveProviderError 保留响应超限类别，其余 provider 错误继续归一为身份错误。
+// preserveProviderError 保留响应超限类别，其余 provider 错误归为身份错误。
 func preserveProviderError(err error) error {
 	if isResponseTooLarge(err) {
 		return ErrResponseTooLarge
@@ -40,8 +38,8 @@ func preserveProviderError(err error) error {
 	return ErrIdentity
 }
 
-// boundedTransport 预读并缓存未超限响应，使直接 decoder 与第三方 OIDC 代码获得
-// 相同且可重放的 body；超大 body 在到达这些消费者前即被拒绝。
+// boundedTransport 预读并缓存未超限响应，使直接 decoder 与第三方 OIDC 代码获得相同且可重放的 body；
+// 超大 body 在到达这些消费者前即被拒绝。
 type boundedTransport struct {
 	base http.RoundTripper
 }

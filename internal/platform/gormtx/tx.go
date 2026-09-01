@@ -26,7 +26,7 @@ func NewRunner(db *gorm.DB) *Runner {
 }
 
 // RunInTx 在单个数据库事务内运行 fn。
-// ctx 已携带事务句柄时复用该事务（支持嵌套，不创建 SavePoint）；
+// ctx 已携带事务句柄时复用该事务（支持嵌套，不会创建 SavePoint）；
 // 否则开启新事务并把事务句柄挂载到子 ctx。
 // 使用方不得在 fn 内部调用 SMTP、CAPTCHA、OAuth 或 Redis。
 func (r *Runner) RunInTx(ctx context.Context, fn func(ctx context.Context) error) error {
@@ -47,7 +47,7 @@ func DB(ctx context.Context, defaultDB *gorm.DB) *gorm.DB {
 	return defaultDB.WithContext(ctx)
 }
 
-// IsDuplicateKeyError 报告被包装的 GORM 错误在任一方言下是否为唯一或主键约束违规。
+// IsDuplicateKeyError 报告被包装的 GORM 错误是否为唯一或主键约束违规。
 func IsDuplicateKeyError(err error) bool {
 	msg := strings.ToLower(fmt.Sprint(err))
 	return strings.Contains(msg, "duplicate") || strings.Contains(msg, "unique") ||

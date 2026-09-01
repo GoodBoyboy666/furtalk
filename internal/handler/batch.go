@@ -8,17 +8,18 @@ import (
 	"furtalk/internal/platform/httpx"
 	"furtalk/internal/service/comment"
 	"furtalk/internal/service/identity"
+
 	"github.com/gin-gonic/gin"
 )
 
-// AdminBatchRequest 是三个管理员资源批量命令共用的请求体。
+// AdminBatchRequest 三个管理员资源批量命令共用的请求体。
 type AdminBatchRequest struct {
 	IDs     []string `json:"ids"`
 	Action  string   `json:"action"`
 	Confirm bool     `json:"confirm"`
 }
 
-// AdminBatchResponse 是三个管理员资源批量命令共用的成功响应。
+// AdminBatchResponse 三个管理员资源批量命令共用的成功响应。
 type AdminBatchResponse struct {
 	Action         string `json:"action"`
 	RequestedCount int    `json:"requested_count"`

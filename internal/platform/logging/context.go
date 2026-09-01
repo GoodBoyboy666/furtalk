@@ -5,7 +5,6 @@ import (
 	"log/slog"
 )
 
-// contextKey 是 context 中日志属性的内部键。
 type contextKey struct{}
 
 // WithAttrs 以不可变副本把属性加入 context.Context。

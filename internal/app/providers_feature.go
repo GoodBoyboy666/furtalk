@@ -18,6 +18,7 @@ import (
 	"furtalk/internal/service/notification"
 	"furtalk/internal/service/setting"
 	"furtalk/internal/service/site"
+
 	"go.uber.org/fx"
 )
 
@@ -56,7 +57,7 @@ type services struct {
 	widgetJWTVerifier *comment.WidgetJWTVerifier
 }
 
-// servicesConfig 是 newServices 的最小装配配置。
+// servicesConfig  newServices 的最小装配配置。
 type servicesConfig struct {
 	ProviderSecretKey []byte
 	PublicBaseURL     string
@@ -178,7 +179,7 @@ func provideIdentityService(s *services) *identity.Service {
 	return s.identity
 }
 
-// jobContribution 是后台任务的可选分组贡献。
+// jobContribution 后台任务的可选分组贡献。
 type jobContribution struct {
 	fx.Out
 	Jobs []BackgroundJob `group:"backgroundJobs,flatten"`

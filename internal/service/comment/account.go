@@ -8,7 +8,6 @@ import (
 )
 
 // ListByOwner 返回当前用户本人的评论，支持站点与状态筛选以及页码分页，并返回匹配总数。
-// 响应只含展示所需元数据，不泄露邮箱、IP、UA 等管理员专属字段。
 func (s *Service) ListByOwner(ctx context.Context, ownerID int64, siteID *int64, status *domain.CommentStatus, page, limit int) (*OwnerCommentListResult, error) {
 	limit = normalizeLimit(limit)
 	filter := domain.OwnerFilter{
@@ -41,7 +40,6 @@ func (s *Service) ListByOwner(ctx context.Context, ownerID int64, siteID *int64,
 }
 
 // GetByOwner 返回当前用户本人一条评论的展示视图及当前删除策略。
-// owner 作用域由仓储层强制，他人评论表现为不存在。
 func (s *Service) GetByOwner(ctx context.Context, ownerID, commentID int64) (*OwnerCommentDetail, error) {
 	row, err := s.comments.GetByOwnerAndID(ctx, ownerID, commentID)
 	if err != nil {

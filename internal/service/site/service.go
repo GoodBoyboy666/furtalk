@@ -1,5 +1,4 @@
-// Package site 是站点与 Origin 管理用例的业务层。
-// 只依赖 domain 与 repository，不触碰 GORM；数据经 repository 读写。
+// Package site 站点与 Origin 管理用例的业务层。
 package site
 
 import (

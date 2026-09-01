@@ -1,4 +1,4 @@
-// Package app 是唯一组合根与生命周期所有者。
+// Package app 唯一组合根与生命周期所有者。
 // 生产启动路径由一套 Uber Fx 对象图构成，配置、platform、repository、
 // 业务服务、HTTP 适配层、后台任务与全部资源生命周期都由 *fx.App 管理。
 // Fx/Dig 只出现在本包；feature core 保持框架无关。
@@ -9,14 +9,15 @@ import (
 	"time"
 
 	"furtalk/internal/platform/config"
+
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxevent"
 )
 
-// stopAllowance 是 HTTP shutdown 超时之外为后台任务/资源关闭预留的清理预算。
+// stopAllowance  HTTP shutdown 超时之外为后台任务/资源关闭预留的清理预算。
 const stopAllowance = 5 * time.Second
 
-// New 是生产启动路径的唯一入口，加载并校验静态配置后构建单一 *fx.App。
+// New 生产启动路径的唯一入口，加载并校验静态配置后构建单一 *fx.App。
 // Fx 停止预算来自 HTTP shutdown 超时，配置加载须在节点构造之前完成。
 func New(options ...fx.Option) (*fx.App, error) {
 	cfg, err := config.Load()

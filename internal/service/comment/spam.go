@@ -19,32 +19,32 @@ import (
 // spamTimeout 限定单个外部垃圾检测渠道的请求耗时。
 const spamTimeout = 3 * time.Second
 
-// spamProviderOrder 是固定的垃圾检测执行顺序。
+// spamProviderOrder 固定的垃圾检测执行顺序。
 var spamProviderOrder = []string{"spam.local", "spam.akismet", "spam.aliyun", "spam.tencent"}
 
-// SpamInput 是评论创建阶段传给垃圾检测网关的送检数据。
+// SpamInput 评论创建阶段传给垃圾检测网关的送检数据。
 type SpamInput struct {
-	// BlogURL 是站点 CanonicalURL。
+	// BlogURL 站点 CanonicalURL。
 	BlogURL string
-	// Permalink 是评论所在页面链接。
+	// Permalink 评论所在页面链接。
 	Permalink string
-	// CommentType 是评论类型，例如 comment。
+	// CommentType 评论类型，例如 comment。
 	CommentType string
-	// Body 是评论 Markdown 原文。
+	// Body 评论 Markdown 原文。
 	Body string
-	// Nickname 是作者昵称。
+	// Nickname 作者昵称。
 	Nickname string
-	// Email 是作者邮箱。
+	// Email 作者邮箱。
 	Email string
-	// AuthorURL 是作者网址。
+	// AuthorURL 作者网址。
 	AuthorURL string
-	// IP 是原始客户端 IP。
+	// IP 原始客户端 IP。
 	IP net.IP
-	// UserAgent 是原始 UA。
+	// UserAgent 原始 UA。
 	UserAgent string
 }
 
-// SpamProviderConfig 是解密后的垃圾检测 provider 配置（含机密）。
+// SpamProviderConfig 解密后的垃圾检测 provider 配置（含机密）。
 type SpamProviderConfig struct {
 	ProviderKey     string
 	Enabled         bool

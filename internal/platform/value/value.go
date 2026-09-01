@@ -1,4 +1,4 @@
-// Package value 提供业务无关的值规范化工具。
+// Package value 提供业务无关的值格式化工具。
 // 只依赖标准库；错误语义由使用方 service 层映射为 domain 错误。
 package value
 
@@ -11,8 +11,7 @@ import (
 	"unicode"
 )
 
-// ErrInvalid 在输入值不符合规范时返回。
-// 使用方按需包装为 domain.ErrValidation 等语义错误。
+// ErrInvalid 输入值不符合规范。
 var ErrInvalid = errors.New("value: invalid")
 
 // NormalizeEmail 返回去除首尾空白的地址及其小写查询形式。
@@ -25,7 +24,7 @@ func NormalizeEmail(raw string) (string, string, error) {
 	return original, strings.ToLower(original), nil
 }
 
-// DefaultNickname 用规范化邮箱的本地部分生成默认昵称。
+// DefaultNickname 用格式化邮箱的本地部分生成默认昵称。
 func DefaultNickname(normalized string) string {
 	local := strings.SplitN(normalized, "@", 2)[0]
 	if strings.TrimSpace(local) == "" {
@@ -34,7 +33,7 @@ func DefaultNickname(normalized string) string {
 	return local
 }
 
-// NormalizeWebsite 校验并规范化个人网站 URL，只允许 http 与 https。
+// NormalizeWebsite 校验并格式化个人网站 URL，只允许 http 与 https。
 func NormalizeWebsite(raw string) (string, error) {
 	u, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil || u.Host == "" {

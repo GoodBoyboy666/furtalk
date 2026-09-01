@@ -33,7 +33,7 @@ const (
 	oauthPurposeBind     = "bind"
 )
 
-// OAuthState 是存储在 oauth-state:<state> 下的一次性临时记录。
+// OAuthState 存储在 oauth-state:<state> 下的一次性临时记录。
 // Verifier/Nonce 按 provider 能力可空：非 PKCE provider 无 Verifier，
 // 非 ID-token provider 无 Nonce。RedirectURI 是授权 URL 中登记的回调地址，
 // 令牌交换复用该精确值，不跨部署重算。
@@ -47,7 +47,7 @@ type OAuthState struct {
 	RedirectURI string `json:"redirect_uri,omitempty"`
 }
 
-// OAuthHandoff 是 Apple form_post 桥接在 oauth-handoff:<token> 下保存的
+// OAuthHandoff  Apple form_post 桥接在 oauth-handoff:<token> 下保存的
 // 短时一次性回调载荷。它只做传输适配，不交换授权码、不创建/绑定用户、
 // 不签发 Cookie。
 type OAuthHandoff struct {
@@ -57,24 +57,24 @@ type OAuthHandoff struct {
 	Error    string `json:"error,omitempty"`
 }
 
-// ProviderMeta 是 GET /auth/providers 返回的公共元数据。
+// ProviderMeta  GET /auth/providers 返回的公共元数据。
 type ProviderMeta struct {
 	Key  string
 	Kind string
 	Name string
 }
 
-// OAuthStart 是 BeginOAuth 的结果。
+// OAuthStart  BeginOAuth 的结果。
 type OAuthStart struct {
 	AuthURL string
 }
 
-// OAuthFactoryConfig 是 OAuth/OIDC provider 工厂所需的最小静态配置。
+// OAuthFactoryConfig  OAuth/OIDC provider 工厂所需的最小静态配置。
 type OAuthFactoryConfig struct {
 	ClientTimeout time.Duration
 }
 
-// OAuthProviderConfig 是 OAuthProviderFactory 的完整配置输入，
+// OAuthProviderConfig  OAuthProviderFactory 的完整配置输入，
 // 对应 setting.AuthProvider 的全部解密字段（含 Apple 私钥与自托管实例地址）。
 type OAuthProviderConfig struct {
 	ProviderKey     string
@@ -90,7 +90,7 @@ type OAuthProviderConfig struct {
 	ApplePrivateKey string
 }
 
-// OAuthProvider 是 OAuth/OIDC 适配器边界，由 internal/platform/oauth 实现。
+// OAuthProvider  OAuth/OIDC 适配器边界，由 internal/platform/oauth 实现。
 type OAuthProvider interface {
 	Name() string
 	BuildAuthURL(ctx context.Context, req oauth.AuthorizationRequest) (string, error)

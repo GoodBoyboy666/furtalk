@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// redactedPlaceholder 是敏感属性被过滤后输出的固定占位符。
+// redactedPlaceholder 敏感属性被过滤后输出的固定占位符。
 const redactedPlaceholder = "[REDACTED]"
 
 // setupTokenValue 标记 bootstrap setup token 的唯一受控放行值。
@@ -19,7 +19,7 @@ func (t setupTokenValue) LogValue() slog.Value {
 }
 
 // SetupToken 构造唯一受控放行的 setup_token 属性。
-// bootstrap 首次引导在启动时输出一次明文 token 是有意通道；
+// bootstrap 首次引导在启动时输出一次明文 token；
 // 其他调用点构造的 setup_token 属性仍会被统一 handler 脱敏。
 func SetupToken(raw string) slog.Attr {
 	return slog.Any("setup_token", setupTokenValue(raw))
@@ -122,7 +122,7 @@ func isSensitive(a slog.Attr) bool {
 	return false
 }
 
-// isSetupTokenAllowance 判断属性是否为 SetupToken 构造的唯一放行值。
+// isSetupTokenAllowance 判断是否为 SetupToken 构造的放行值。
 func isSetupTokenAllowance(a slog.Attr) bool {
 	if a.Key != "setup_token" {
 		return false

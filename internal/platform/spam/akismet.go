@@ -9,16 +9,16 @@ import (
 	"strings"
 )
 
-// akismetEndpointHost 是 Akismet comment-check 的固定端点主机。
+// akismetEndpointHost Akismet comment-check 的 Endpoint。
 const akismetEndpointHost = "rest.akismet.com"
 
-// AkismetConfig 是 Akismet 检测器的配置。
+// AkismetConfig Akismet 检测器的配置。
 type AkismetConfig struct {
-	// APIKey 是 Akismet API key。
+	// APIKey Akismet API key。
 	APIKey string
 }
 
-// Akismet 调用 Akismet comment-check 端点，响应严格按 true/false 解析。
+// Akismet 调用 Akismet comment-check Endpoint。
 // 站点 URL 取自每次送检的 Input.BlogURL。
 type Akismet struct {
 	client *http.Client
@@ -26,7 +26,7 @@ type Akismet struct {
 }
 
 // NewAkismet 构建 Akismet 检测器。
-// client 必须携带有界超时。
+// client 必须携带超时。
 func NewAkismet(client *http.Client, cfg AkismetConfig) *Akismet {
 	if client == nil {
 		client = defaultClient()
@@ -77,7 +77,7 @@ func (a *Akismet) Check(ctx context.Context, input Input) (Result, error) {
 	}
 }
 
-// endpoint 返回带 API key 的 comment-check HTTPS 端点。
+// endpoint 返回带 API key 的 comment-check HTTPS Endpoint。
 func (a *Akismet) endpoint() string {
 	return "https://" + strings.TrimSpace(a.cfg.APIKey) + "." + akismetEndpointHost + "/1.1/comment-check"
 }

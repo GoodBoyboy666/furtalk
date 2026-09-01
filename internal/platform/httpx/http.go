@@ -8,14 +8,13 @@ import (
 
 	"furtalk/internal/platform/clientip"
 	"furtalk/internal/platform/logging"
+
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
 
-// RequestIDKey 是请求上下文中保存请求 ID 的键。
 const RequestIDKey = "request_id"
 
-// ClientIPKey 是请求上下文中保存解析后客户端 IP 的键。
 const ClientIPKey = "client_ip"
 
 // RequestID 读取或生成 X-Request-ID，同时写入 Gin 上下文与标准 context，

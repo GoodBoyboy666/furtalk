@@ -16,6 +16,7 @@ import (
 	"furtalk/internal/platform/config"
 	"furtalk/internal/platform/eventbus"
 	"furtalk/internal/platform/logging"
+
 	"go.uber.org/fx"
 	"gorm.io/gorm"
 )
@@ -77,7 +78,7 @@ func newDatabaseCleanup(db *gorm.DB, logger *slog.Logger) *databaseCleanup {
 	return &databaseCleanup{db: db, logger: logger}
 }
 
-// Start 是 fx.Hook 的空实现，数据库清理在启动阶段无动作。
+// Start  fx.Hook 的空实现，数据库清理在启动阶段无动作。
 func (c *databaseCleanup) Start(context.Context) error { return nil }
 
 // Stop 关闭数据库连接池；关闭失败只记录日志并继续。
@@ -106,7 +107,7 @@ func newCacheCleanup(store cache.Store, logger *slog.Logger) *cacheCleanup {
 	return &cacheCleanup{store: store, logger: logger}
 }
 
-// Start 是 fx.Hook 的空实现，缓存清理在启动阶段无动作。
+// Start  fx.Hook 的空实现，缓存清理在启动阶段无动作。
 func (c *cacheCleanup) Start(context.Context) error { return nil }
 
 // Stop 关闭缓存后端连接；内存后端无连接，直接跳过。
@@ -128,7 +129,7 @@ func newBusCleanup(bus *eventbus.Bus[domain.CommentEvent]) *busCleanup {
 	return &busCleanup{bus: bus}
 }
 
-// Start 是 fx.Hook 的空实现，事件总线在启动阶段无动作。
+// Start  fx.Hook 的空实现，事件总线在启动阶段无动作。
 func (c *busCleanup) Start(context.Context) error { return nil }
 
 // Stop 幂等关闭事件总线；关闭后待处理事件被丢弃。

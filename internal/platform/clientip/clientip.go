@@ -1,6 +1,4 @@
-// Package clientip 从请求提取客户端 IP，并做规范化与隐私变换（none/coarse/full）。
-// 仅当直接对端位于可信代理 CIDR 内时才信任 X-Forwarded-For；
-// 否则使用 RemoteAddr。
+// Package clientip 从请求提取客户端 IP，并做格式化与隐私变换。
 package clientip
 
 import (
@@ -13,18 +11,17 @@ import (
 	"github.com/mileusna/useragent"
 )
 
-// 隐私模式：none 丢弃值、coarse 降级、full 保留。
+// 隐私模式：none 关闭记录、coarse 简单、full 完整。
 const (
-	// ModeNone 完全丢弃该值（不持久化任何内容）。
+	// ModeNone 关闭记录。
 	ModeNone = "none"
-	// ModeCoarse 保留隐私降低后的值：IPv4 /24、IPv6 /48，以及 UA 的设备/OS/浏览器族。
+	// ModeCoarse 记录处理后的值：IPv4 /24、IPv6 /48，以及 UA 的设备/OS/浏览器族。
 	ModeCoarse = "coarse"
-	// ModeFull 保留规范化后的或原始的值。
+	// ModeFull 记录原始的值。
 	ModeFull = "full"
 )
 
 // ParseTrustedCIDRs 将已验证的 CIDR 字符串转换为网段。
-// 使用方通常传入静态配置的 TrustedProxies（加载时已校验）；此函数主要供测试与组合使用。
 func ParseTrustedCIDRs(cidrs []string) ([]*net.IPNet, error) {
 	parsed := make([]*net.IPNet, 0, len(cidrs))
 	for _, cidr := range cidrs {
@@ -37,10 +34,10 @@ func ParseTrustedCIDRs(cidrs []string) ([]*net.IPNet, error) {
 	return parsed, nil
 }
 
-// Extract 返回请求的有效客户端 IP。仅当直接对端位于某个可信代理 CIDR 内时，
-// 才解析 X-Forwarded-For 可信代理链；否则直接使用 RemoteAddr。
-// 链解析从最右一跳向左遍历，跳过位于可信代理 CIDR 的地址，选择第一个非可信
-// 地址；全部跳都可信时返回最左一跳。任一非空跳格式错误都返回错误，不静默信任。
+// Extract 返回请求的有效客户端 IP。
+// 仅当位于某个可信代理 CIDR 内时，才解析 X-Forwarded-For 可信代理链；否则直接使用 RemoteAddr。
+// 链解析从最右一跳向左遍历，跳过位于可信代理 CIDR 的地址，选择第一个非可信地址；
+// 全部跳都可信时返回最左一跳。任一非空跳格式错误都返回错误。
 func Extract(r *http.Request, trusted []*net.IPNet) (net.IP, error) {
 	remote, err := peerIP(r.RemoteAddr)
 	if err != nil {
@@ -64,8 +61,7 @@ func Extract(r *http.Request, trusted []*net.IPNet) (net.IP, error) {
 	return Normalize(hops[0]), nil
 }
 
-// xffHops 按 HTTP 字段出现顺序展开全部 X-Forwarded-For header，再按逗号拆分成
-// 跳，并对每个非空跳做严格 IP 解析与规范化。任一非空值不是合法 IP 都返回错误。
+// xffHops 按 HTTP 字段出现顺序展开全部 X-Forwarded-For header
 func xffHops(values []string) ([]net.IP, error) {
 	var hops []net.IP
 	for _, value := range values {
@@ -113,7 +109,8 @@ func parseIP(host string) (net.IP, error) {
 	return ip, nil
 }
 
-// Normalize 返回 IP 的规范单一形式：IPv4 为 4 字节形式，IPv6 为 16 字节形式，并去除 zone。
+// Normalize 返回单一形式的IP
+// IPv4 为 4 字节形式，IPv6 为 16 字节形式，并去除 zone。
 func Normalize(ip net.IP) net.IP {
 	if ip == nil {
 		return nil
@@ -125,9 +122,9 @@ func Normalize(ip net.IP) net.IP {
 }
 
 // CoarsenIP 对 IP 应用隐私模式：
-//   - none 返回 nil（使用方不得持久化该值）；
-//   - coarse 将 IPv4 掩码为其 /24 前缀，将 IPv6 掩码为其 /48 前缀；
-//   - full 返回规范化后的原始值。
+// none 返回 nil（使用方不得持久化该值）；
+// coarse IPv4 返回 /24 前缀，IPv6 返回 /48 前缀；
+// full 返回格式化后的原始值。
 func CoarsenIP(ip net.IP, mode string) (net.IP, error) {
 	ip = Normalize(ip)
 	if ip == nil {
@@ -155,10 +152,6 @@ func masked(ip net.IP, mask net.IPMask) net.IP {
 }
 
 // UARecord 保存按隐私模式处理后的 User-Agent 记录。
-// Raw 与 coarse 组件中恰好设置一个：
-//   - none：不设置任何字段（不持久化任何内容）；
-//   - coarse：设置 Browser、OS 和 Device；Raw 为 nil；
-//   - full：设置 Raw；coarse 组件为 nil。
 type UARecord struct {
 	Raw     *string
 	Browser *string
@@ -173,8 +166,7 @@ func strPtr(s string) *string {
 	return &s
 }
 
-// ParseUA 按给定隐私模式处理原始 User-Agent 字符串。none/coarse 模式
-// 不记录或持久化原始值。
+// ParseUA 按给定隐私模式处理原始 User-Agent 字符串。
 func ParseUA(raw, mode string) (*UARecord, error) {
 	switch mode {
 	case ModeNone:

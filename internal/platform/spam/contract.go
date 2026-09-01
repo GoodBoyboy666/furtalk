@@ -1,6 +1,5 @@
 // Package spam 提供垃圾检测的基础协议与固定渠道适配：
 // 本地关键词库匹配器、Akismet、阿里云内容安全与腾讯云内容安全。
-// 该包与业务无关，不依赖 domain、repository、service 或 Gin。
 package spam
 
 import (

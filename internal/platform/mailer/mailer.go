@@ -1,7 +1,6 @@
 // Package mailer 实现轻量的 SMTP/MIME 投递客户端，对外暴露 Mailer 接口。
 // 封装 github.com/wneessen/go-mail，支持隐式 TLS、显式 STARTTLS 与明文连接、
 // MIME text/HTML 正文，以及每次发送的 context 与超时。
-// 消费者只依赖 Mailer 接口。
 package mailer
 
 import (
@@ -15,13 +14,13 @@ import (
 )
 
 var (
-	// ErrUnavailable 在投递或连通性探针无法到达 SMTP 服务器时返回。
+	// ErrUnavailable 投递或连通性探针无法到达 SMTP 服务器。
 	ErrUnavailable = errors.New("mailer: smtp server unavailable")
-	// ErrConfig 在 SMTP 配置无效时返回。
+	// ErrConfig SMTP 配置无效。
 	ErrConfig = errors.New("mailer: invalid smtp configuration")
 )
 
-// SMTPConfig 是静态 SMTP 投递配置。
+// SMTPConfig 静态 SMTP 投递配置。
 // TLS 选择传输方式："tls"（隐式 TLS）、"starttls"（显式 STARTTLS）或 "none"。
 // 设置 TLSConfig 会覆盖客户端的 TLS 配置；生产环境保持 nil，执行正常的证书验证。
 type SMTPConfig struct {
@@ -35,7 +34,7 @@ type SMTPConfig struct {
 	TLSConfig *tls.Config
 }
 
-// Message 是一封 MIME 邮件。From 为空时回退到 SMTP 配置中的 From；
+// Message 一封 MIME 邮件。From 为空时回退到 SMTP 配置中的 From；
 // TextBody 与 HTMLBody 至少设置一个。
 type Message struct {
 	From     string
@@ -142,7 +141,7 @@ func (m *smtpMailer) Send(ctx context.Context, msg Message) error {
 }
 
 // Probe 执行连通性检查：连接 SMTP 服务器，执行配置的 TLS/STARTTLS 握手并发送 EHLO，
-// 但不发送任何邮件。
+// 不会发送任何邮件。
 func Probe(ctx context.Context, cfg SMTPConfig) error {
 	m, err := NewSMTP(cfg)
 	if err != nil {

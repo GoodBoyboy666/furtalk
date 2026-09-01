@@ -7,14 +7,14 @@ import (
 	"furtalk/internal/platform/token"
 )
 
-// WidgetSignerConfig 是 widget signer 的最小静态配置。
+// WidgetSignerConfig widget signer 的最小静态配置。
 type WidgetSignerConfig struct {
 	Issuer   string
 	Key      []byte
 	Lifetime time.Duration
 }
 
-// WidgetSigner 是面向 widget token 的 JWT 签名与验签服务。
+// WidgetSigner 面向 widget token 的 JWT 签名与验签服务。
 type WidgetSigner struct {
 	*jwt.Service
 }

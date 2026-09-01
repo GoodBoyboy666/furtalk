@@ -12,16 +12,14 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// LikeResult 报告一次 Like 变更后的权威状态。
 type LikeResult struct {
 	CommentID int64
 	LikeCount int64
 	Liked     bool
 }
 
-// AddLike 为已发布的站点内评论幂等添加当前账号的 Like：
-// 已存在时保持原样（不重复计数），评论缺失或非 published 返回 domain.ErrNotFound，
-// 绝不披露隐藏状态。返回权威计数与 liked=true。
+// AddLike 添加 Like：
+// 已存在时保持原样，评论缺失或非 published 返回 domain.ErrNotFound，
 func (r *CommentRepo) AddLike(ctx context.Context, siteID, commentID, userID int64) (*LikeResult, error) {
 	var result *LikeResult
 	err := gormtx.DB(ctx, r.db).Transaction(func(tx *gorm.DB) error {
@@ -48,8 +46,8 @@ func (r *CommentRepo) AddLike(ctx context.Context, siteID, commentID, userID int
 	return result, nil
 }
 
-// RemoveLike 为已发布的站点内评论幂等移除当前账号的 Like：
-// 不存在时也返回成功（计数不降为负），评论缺失或非 published 返回
+// RemoveLike 移除 Like：
+// 不存在时也返回成功，评论缺失或非 published 返回
 // domain.ErrNotFound。返回权威计数与 liked=false。
 func (r *CommentRepo) RemoveLike(ctx context.Context, siteID, commentID, userID int64) (*LikeResult, error) {
 	var result *LikeResult
@@ -75,8 +73,7 @@ func (r *CommentRepo) RemoveLike(ctx context.Context, siteID, commentID, userID 
 	return result, nil
 }
 
-// requirePublishedComment 确认站点内存在已发布的评论，缺失或未发布返回
-// domain.ErrNotFound（与缺失相同的领域结果，不披露隐藏状态）。
+// requirePublishedComment 确认站点内存在已发布的评论，缺失或未发布返回 domain.ErrNotFound。
 func requirePublishedComment(tx *gorm.DB, siteID, commentID int64) error {
 	var count int64
 	if err := tx.Model(&model.Comment{}).
@@ -90,7 +87,7 @@ func requirePublishedComment(tx *gorm.DB, siteID, commentID int64) error {
 	return nil
 }
 
-// likeCount 返回站点内某条评论的权威 Like 计数（非负）。
+// likeCount 返回站点内某条评论的权威 Like 计数。
 func likeCount(tx *gorm.DB, siteID, commentID int64) (int64, error) {
 	var count int64
 	if err := tx.Model(&model.CommentLike{}).

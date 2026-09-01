@@ -1,12 +1,10 @@
-// Command furtalk 是 Furtalk 后端的进程入口。
-// 它只负责启动失败日志与运行单一 *fx.App；全部装配、信号与退出码
-// 生命周期都由 internal/app.New / *fx.App.Run 管理。
+// Command Furtalk 后端的进程入口。
+// 负责启动失败日志与运行单一 *fx.App；全部装配、信号与退出码
+// 生命周期由 internal/app.New / *fx.App.Run 管理。
 //
-// @title Furtalk API
+// @title Furtalk
 // @version 1.0.0
-// @description Furtalk 评论系统的 HTTP API：覆盖站点与管理员引导、
-// @description 第一方与 widget 认证/会话、评论发布与审核、站点/用户/设置/
-// @description 提供商管理与邮件通知退订。
+// @description Furtalk 评论系统
 package main
 
 import (

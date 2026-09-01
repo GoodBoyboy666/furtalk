@@ -15,7 +15,6 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// DynamicSettingRow 是 dynamic_settings 行的仓储边界表示。
 type DynamicSettingRow struct {
 	Key       string
 	Type      string
@@ -23,7 +22,6 @@ type DynamicSettingRow struct {
 	UpdatedBy int64
 }
 
-// SettingsRepo 持久化按 key 存取的动态设置项。
 type SettingsRepo struct {
 	db *gorm.DB
 }
@@ -61,8 +59,7 @@ func (r *SettingsRepo) Get(ctx context.Context, key string) (*DynamicSettingRow,
 }
 
 // LockRows 锁定并返回指定 key 的设置行，供事务内先读后写使用。
-// 仅 PostgreSQL 生成 FOR UPDATE；SQLite 不支持该子句，单进程写事务由
-// busy timeout 兜底，返回行仍按当前事务可见性读取。
+// 仅 PostgreSQL 生成 FOR UPDATE；SQLite 不支持该子句，单进程写事务由 busy timeout 负责，返回行仍按当前事务可见性读取。
 func (r *SettingsRepo) LockRows(ctx context.Context, keys []string) ([]DynamicSettingRow, error) {
 	query := gormtx.DB(ctx, r.db).Where("key IN ?", keys)
 	if r.db.Dialector.Name() != "sqlite" {
@@ -79,8 +76,7 @@ func (r *SettingsRepo) LockRows(ctx context.Context, keys []string) ([]DynamicSe
 	return out, nil
 }
 
-// SeedMissing 批量插入缺失的设置项;已存在的 key 保持不变(ON CONFLICT DO NOTHING)。
-// 并发首次播种时各写入方互不覆盖。
+// SeedMissing 批量插入缺失的设置项;已存在的 key 保持不变。
 func (r *SettingsRepo) SeedMissing(ctx context.Context, rows []DynamicSettingRow) error {
 	if len(rows) == 0 {
 		return nil
@@ -96,7 +92,7 @@ func (r *SettingsRepo) SeedMissing(ctx context.Context, rows []DynamicSettingRow
 	return nil
 }
 
-// Upsert 批量写入设置项;同 key 已存在时直接覆盖(ON CONFLICT DO UPDATE),
+// Upsert 批量写入设置项;同 key 已存在时直接覆盖,
 // 未提交的 key 保持原值。批次在单个事务内全部成功或全部失败。
 func (r *SettingsRepo) Upsert(ctx context.Context, rows []DynamicSettingRow) error {
 	if len(rows) == 0 {
@@ -116,7 +112,6 @@ func (r *SettingsRepo) Upsert(ctx context.Context, rows []DynamicSettingRow) err
 	return nil
 }
 
-// toDynamicSettingRow 把 GORM 行转为仓储边界 DynamicSettingRow。
 func toDynamicSettingRow(row model.DynamicSetting) DynamicSettingRow {
 	return DynamicSettingRow{
 		Key:       row.Key,
@@ -126,7 +121,6 @@ func toDynamicSettingRow(row model.DynamicSetting) DynamicSettingRow {
 	}
 }
 
-// toDynamicSettingModel 把仓储边界行转为 GORM 模型。
 func toDynamicSettingModel(s DynamicSettingRow) model.DynamicSetting {
 	return model.DynamicSetting{
 		Key:       s.Key,
@@ -136,11 +130,8 @@ func toDynamicSettingModel(s DynamicSettingRow) model.DynamicSetting {
 	}
 }
 
-// CaptchaProviderSettingKey 是 CAPTCHA 选择设置 key。
-// 它以公开设置行保存当前选中的 CAPTCHA provider key，不是 provider 配置行。
 const CaptchaProviderSettingKey = "captcha_provider"
 
-// providerSettingSuffix 是 provider 配置动态设置 key 的后缀。
 const providerSettingSuffix = "_provider"
 
 // providerSettingKey 把 provider key 映射为动态设置 key。
@@ -160,7 +151,7 @@ func IsProviderSettingKey(key string) bool {
 	return key != CaptchaProviderSettingKey && strings.HasSuffix(key, providerSettingSuffix)
 }
 
-// CaptchaProviderRow 是 CAPTCHA provider 配置行的仓储边界表示，含密文字段。
+// CaptchaProviderRow CAPTCHA provider 配置行。
 // CAPTCHA 行没有 kind 之外的启用语义，不保存 enabled。
 type CaptchaProviderRow struct {
 	ProviderKey      string
@@ -170,7 +161,7 @@ type CaptchaProviderRow struct {
 	SecretCiphertext []byte
 }
 
-// AuthProviderRow 是 OAuth/OIDC provider 配置行的仓储边界表示，含密文字段。
+// AuthProviderRow OAuth/OIDC provider 配置行。
 type AuthProviderRow struct {
 	ProviderKey      string
 	Kind             domain.ProviderKind
@@ -181,8 +172,7 @@ type AuthProviderRow struct {
 	SecretCiphertext []byte
 }
 
-// SpamProviderRow 是垃圾检测 provider 配置行的仓储边界表示，含密文字段。
-// 垃圾检测 provider 与 OAuth/OIDC 一样携带 enabled，允许多个渠道同时启用。
+// SpamProviderRow 垃圾检测 provider 配置行。
 type SpamProviderRow struct {
 	ProviderKey      string
 	Enabled          bool
@@ -192,8 +182,7 @@ type SpamProviderRow struct {
 	SecretCiphertext []byte
 }
 
-// NotificationProviderRow 是通知通道 provider 配置行的仓储边界表示，含密文字段。
-// 通知通道与 OAuth/OIDC 一样携带 enabled，每平台实例级最多一个目标。
+// NotificationProviderRow 通知通道 provider 配置行。
 type NotificationProviderRow struct {
 	ProviderKey      string
 	Enabled          bool
@@ -203,8 +192,8 @@ type NotificationProviderRow struct {
 	SecretCiphertext []byte
 }
 
-// captchaProviderEnvelope 是 CAPTCHA provider 存入 dynamic_settings 的 JSON value。
-// 只含 kind 判别符与公开/密文块，绝不包含 enabled。
+// captchaProviderEnvelope CAPTCHA provider 存入 dynamic_settings 的 JSON value。
+// 只含 kind 判别符与公开/密文块。
 type captchaProviderEnvelope struct {
 	Kind             domain.ProviderKind `json:"kind"`
 	PublicConfig     json.RawMessage     `json:"public_config,omitempty"`
@@ -213,7 +202,7 @@ type captchaProviderEnvelope struct {
 	SecretCiphertext []byte              `json:"secret_ciphertext,omitempty"`
 }
 
-// authProviderEnvelope 是 OAuth/OIDC provider 存入 dynamic_settings 的 JSON value。
+// authProviderEnvelope OAuth/OIDC provider 存入 dynamic_settings 的 JSON value。
 type authProviderEnvelope struct {
 	Kind             domain.ProviderKind `json:"kind"`
 	Enabled          bool                `json:"enabled"`
@@ -223,8 +212,7 @@ type authProviderEnvelope struct {
 	SecretCiphertext []byte              `json:"secret_ciphertext,omitempty"`
 }
 
-// spamProviderEnvelope 是垃圾检测 provider 存入 dynamic_settings 的 JSON value。
-// 与 OAuth/OIDC 一样携带 enabled；本地词库渠道允许无 Secret 信封。
+// spamProviderEnvelope 垃圾检测 provider 存入 dynamic_settings 的 JSON value。
 type spamProviderEnvelope struct {
 	Kind             domain.ProviderKind `json:"kind"`
 	Enabled          bool                `json:"enabled"`
@@ -234,8 +222,7 @@ type spamProviderEnvelope struct {
 	SecretCiphertext []byte              `json:"secret_ciphertext,omitempty"`
 }
 
-// notificationProviderEnvelope 是通知通道 provider 存入 dynamic_settings 的 JSON value。
-// 与 OAuth/OIDC 一样携带 enabled；每平台实例级最多一个目标。
+// notificationProviderEnvelope 通知通道 provider 存入 dynamic_settings 的 JSON value。
 type notificationProviderEnvelope struct {
 	Kind             domain.ProviderKind `json:"kind"`
 	Enabled          bool                `json:"enabled"`
@@ -245,7 +232,7 @@ type notificationProviderEnvelope struct {
 	SecretCiphertext []byte              `json:"secret_ciphertext,omitempty"`
 }
 
-// decodedProviderRow 是 provider 动态设置行解码后的中间表示，供类型化方法过滤。
+// decodedProviderRow provider 动态设置行解码后的中间表示，供类型化方法过滤。
 type decodedProviderRow struct {
 	providerKey      string
 	kind             domain.ProviderKind

@@ -1,8 +1,4 @@
-// Package captcha 实现 CAPTCHA 提供方适配器（Turnstile、reCAPTCHA、hCaptcha 与 CAP），
-// 统一暴露 Verifier 接口。
-// 各适配器在提供方的 siteverify 端点校验 token；
-// 网络错误、提供方错误响应、hostname/action 不匹配与配置缺失都返回错误。
-// 服务只消费 Verifier 接口，不接触 HTTP 细节。
+// Package captcha 实现 CAPTCHA Provider适配器（Turnstile、reCAPTCHA、hCaptcha 与 CAP），
 package captcha
 
 import (
@@ -19,30 +15,25 @@ import (
 )
 
 var (
-	// ErrUnavailable 在验证无法到达提供方，或提供方返回非 200/无法解析的响应时返回。
-	// 映射为 HTTP 503。
+	// ErrUnavailable 验证无法到达Provider，或Provider返回非 200/无法解析的响应。
 	ErrUnavailable = errors.New("captcha: provider unavailable")
-	// ErrFailed 在提供方报告验证失败（success=false、hostname/action 不匹配）时返回。
-	// 映射为 HTTP 403。
+	// ErrFailed Provider报告验证失败（success=false、hostname/action 不匹配）。
 	ErrFailed = errors.New("captcha: verification failed")
-	// ErrUnsupported 在提供方名称没有对应适配器时返回。
+	// ErrUnsupported Provider名称没有对应适配器。
 	ErrUnsupported = errors.New("captcha: unsupported provider")
-	// ErrRequired 在策略要求 CAPTCHA 但未提供令牌时返回。
+	// ErrRequired 策略要求 CAPTCHA 但未提供令牌。
 	ErrRequired = errors.New("captcha: token required")
 )
 
-// defaultTimeout 是 Config.Timeout 为零时的单个 siteverify 请求超时。
+// defaultTimeout 默认单个 siteverify 请求超时。
 const defaultTimeout = 5 * time.Second
 
-// Verifier 是评论与 widget 服务消费的 CAPTCHA 验证边界。
-// 实现必须在所有错误路径上默认拒绝，不静默放行。
+// Verifier CAPTCHA 验证接口。
 type Verifier interface {
 	Verify(ctx context.Context, action, token string) error
 }
 
-// Config 携带解密后的提供方配置与可选的覆盖项。
-// Endpoint 覆盖提供方的默认 siteverify URL（供测试与连通性探针使用）；
-// Hostname 设置后要求提供方上报的 hostname 完全匹配。
+// Config 配置。
 type Config struct {
 	Provider  string
 	SiteKey   string
@@ -52,8 +43,7 @@ type Config struct {
 	Timeout   time.Duration
 }
 
-// New 为给定的提供方构建适配器。
-// 返回的 Verifier 在结构上满足评论/widget 的 CaptchaVerifier 接口。
+// New 构建适配器。
 func New(cfg Config, client *http.Client) (Verifier, error) {
 	endpoint, err := siteVerifyURL(cfg)
 	if err != nil {
@@ -72,9 +62,7 @@ func New(cfg Config, client *http.Client) (Verifier, error) {
 	return &verifier{cfg: cfg, http: client, endpoint: endpoint, timeout: timeout}, nil
 }
 
-// siteVerifyURL 解析提供方的 siteverify 端点。
-// 非 CAP 提供方使用已知固定端点，可被 Config.Endpoint 覆盖（供测试与探针使用）；
-// CAP 由管理员配置的实例基址与 site key 派生，不使用占位默认值。
+// siteVerifyURL 解析Provider的 siteverify Endpoint。
 func siteVerifyURL(cfg Config) (string, error) {
 	switch cfg.Provider {
 	case "turnstile":
@@ -97,7 +85,7 @@ func siteVerifyURL(cfg Config) (string, error) {
 	}
 }
 
-// overrideOrDefault 在端点覆盖为空时回落到提供方的固定默认值。
+// overrideOrDefault Endpoint覆盖为空时回退到Provider的固定默认值。
 func overrideOrDefault(override, fallback string) string {
 	if strings.TrimSpace(override) == "" {
 		return fallback
@@ -105,8 +93,7 @@ func overrideOrDefault(override, fallback string) string {
 	return override
 }
 
-// WidgetAPIURL 返回提供方给浏览器控件使用的公共 API 端点。
-// 仅 CAP 需要管理员配置的外部 Standalone 基址派生；其他提供方返回空串。
+// WidgetAPIURL 给浏览器控件使用的公共 API Endpoint。
 func WidgetAPIURL(cfg Config) string {
 	if cfg.Provider != "cap" || strings.TrimSpace(cfg.Endpoint) == "" {
 		return ""
@@ -118,8 +105,7 @@ func WidgetAPIURL(cfg Config) string {
 	return base + "/" + cfg.SiteKey + "/"
 }
 
-// normalizeBaseURL 校验并规范化绝对 http(s) 实例 URL，供 CAP 派生端点。
-// 去除尾部斜杠与查询/片段，不改动主机与协议。
+// normalizeBaseURL 校验并格式化绝对 http(s) 实例 URL。
 func normalizeBaseURL(raw string) (string, error) {
 	u, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http") {
@@ -137,8 +123,7 @@ type verifier struct {
 	timeout  time.Duration
 }
 
-// siteVerifyResponse 是各提供方共享的响应结构。
-// 提供方未返回的字段为空，校验时跳过这些字段。
+// siteVerifyResponse 各Provider共享的响应结构。
 type siteVerifyResponse struct {
 	Success    bool     `json:"success"`
 	ErrorCodes []string `json:"error-codes"`
@@ -146,9 +131,9 @@ type siteVerifyResponse struct {
 	Action     string   `json:"action"`
 }
 
-// Verify 把 secret 和 token 提交到提供方的 siteverify 端点。
-// CAP 使用官方 JSON 协议；其余提供方沿用 form-urlencoded 协议。
-// 仅当提供方确认成功，且上报的 action 与 hostname 匹配时返回 nil，否则返回错误。
+// Verify 验证。
+// CAP 使用官方 JSON 协议；其余Provider沿用 form-urlencoded 协议。
+// 仅当Provider确认成功，且上报的 action 与 hostname 匹配时返回 nil，否则返回错误。
 // 网络错误、非 200 响应和解析失败都返回 ErrUnavailable。
 func (c *verifier) Verify(ctx context.Context, action, token string) error {
 	if strings.TrimSpace(token) == "" {
@@ -206,9 +191,8 @@ func (c *verifier) Verify(ctx context.Context, action, token string) error {
 	return nil
 }
 
-// Probe 在不提交 token 的情况下对提供方的 siteverify 端点执行有界连通性检查。
-// 任何 HTTP 响应（2xx 或 4xx）都证明可达；传输错误或缺少提供方配置则返回错误。
-// admin 的 captcha 类型 provider-test 端点依赖此探针。
+// Probe 不提交 token 的情况下对Provider的 siteverify Endpoint执行连通性检查。
+// 任何 HTTP 响应（2xx 或 4xx）都证明可达；传输错误或缺少Provider配置则返回错误。
 func Probe(ctx context.Context, cfg Config, client *http.Client) error {
 	v, err := New(cfg, client)
 	if err != nil {
@@ -233,10 +217,9 @@ func Probe(ctx context.Context, cfg Config, client *http.Client) error {
 	return nil
 }
 
-// PolicyCheck 对单个 action 执行策略。
-// 策略不要求该 action 时直接放行；否则验证器缺失或不可用返回 ErrUnavailable，
+// PolicyCheck 对单个 action 执行策略检查。
+// 验证器缺失或不可用返回 ErrUnavailable，
 // 缺少令牌返回 ErrRequired，被拒绝的令牌返回 ErrFailed。
-// 服务层据此映射为各自 feature 的语义错误。
 func PolicyCheck(ctx context.Context, verifier Verifier, policy map[string]bool, action, token string) error {
 	if !policy[action] {
 		return nil

@@ -1,4 +1,4 @@
-// Package handler 是 HTTP 层：请求解析、身份提取、DTO 组装与错误→HTTP 映射。
+// Package handler  HTTP 层：请求解析、身份提取、DTO 组装与错误→HTTP 映射。
 // 按业务分文件，同属一个大包。不触碰 repository 与 GORM。
 package handler
 
@@ -12,6 +12,7 @@ import (
 	"furtalk/internal/domain"
 	"furtalk/internal/middleware"
 	"furtalk/internal/platform/httpx"
+
 	"github.com/gin-gonic/gin"
 )
 

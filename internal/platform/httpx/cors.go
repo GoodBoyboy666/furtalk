@@ -9,7 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// CORSForSiteParam 是路由注册时显式选择的 CORS 策略。
+// CORSForSiteParam 路由注册时显式选择的 CORS 策略。
 // 站点 id 位于路由参数中，中间件按参数解析站点，并对照其精确 origin 白名单。
 // 仅当请求 Origin 与站点存储的某个规范 origin 字节级完全一致且站点处于活跃状态时，
 // 才授予携带凭据的 CORS 头；每个 CORS 响应都设置 Vary: Origin。
@@ -41,7 +41,7 @@ func CORSForSiteParam(param string, origins OriginsProvider) gin.HandlerFunc {
 	}
 }
 
-// CORSForCredentialContext 是路由注册时显式选择的 CORS 策略。
+// CORSForCredentialContext 路由注册时显式选择的 CORS 策略。
 // 站点上下文来自 credential 或一次性 code，预检阶段未知，因此预检只按结构应答；
 // 精确 Origin 由副作用处理器或服务通过 RequireAllowedOrigin 或服务级白名单重新验证。
 func CORSForCredentialContext() gin.HandlerFunc {
@@ -82,7 +82,7 @@ func RequireAllowedOrigin(origins OriginsProvider, siteID func(*gin.Context) (in
 	}
 }
 
-// SiteIDFromParam 返回从路由参数解析站点 id 的解析器，供 RequireAllowedOrigin 使用。
+// SiteIDFromParam 从路由参数解析站点 id，供 RequireAllowedOrigin 使用。
 func SiteIDFromParam(param string) func(*gin.Context) (int64, bool) {
 	return func(c *gin.Context) (int64, bool) {
 		return siteIDFromParam(c, param)
@@ -99,7 +99,7 @@ func siteIDFromParam(c *gin.Context, param string) (int64, bool) {
 }
 
 // allowOrigin 设置精确的 allow-origin 头并处理预检。
-// 真实的副作用请求继续进入后续中间件，由 RequireAllowedOrigin 或服务重新验证 Origin。
+// 放行的请求继续进入后续中间件，由 RequireAllowedOrigin 或服务重新验证 Origin。
 func allowOrigin(c *gin.Context, origin string) {
 	c.Header("Access-Control-Allow-Origin", origin)
 	c.Header("Access-Control-Allow-Credentials", "true")
@@ -117,8 +117,8 @@ func allowOrigin(c *gin.Context, origin string) {
 	c.AbortWithStatus(http.StatusNoContent)
 }
 
-// rejectPreflight 中止一个不得授予的预检请求。
-// 真实的副作用请求继续进入 handler，由 handler 重新验证 Origin。
+// rejectPreflight 中止一个非法的预检请求。
+// 放行的请求继续进入 handler，由 handler 重新验证 Origin。
 func rejectPreflight(c *gin.Context) {
 	if c.Request.Method != http.MethodOptions {
 		return
@@ -126,7 +126,7 @@ func rejectPreflight(c *gin.Context) {
 	c.AbortWithStatusJSON(http.StatusForbidden, Response(c, "cors_origin_not_allowed", "origin is not allowed"))
 }
 
-// CanonicalOrigin 验证并规范化单个精确 origin 值：
+// CanonicalOrigin 验证并格式化单个精确 origin 值：
 //   - 非空且不是字面量 "null"；
 //   - 无空白或逗号（多值走私）；
 //   - 无通配符；
@@ -161,8 +161,7 @@ func CanonicalOrigin(raw string) (string, bool) {
 	return origin, true
 }
 
-// validateOriginHeader 使用 CanonicalOrigin 验证单个精确 Origin 头值。
-// 恰好需要一个头值。
+// validateOriginHeader 使用 CanonicalOrigin 验证单个精确 Origin 值。
 func validateOriginHeader(r *http.Request) (string, bool) {
 	values := r.Header.Values("Origin")
 	if len(values) != 1 {
@@ -172,7 +171,6 @@ func validateOriginHeader(r *http.Request) (string, bool) {
 }
 
 // ValidRequestOrigin 返回请求中结构合法的精确 Origin，缺失或无效时返回空字符串。
-// 有副作用的 handler 必须对照站点白名单重新验证 Origin，CORS 预检的允许并非授权。
 func ValidRequestOrigin(c *gin.Context) string {
 	origin, ok := validateOriginHeader(c.Request)
 	if !ok {

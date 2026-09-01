@@ -12,12 +12,11 @@ import (
 	"gorm.io/gorm"
 )
 
-// BootstrapRepo 持久化 bootstrap 单例行。
 type BootstrapRepo struct {
 	db *gorm.DB
 }
 
-// NewBootstrapRepo 构建 bootstrap 仓储。
+// NewBootstrapRepo 构建 bootstrap repository。
 func NewBootstrapRepo(db *gorm.DB) *BootstrapRepo {
 	return &BootstrapRepo{db: db}
 }

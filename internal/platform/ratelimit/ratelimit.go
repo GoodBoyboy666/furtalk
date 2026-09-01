@@ -1,5 +1,4 @@
 // Package ratelimit 提供进程内令牌桶限流器。
-// 计数器仅存于内存，无持久化，无跨进程共享。
 package ratelimit
 
 import (
@@ -10,15 +9,13 @@ import (
 	"time"
 )
 
-// Config 是限流器需要的静态配置。
+// Config 限流器需要的静态配置。
 type Config struct {
 	Rate  float64 // 每秒补充的令牌数
 	Burst int     // 可累积的最大令牌数
 }
 
-// Names of the fixed flow-admission policies used by the application.  They
-// are strings so handlers can keep policy selection declarative without
-// importing application configuration.
+// 应用中固定流量准入策略的名称。使用字符串类型，处理函数可以声明式地选择策略，而无需引入应用配置。
 const (
 	PolicyPasskeyLoginOptions        = "passkey_login_options"
 	PolicyOAuthStart                 = "oauth_start"
@@ -28,7 +25,7 @@ const (
 	PolicyPasswordLoginIP            = "password_login_ip"
 	PolicyPasswordLoginEmail         = "password_login_email"
 
-	// Short aliases are retained for callers that prefer the flow name.
+	// 保留这些短别名，供偏好流程命名的调用方使用。
 	PasskeyLoginOptionsPolicy        = PolicyPasskeyLoginOptions
 	OAuthStartPolicy                 = PolicyOAuthStart
 	OAuthHandoffPolicy               = PolicyOAuthHandoff
@@ -38,9 +35,8 @@ const (
 	PasswordLoginEmailPolicy         = PolicyPasswordLoginEmail
 )
 
-// DefaultPolicies returns the F-03 flow budgets plus dedicated public password
-// login budgets. It returns a fresh map
-// on every call so callers cannot mutate a registry after construction.
+// DefaultPolicies 返回各流程的限流预算，以及公开密码登录的专用预算。
+// 每次调用都返回全新的 map，避免调用方在构造后改动注册表。
 func DefaultPolicies() map[string]Config {
 	return map[string]Config{
 		PolicyPasskeyLoginOptions:        {Rate: 0.5, Burst: 5},
@@ -53,12 +49,11 @@ func DefaultPolicies() map[string]Config {
 	}
 }
 
-// 限流器后台清理参数：空闲淘汰时长与清扫周期。
 const (
 	idleTimeout   = 10 * time.Minute
 	cleanupPeriod = 1 * time.Minute
 
-	// DefaultBucketCapacity bounds the subjects retained by every limiter.
+	// DefaultBucketCapacity 限制每个限流器保留的 subject 数量。
 	DefaultBucketCapacity = 10_000
 )
 
@@ -77,18 +72,16 @@ type Limiter struct {
 	now      func() time.Time
 }
 
-// PolicyRegistry is an immutable collection of independent token buckets.
-// Each policy has its own buckets, so a subject exhausting one flow does not
-// consume tokens from another.  CleanupLoop is the only background loop and
-// sweeps every policy on one shared ticker.
+// PolicyRegistry 一组相互独立的令牌桶的不可变集合。
+// 每个策略拥有自己的桶，耗尽某个流程的配额不会消耗其他流程的令牌。
+// CleanupLoop 是唯一的后台循环，用同一个共享 ticker 轮询清理所有策略。
 type PolicyRegistry struct {
 	policies map[string]*Limiter
 	now      func() time.Time
 }
 
-// NewPolicyRegistry builds a registry from policy definitions.  Definitions
-// with a non-positive rate or burst are omitted and therefore fail closed when
-// requested.  The input map is copied; later caller mutation has no effect.
+// NewPolicyRegistry 按策略定义构建注册表。rate 或 burst 非正的定义会被跳过，请求这些策略时直接失败（fail closed）。
+// 输入 map 会被复制，调用方之后的修改不会影响注册表。
 func NewPolicyRegistry(configs map[string]Config) *PolicyRegistry {
 	registry := &PolicyRegistry{
 		policies: make(map[string]*Limiter, len(configs)),
@@ -103,19 +96,18 @@ func NewPolicyRegistry(configs map[string]Config) *PolicyRegistry {
 	return registry
 }
 
-// NewDefaultPolicyRegistry constructs the application F-03 flow registry.
+// NewDefaultPolicyRegistry 构建应用的流程注册表。
 func NewDefaultPolicyRegistry() *PolicyRegistry {
 	return NewPolicyRegistry(DefaultPolicies())
 }
 
-// Allow reports whether policy has one token available for subject.  Unknown
-// policies fail closed. Empty subjects use one stable unknown bucket, so a
-// caller cannot bypass admission merely by omitting its identity.
+// Allow 报告 subject 在指定策略下是否有一个令牌可用。未知策略一律拒绝（fail closed）。
+// 空 subject 会固定落入同一个 unknown 桶，调用方无法通过省略身份来绕过准入。
 func (r *PolicyRegistry) Allow(policy, subject string) bool {
 	return r.AllowN(policy, subject, 1)
 }
 
-// AllowN is the policy-registry equivalent of Limiter.AllowN.
+// AllowN 是 Limiter.AllowN 在策略注册表上的等价方法。
 func (r *PolicyRegistry) AllowN(policy, subject string, n int) bool {
 	if n <= 0 {
 		return true
@@ -130,9 +122,8 @@ func (r *PolicyRegistry) AllowN(policy, subject string, n int) bool {
 	return l.AllowN(normalizeSubject(subject), n)
 }
 
-// Limiter returns the named limiter for integration points that already
-// accept the lower-level Limiter type.  The returned pointer must be treated
-// as read-only configuration; its buckets remain safe for concurrent use.
+// Limiter 返回指定名称的限流器，供已经接受底层 Limiter 类型的集成点使用。
+// 返回的指针应视为只读配置；其桶的并发访问仍然是安全的。
 func (r *PolicyRegistry) Limiter(policy string) *Limiter {
 	if r == nil {
 		return nil
@@ -140,7 +131,7 @@ func (r *PolicyRegistry) Limiter(policy string) *Limiter {
 	return r.policies[policy]
 }
 
-// PolicyNames returns sorted policy names for diagnostics and tests.
+// PolicyNames 返回排序后的策略名称，用于诊断与测试。
 func (r *PolicyRegistry) PolicyNames() []string {
 	if r == nil {
 		return nil
@@ -153,7 +144,7 @@ func (r *PolicyRegistry) PolicyNames() []string {
 	return names
 }
 
-// BucketCount reports the number of buckets held by one policy.
+// BucketCount 返回单个策略当前持有的桶数量。
 func (r *PolicyRegistry) BucketCount(policy string) int {
 	if l := r.Limiter(policy); l != nil {
 		return l.BucketCount()
@@ -161,7 +152,7 @@ func (r *PolicyRegistry) BucketCount(policy string) int {
 	return 0
 }
 
-// CleanupLoop is the registry's single managed cleanup task.
+// CleanupLoop 是注册表唯一的托管清理任务。
 func (r *PolicyRegistry) CleanupLoop(ctx context.Context) error {
 	if r == nil {
 		<-ctx.Done()

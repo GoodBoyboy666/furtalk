@@ -16,11 +16,11 @@ import (
 	"time"
 )
 
-// AlibabaConfig 是阿里云内容安全检测器的配置。
+// AlibabaConfig 阿里云内容安全检测器的配置。
 type AlibabaConfig struct {
-	// Region 是文档支持的区域，例如 cn-shanghai。
+	// Region 文档支持的区域，例如 cn-shanghai。
 	Region string
-	// AccessKeyID 与 AccessKeySecret 是阿里云凭据。
+	// 阿里云凭据。
 	AccessKeyID     string
 	AccessKeySecret string
 	// BizType 是可选的业务策略编号。
@@ -34,7 +34,7 @@ type Alibaba struct {
 }
 
 // NewAlibaba 构建阿里云内容安全检测器。
-// client 为 nil 时使用携带有界超时的默认客户端。
+// client 为 nil 时使用携带超时的默认客户端。
 func NewAlibaba(client *http.Client, cfg AlibabaConfig) *Alibaba {
 	if client == nil {
 		client = defaultClient()

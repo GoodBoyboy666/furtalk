@@ -1,6 +1,5 @@
-// Package bootstrap 是首次运行引导用例的业务层。
-// 创建首位管理员经 FirstAdminWriter 由 identity 层代写用户（含密码哈希）；
-// bootstrap 单例行经 repository 持久化。
+// Package bootstrap 首次运行引导用例的业务层。
+// 创建首位管理员经 FirstAdminWriter 由 identity 代写用户；
 package bootstrap
 
 import (
@@ -20,7 +19,6 @@ import (
 	"furtalk/internal/repository"
 )
 
-// 引导流程的进程常量。
 const (
 	setupTokenTTL     = 10 * time.Minute
 	setupTokenByteLen = 32
@@ -42,7 +40,6 @@ type TxRunner interface {
 }
 
 // FirstAdminWriter 由 identity.Service 实现，供 bootstrap 原子地创建首位管理员。
-// 密码哈希与邮箱规范化等不变量保留在 identity 层。
 type FirstAdminWriter interface {
 	CreateUserWithPassword(ctx context.Context, user *domain.User, password string) error
 	FindUserByEmailNormalized(ctx context.Context, normalized string) (*domain.User, error)
@@ -110,7 +107,6 @@ type Service struct {
 
 // NewService 构建 bootstrap 服务。
 // 仅当实例尚未初始化且初始化状态读取成功时才生成并输出明文 setup token；
-// 已初始化的启动与状态读取失败路径一律不输出 token。
 func NewService(txRunner TxRunner, users FirstAdminWriter, bootstrap *repository.BootstrapRepo, log *slog.Logger) (*Service, error) {
 	log = logging.Normalize(log)
 	s := &Service{txRunner: txRunner, users: users, bootstrap: bootstrap, log: log, now: time.Now}

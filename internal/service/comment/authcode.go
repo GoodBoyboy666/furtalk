@@ -11,7 +11,7 @@ import (
 	"furtalk/internal/platform/cache"
 )
 
-// authCodeKeyPrefix 是一次性授权码的存储键前缀。
+// authCodeKeyPrefix 一次性授权码的存储键前缀。
 const authCodeKeyPrefix = "authcode:"
 
 var errAuthCodeCapacity = errors.New("comment: widget authorization namespace capacity")

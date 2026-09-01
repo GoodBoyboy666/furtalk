@@ -11,10 +11,10 @@ import (
 )
 
 // ListPublic 返回线程的扁平评论列表，带稳定的游标分页。
-// 缺省排序使用实例策略的 comment_sort；显式 sort 只影响本次浏览，不写设置。
+// 缺省排序使用实例策略的 comment_sort；显式 sort 只影响本次浏览。
 // hot 使用 (like_count, created_at, id) 降序；其游标带版本标记，只能用于 hot。
 // viewerID 非空时各评论携带该查看者是否点赞的观众状态，否则恒为 false。
-// 缺失的页面返回 ID=0、默认开启的合成空线程；公开读取不创建持久化记录。
+// 缺失的页面返回 ID=0、默认开启的合成空线程。
 func (s *Service) ListPublic(ctx context.Context, siteID int64, pageKey, cursorRaw, sortRaw string, limit int, viewerID *int64) (*ThreadView, error) {
 	if err := s.validateSiteActive(ctx, siteID); err != nil {
 		return nil, err
@@ -119,7 +119,7 @@ func (s *Service) ListLatestPublic(ctx context.Context, siteID int64, limit int)
 }
 
 // normalizeSort 解析公开 sort 参数并校验：空值回落到实例策略默认排序，
-// 显式值必须是受控的 asc/desc/hot，非法值返回验证错误。
+// 显式值必须是 asc/desc/hot，非法值返回验证错误。
 func normalizeSort(raw, defaultSort string) (domain.CommentSort, error) {
 	if raw == "" {
 		if !domain.ValidPublicCommentSort(defaultSort) {
@@ -165,8 +165,8 @@ func (s *Service) RuntimeConfig(ctx context.Context, siteID int64) (*RuntimeConf
 }
 
 // buildRuntimeCaptcha 为 comment action 构造公共渲染投影。
-// 策略开启但 provider 未配置/损坏时仍标记 required=true（渲染提示），
-// 写端点重新读取实时策略并以 503 失败关闭，不静默降级为“无需验证码”。
+// 策略开启但 provider 未配置/损坏时仍标记 required=true，
+// 写端点重新读取实时策略并以 503 失败关闭。
 func buildRuntimeCaptcha(policy map[string]bool, provider *CaptchaConfig) *RuntimeCaptcha {
 	build := func(action string) *CaptchaProjection {
 		if !policy[action] {
@@ -189,7 +189,7 @@ func buildRuntimeCaptcha(policy map[string]bool, provider *CaptchaConfig) *Runti
 	}
 }
 
-// avatarBaseURL 读取当前 Gravatar 基址策略。
+// avatarBaseURL 读取当前 Gravatar BaseURL策略。
 func (s *Service) avatarBaseURL(ctx context.Context) (string, error) {
 	pol, err := s.settings.CommentPolicy(ctx)
 	if err != nil {

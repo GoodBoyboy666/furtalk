@@ -19,19 +19,19 @@ const (
 	passkeyKeyPrefix    = "webauthn:"
 )
 
-// RegistrationOptions 是返回给客户端的仪式输出。
+// RegistrationOptions 返回给客户端的仪式输出。
 type RegistrationOptions struct {
 	Challenge string
 	Options   json.RawMessage
 }
 
-// LoginOptions 是断言仪式输出。
+// LoginOptions 断言仪式输出。
 type LoginOptions struct {
 	Challenge string
 	Options   json.RawMessage
 }
 
-// PasskeyAdapter 是 WebAuthn 仪式边界，由 internal/platform/passkey 实现。
+// PasskeyAdapter  WebAuthn 仪式边界，由 internal/platform/passkey 实现。
 type PasskeyAdapter interface {
 	BeginRegistration(user passkey.User) (json.RawMessage, []byte, error)
 	FinishRegistration(user passkey.User, session, response []byte) (*passkey.Credential, error)

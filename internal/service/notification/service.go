@@ -1,5 +1,4 @@
-// Package notification 消费提交后的评论事件并投递通知邮件，
-// 同时实现带签名的退订用例。
+// Package notification 消费提交后的评论事件并投递通知邮件，同时实现带签名的退订用例。
 // 用户与评论读取经 repository；偏好写经 domain.PreferenceWriter 由 identity 层代写。
 package notification
 

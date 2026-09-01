@@ -16,17 +16,17 @@ import (
 	"furtalk/internal/platform/value"
 )
 
-// Session 是成功的第一方登录结果。
+// Session 成功的第一方登录结果。
 type Session struct {
 	Token     string
 	CSRFToken string
 	ExpiresAt time.Time
 }
 
-// EmailCodeRecord 是临时的邮箱验证码记录，JSON 形态与缓存层的记录一致。
+// EmailCodeRecord 临时的邮箱验证码记录，JSON 形态与缓存层的记录一致。
 type EmailCodeRecord = cache.EmailCodeRecord
 
-// EmailCodeStore 是带用途前缀的临时邮箱验证码存取边界。
+// EmailCodeStore 带用途前缀的临时邮箱验证码存取边界。
 type EmailCodeStore interface {
 	SetEmailCode(ctx context.Context, purpose, normalizedEmail string, record EmailCodeRecord, ttl time.Duration) error
 	GetEmailCode(ctx context.Context, purpose, normalizedEmail string) (*EmailCodeRecord, error)
@@ -165,7 +165,7 @@ func (s *Service) SendEmailCode(ctx context.Context, rawEmail, captchaToken stri
 	return nil
 }
 
-// EmailCodeLoginInput 是邮箱验证码登录的输入。
+// EmailCodeLoginInput 邮箱验证码登录的输入。
 type EmailCodeLoginInput struct {
 	Email        string
 	Code         string

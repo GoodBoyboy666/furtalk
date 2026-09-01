@@ -12,7 +12,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// SiteRepo 持久化站点与 origin 行。
 type SiteRepo struct {
 	db *gorm.DB
 }
@@ -66,7 +65,7 @@ func (r *SiteRepo) Create(ctx context.Context, s *domain.Site) error {
 	return nil
 }
 
-// Update 应用一次部分站点更新，符合 PATCH 语义。
+// Update 应用一次部分站点更新。
 func (r *SiteRepo) Update(ctx context.Context, s *domain.Site) error {
 	updates := map[string]any{}
 	if s.Name != "" {
@@ -108,7 +107,7 @@ func (r *SiteRepo) Delete(ctx context.Context, id int64) error {
 	return nil
 }
 
-// ListOrigins 按 id 升序返回某个站点的全部 origin 记录（含稳定 ID）。
+// ListOrigins 按 id 升序返回某个站点的全部 origin 记录。
 func (r *SiteRepo) ListOrigins(ctx context.Context, siteID int64) ([]domain.Origin, error) {
 	var rows []model.SiteOrigin
 	if err := gormtx.DB(ctx, r.db).
@@ -157,7 +156,7 @@ func (r *SiteRepo) AddOrigin(ctx context.Context, siteID int64, origin string) (
 // 记录不存在时返回 domain.ErrNotFound，重复值返回 domain.ErrConflict。
 func (r *SiteRepo) UpdateOrigin(ctx context.Context, siteID, originID int64, origin string) (*domain.Origin, error) {
 	db := gormtx.DB(ctx, r.db)
-	// 更新前以 site 作用域确认记录存在，因为不同方言下 RowsAffected 语义不一致。
+	// 更新前以 site 作用域确认记录存在，因为不同数据库下 RowsAffected 语义不一致。
 	var row model.SiteOrigin
 	if err := db.Where("site_id = ? AND id = ?", siteID, originID).First(&row).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -178,7 +177,7 @@ func (r *SiteRepo) UpdateOrigin(ctx context.Context, siteID, originID int64, ori
 	return &updated, nil
 }
 
-// RemoveOrigin 以 site_id 与 origin id 两个条件限定删除范围。
+// RemoveOrigin 删除origin
 func (r *SiteRepo) RemoveOrigin(ctx context.Context, siteID, originID int64) error {
 	result := gormtx.DB(ctx, r.db).
 		Where("site_id = ? AND id = ?", siteID, originID).

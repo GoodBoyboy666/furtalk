@@ -6,14 +6,14 @@ import (
 	"furtalk/internal/platform/token"
 )
 
-// SignerConfig 是第一方 signer 所需的最小静态配置。
+// SignerConfig 第一方 signer 所需的最小静态配置。
 type SignerConfig struct {
 	Issuer   string
 	Key      []byte
 	Lifetime time.Duration
 }
 
-// Signer 是面向第一方登录的 JWT 签名与验签服务。
+// Signer 面向第一方登录的 JWT 签名与验签服务。
 type Signer struct {
 	*jwt.Service
 }

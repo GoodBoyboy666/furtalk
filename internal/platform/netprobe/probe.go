@@ -1,5 +1,5 @@
 // Package netprobe 提供外部 URL 连通性检查。
-// 只判断端点是否可达，不做任何业务决策。
+// 只判断端点是否可达，不会做任何业务决策。
 package netprobe
 
 import (

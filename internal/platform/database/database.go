@@ -18,13 +18,13 @@ import (
 	"gorm.io/gorm"
 )
 
-// SQLite 连接参数：启用外键并设置 busy timeout（毫秒）。
+// SQLite 连接参数
 const (
 	sqliteBusyTimeoutMS = 5000
 	sqlitePragmas       = "?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)"
 )
 
-// Config 是数据库连接需要的全部静态配置。
+// Config 数据库连接需要的全部静态配置。
 type Config struct {
 	Dialect  string
 	Path     string
@@ -36,9 +36,9 @@ type Config struct {
 	SSLMode  string
 }
 
-// NewDatabase 按配置的方言打开数据库，为 SQLite 启用 WAL 并校验 SQLite pragma。
-// 它不创建或修改任何表结构：schema 由外部 Atlas Versioned migration 在应用进程外完成，
-// 应用只连接并使用已经完成外部迁移的数据库。任何失败都会在 HTTP 监听器绑定之前终止启动。
+// NewDatabase 按配置的连接打开数据库，为 SQLite 启用 WAL 并校验 SQLite pragma。
+// schema 由外部 Atlas Versioned migration 在应用进程外完成，
+// 应用只连接并使用已经完成外部迁移的数据库。
 func NewDatabase(cfg Config) (*gorm.DB, error) {
 	db, err := Connect(cfg)
 	if err != nil {
@@ -55,7 +55,7 @@ func NewDatabase(cfg Config) (*gorm.DB, error) {
 	return db, nil
 }
 
-// Connect 按配置的方言打开数据库并返回 *gorm.DB。
+// Connect 按配置的连接信息打开数据库并返回 *gorm.DB。
 // SQLite 使用纯 Go 的 glebarez 驱动，其 DSN pragma 在每个新连接上启用外键与 busy timeout。
 // PostgreSQL 使用 gorm.io/driver/postgres 提供的 pgx 驱动。
 func Connect(cfg Config) (*gorm.DB, error) {
@@ -97,8 +97,8 @@ func sqliteDSN(path string) string {
 }
 
 // PostgresURL 根据拆分的连接字段生成 pgx/GORM 使用的 PostgreSQL URL。
-// 用户名、密码和数据库名均由 net/url 负责编码，主机端口由 net.JoinHostPort
-// 组合，以便 IPv6 地址不会与端口分隔符混淆。
+// 用户名、密码和数据库名均由 net/url 负责编码，主机端口由 net.JoinHostPort 组合，
+// 以便 IPv6 地址不会与端口分隔符混淆。
 func PostgresURL(cfg Config) (string, error) {
 	if strings.TrimSpace(cfg.Host) == "" {
 		return "", errors.New("database host must not be empty for postgres")
@@ -159,7 +159,7 @@ func gormConfig() *gorm.Config {
 }
 
 // AutoMigrate 为给定的 models 创建或更新表结构。
-// 仅供隔离的测试数据库搭建使用；生产装配不调用它，生产 schema 由外部 Atlas migration 管理。
+// 仅供隔离的测试数据库搭建使用；生产装配不可调用，生产 schema 由外部 Atlas migration 管理。
 func AutoMigrate(db *gorm.DB, models ...any) error {
 	if err := db.AutoMigrate(models...); err != nil {
 		return fmt.Errorf("auto migrate schema: %w", err)
@@ -168,7 +168,7 @@ func AutoMigrate(db *gorm.DB, models ...any) error {
 }
 
 // CheckSQLite 验证连接池中每个连接的 pragma 与日志模式。
-// 它获取若干专用连接，断言每个连接都启用外键、设置 busy timeout 并使用 WAL 日志模式。
+// 获取若干专用连接，断言每个连接都启用外键、设置 busy timeout 并使用 WAL 日志模式。
 func CheckSQLite(db *gorm.DB) error {
 	sqlDB, err := db.DB()
 	if err != nil {
@@ -217,7 +217,7 @@ func checkSQLiteConn(ctx context.Context, sqlDB *sql.DB) error {
 	return nil
 }
 
-// SetWAL 在 SQLite 数据库上启用 WAL 日志模式，该模式在数据库级别持久生效。
+// SetWAL 在 SQLite 数据库上启用 WAL 日志模式。
 func SetWAL(db *gorm.DB) error {
 	if err := db.Exec("PRAGMA journal_mode = WAL").Error; err != nil {
 		return fmt.Errorf("enable WAL journal mode: %w", err)

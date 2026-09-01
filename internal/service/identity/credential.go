@@ -16,7 +16,7 @@ const (
 	IdentityKindExternal = "external"
 )
 
-// Identity 是 /me/identities 返回的登录方式数据。
+// Identity  /me/identities 返回的登录方式数据。
 type Identity struct {
 	Kind       string
 	ID         int64

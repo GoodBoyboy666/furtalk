@@ -34,7 +34,7 @@ func (o *OptionalNullableString) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// AdminCreateUserInput 是管理员创建用户命令的输入。
+// AdminCreateUserInput 管理员创建用户命令的输入。
 type AdminCreateUserInput struct {
 	Email         string
 	Nickname      string
@@ -44,7 +44,7 @@ type AdminCreateUserInput struct {
 	EmailVerified bool
 }
 
-// AdminUpdateUserInput 是管理员更新用户命令的输入。
+// AdminUpdateUserInput 管理员更新用户命令的输入。
 // 指针字段为 nil 表示"未提供"；WebsiteURL 通过 OptionalNullableString
 // 区分省略、显式 null 与字符串三种状态。
 type AdminUpdateUserInput struct {

@@ -16,8 +16,7 @@ import (
 )
 
 // Create 在单个事务内解析或创建作者与线程，并创建根评论或回复。
-// 普通匿名邮箱走公开提交路径；管理员邮箱与认证模式必须携带有效凭据，
-// 请求邮箱只用于一致性校验，绝不选择或替换凭据主体。
+// 普通匿名邮箱走公开提交路径；管理员邮箱与认证模式必须携带有效凭据，请求邮箱只用于一致性校验。
 func (s *Service) Create(ctx context.Context, input CreateInput) (*CommentView, error) {
 	if err := s.validateSiteAndOrigin(ctx, input.SiteID, input.Origin); err != nil {
 		return nil, err
@@ -165,8 +164,7 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (*CommentView, 
 }
 
 // resolveAndSyncActor 在事务内解析作者用户并同步资料：
-// 凭据路径使用凭据主体并只校验一致性；匿名路径按规范化邮箱查找或创建
-// 普通用户，处理 normalized-email 唯一竞争。资料与评论同事务提交。
+// 凭据路径使用凭据主体并只校验一致性；匿名路径按规范化邮箱查找或创建普通用户，
 func (s *Service) resolveAndSyncActor(ctx context.Context, pol domain.CommentPolicy, normalized, original, nickname string, websiteOp WebsiteOperation, credentialActor *int64) (int64, error) {
 	var (
 		user *domain.User
@@ -231,8 +229,7 @@ func (s *Service) resolveAndSyncActor(ctx context.Context, pol domain.CommentPol
 	return user.ID, nil
 }
 
-// applyWebsiteOperation 应用网址三态操作：缺省保持当前值，null/空串清空，
-// 合法非空 URL 覆盖。
+// applyWebsiteOperation 应用网址三态操作：缺省保持当前值，null/空串清空，合法非空 URL 覆盖。
 func applyWebsiteOperation(current *string, op WebsiteOperation) (*string, error) {
 	if !op.Set {
 		return current, nil

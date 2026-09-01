@@ -1,6 +1,6 @@
-// 文件型 HTML 邮件模板的加载与渲染。
+// Package mailer 文件型 HTML 邮件模板的加载与渲染。
 // 模板使用 Go 标准库 html/template 解析，随上下文自动转义动态值；
-// 应用启动时一次读取并解析全部模板，运行期不重新读取、不监听目录。
+// 应用启动时一次读取并解析全部模板，运行期不会重新读取与监听目录。
 package mailer
 
 import (
@@ -16,34 +16,34 @@ import (
 type TemplateKind string
 
 const (
-	// KindLoginCode 是登录验证码邮件模板。
+	// KindLoginCode 登录验证码邮件模板。
 	KindLoginCode TemplateKind = "login_code"
-	// KindPasswordResetCode 是密码重置验证码邮件模板。
+	// KindPasswordResetCode 密码重置验证码邮件模板。
 	KindPasswordResetCode TemplateKind = "password_reset_code"
-	// KindModeration 是新评论/待审核通知邮件模板。
+	// KindModeration 新评论/待审核通知邮件模板。
 	KindModeration TemplateKind = "moderation"
-	// KindPublished 是评论发布通知邮件模板。
+	// KindPublished 评论发布通知邮件模板。
 	KindPublished TemplateKind = "published"
-	// KindReply 是评论回复通知邮件模板。
+	// KindReply 评论回复通知邮件模板。
 	KindReply TemplateKind = "reply"
 )
 
 // 模板文件扩展名。
 const templateSuffix = ".html"
 
-// LoginCodeData 是登录验证码模板的变量契约。
+// LoginCodeData 登录验证码模板的变量。
 type LoginCodeData struct {
 	Code             string
 	ExpiresInMinutes int
 }
 
-// PasswordResetCodeData 是密码重置验证码模板的变量契约。
+// PasswordResetCodeData 密码重置验证码模板的变量。
 type PasswordResetCodeData struct {
 	Code             string
 	ExpiresInMinutes int
 }
 
-// ModerationData 是审核通知模板的变量契约。
+// ModerationData 审核通知模板的变量。
 // PageTitle 与 PageURL 是评论所属页面的元数据；PageURL 为空时不渲染链接。
 type ModerationData struct {
 	AuthorNickname     string
@@ -53,16 +53,16 @@ type ModerationData struct {
 	PageURL            string
 }
 
-// PublishedData 是评论发布通知模板的变量契约。
-// UnsubscribeURL 必须是渲染前生成的完整签名退订链接，只用于 href 上下文。
+// PublishedData 评论发布通知模板的变量。
+// UnsubscribeURL 退订链接，只用于 href 上下文。
 type PublishedData struct {
 	AuthorNickname string
 	CommentBody    string
 	UnsubscribeURL string
 }
 
-// ReplyData 是评论回复通知模板的变量契约。
-// UnsubscribeURL 必须是渲染前生成的完整签名退订链接，只用于 href 上下文。
+// ReplyData 评论回复通知模板的变量。
+// UnsubscribeURL 退订链接，只用于 href 上下文。
 // PageTitle 与 PageURL 是回复所属页面的元数据；PageURL 为空时不渲染链接。
 type ReplyData struct {
 	ReplyAuthorNickname  string
@@ -85,8 +85,8 @@ type TemplateRenderer interface {
 	Reply(ReplyData) (string, error)
 }
 
-// TemplateSet 是启动期解析并冻结的只读模板集合。
-// 运行期安全并发使用；模板内容在进程生命周期内保持不变。
+// TemplateSet 只读模板集合。
+// 运行期可安全并发使用；模板内容在进程生命周期内保持不变。
 type TemplateSet struct {
 	loginCode         *template.Template
 	passwordResetCode *template.Template

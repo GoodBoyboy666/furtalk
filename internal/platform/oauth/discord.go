@@ -24,10 +24,10 @@ const (
 	discordAPIURL       = "https://discord.com/api/v10"
 )
 
-// discordProvider 是 Discord 的固定端点 OAuth2 API 适配器。
-// 普通网页登录流程未文档化 PKCE，因此不发送 code_challenge/code_verifier，
-// 也不发送 nonce。confidential client 的 token 请求固定使用 HTTP Basic
-// （AuthStyleInHeader；Discord 同时支持 body 方式，固定 Basic 不触发探测重试）。
+// discordProvider Discord 的 OAuth2 API 适配器。
+// 普通网页登录流程未文档化 PKCE，因此不会发送 code_challenge/code_verifier与nonce。
+// confidential client 的 token 请求固定使用 HTTP Basic
+// （AuthStyleInHeader；Discord 同时支持 body 方式，固定 Basic 不会触发探测重试）。
 // subject 是 User snowflake id；VerifiedEmail 只在 email 非空且 verified=true 时填充。
 type discordProvider struct {
 	key          string
@@ -92,16 +92,16 @@ func (p *discordProvider) oauthConfig(redirectURI string) *oauth2.Config {
 }
 
 // BuildAuthURL 为新的 state 生成 Discord 授权 URL。
-// Discord 普通网页登录未定义 PKCE，即使请求中带 verifier 也不附加 code_challenge；
-// 同样不发送 nonce。
+// Discord 普通网页登录未定义 PKCE，即使请求中带 verifier 也不会附加 code_challenge；
+// 同样不会发送 nonce。
 func (p *discordProvider) BuildAuthURL(ctx context.Context, req AuthorizationRequest) (string, error) {
 	return p.oauthConfig(req.RedirectURI).AuthCodeURL(req.State), nil
 }
 
 // Exchange 用 code 换取 token，通过 Bearer 拉取 /users/@me 并返回标准化后的 Identity。
 // subject 是 User 的 snowflake id；VerifiedEmail 只在 email 非空且 verified=true 时填充，
-// 否则保留空字符串（缺失/未验证邮箱不否定 subject）。
-// 任何失败映射为 ErrIdentity，错误文本不包含 code/token/secret。
+// 否则保留空字符串（缺失/未验证邮箱不会否定 subject）。
+// 任何失败映射为 ErrIdentity。
 func (p *discordProvider) Exchange(ctx context.Context, req ExchangeRequest) (*Identity, error) {
 	token, err := p.oauthConfig(req.RedirectURI).Exchange(p.clientContext(ctx), req.Code)
 	if err != nil {

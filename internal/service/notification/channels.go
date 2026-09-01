@@ -28,11 +28,11 @@ type ChannelDispatcher interface {
 	Send(ctx context.Context, cfg notifier.Config, msg notifier.Message) error
 }
 
-// webhookBodyMaxRunes 是 WebHook v1 信封中评论正文的截断字符上限，
+// webhookBodyMaxRunes  WebHook v1 信封中评论正文的截断字符上限，
 // 使整体 JSON 请求体保持在有界范围（远低于 64KiB）。
 const webhookBodyMaxRunes = 1000
 
-// webhookEnvelope 是通用 WebHook v1 请求体。
+// webhookEnvelope 通用 WebHook v1 请求体。
 // 业务 ID 全部编码为十进制字符串；缺失的父评论/标题/URL 使用 JSON null。
 type webhookEnvelope struct {
 	Version          string         `json:"version"`
@@ -45,21 +45,21 @@ type webhookEnvelope struct {
 	Comment          webhookComment `json:"comment"`
 }
 
-// webhookSite 是 WebHook v1 信封中的站点对象。
+// webhookSite  WebHook v1 信封中的站点对象。
 type webhookSite struct {
 	ID           string `json:"id"`
 	Name         string `json:"name"`
 	CanonicalURL string `json:"canonical_url"`
 }
 
-// webhookPage 是 WebHook v1 信封中的页面对象；标题/URL 缺失时为 JSON null。
+// webhookPage  WebHook v1 信封中的页面对象；标题/URL 缺失时为 JSON null。
 type webhookPage struct {
 	ThreadID string  `json:"thread_id"`
 	Title    *string `json:"title"`
 	URL      *string `json:"url"`
 }
 
-// webhookComment 是 WebHook v1 信封中的评论对象；父评论缺失时为 JSON null。
+// webhookComment  WebHook v1 信封中的评论对象；父评论缺失时为 JSON null。
 type webhookComment struct {
 	ID             string  `json:"id"`
 	ParentID       *string `json:"parent_id"`

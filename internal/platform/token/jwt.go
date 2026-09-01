@@ -1,6 +1,5 @@
 // Package jwt 为评论系统提供通用的 JWT 签名与验签方案。
 // 签名算法固定为 HS256，每次解析时强制校验 issuer、audience、subject、token kind 与时间。
-// Token 不携带授权角色与状态，授权信息每次请求时从授权缓存读取。
 package jwt
 
 import (
@@ -15,29 +14,28 @@ import (
 
 // JWT 常量：各 token 种类的 audience、kind 与唯一签名算法。
 const (
-	// AudienceFirstParty 是 first-party 登录 token 的 audience。
+	// AudienceFirstParty first-party 登录 token 的 audience。
 	AudienceFirstParty = "furtalk-first-party"
-	// AudienceWidgetAuthenticated 是已认证模式 widget token 的 audience。
+	// AudienceWidgetAuthenticated 已认证模式 widget token 的 audience。
 	AudienceWidgetAuthenticated = "furtalk-widget-authenticated"
-	// AudienceUnsubscribe 是通知邮件中退订链接所用签名 token 的 audience。
+	// AudienceUnsubscribe 通知邮件中退订链接所用签名 token 的 audience。
 	AudienceUnsubscribe = "furtalk-unsubscribe"
 
-	// TokenKindFirstParty 是 first-party 登录 token 的 token kind。
+	// TokenKindFirstParty first-party 登录 token 的 token kind。
 	TokenKindFirstParty = "first_party"
-	// TokenKindWidgetAuthenticated 是已认证模式 widget token 的 token kind。
+	// TokenKindWidgetAuthenticated 已认证模式 widget token 的 token kind。
 	TokenKindWidgetAuthenticated = "widget_authenticated"
-	// TokenKindUnsubscribe 是通知退订 token 的 token kind。
+	// TokenKindUnsubscribe 通知退订 token 的 token kind。
 	TokenKindUnsubscribe = "unsubscribe"
 
-	// SigningMethod 是唯一接受的签名算法。
+	// SigningMethod 唯一接受的签名算法。
 	SigningMethod = "HS256"
 )
 
 var (
-	// ErrInvalidToken 在 token 无法解析，
-	// 或未通过固定的 algorithm/issuer/audience/kind/time 声明校验时返回。
+	// ErrInvalidToken token 无法解析，或未通过固定的 algorithm/issuer/audience/kind/time 声明校验。
 	ErrInvalidToken = errors.New("jwt: invalid token")
-	// ErrTokenExpired 在 token 已过期或尚未生效时返回。
+	// ErrTokenExpired token 已过期或尚未生效。
 	ErrTokenExpired = errors.New("jwt: token expired or not yet valid")
 )
 
@@ -48,10 +46,10 @@ type Config struct {
 	Lifetime time.Duration
 }
 
-// Claims 是每种 token kind 使用的固定声明集合。
+// Claims 是每种 token kind 使用的声明集合。
 // SiteID 与 CredentialEpoch 仅在 widget token 上设置；
 // NotificationKind 仅在退订 token 上设置；
-// SessionVersion 仅在第一方 token 上设置，用于撤销检查。
+// SessionVersion 仅在第一方 token 上设置，用于撤销令牌。
 type Claims struct {
 	TokenKind        string `json:"token_kind"`
 	SiteID           string `json:"site_id,omitempty"`
@@ -61,8 +59,8 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
-// UserID 把 subject 解析为十进制 int64 并返回。
-// subject 是持久化用户 id 的十进制字符串。
+// UserID 将 subject 解析为十进制 int64 并返回。
+// subject 为持久化用户 id 的十进制字符串。
 func (c Claims) UserID() (int64, error) {
 	id, err := strconv.ParseInt(c.Subject, 10, 64)
 	if err != nil || id <= 0 {
@@ -71,17 +69,17 @@ func (c Claims) UserID() (int64, error) {
 	return id, nil
 }
 
-// Service 是固定策略的 JWT 签名器与验签器。
+// Service 固定策略的 JWT 签名器与验签器。
 type Service struct {
 	cfg Config
 }
 
-// NewService 使用给定的静态策略构建 JWT 服务。
+// NewService 构建 JWT 服务。
 func NewService(cfg Config) *Service {
 	return &Service{cfg: cfg}
 }
 
-// SignFirstParty 为用户 id 与当前会话代次签发 first-party 登录 token。
+// SignFirstParty 用户 id 与当前会话代次签发 first-party 登录 token。
 // sessionVersion 必须是正整数；签发时写入 claim，供撤销检查与当前版本比较。
 func (s *Service) SignFirstParty(userID, sessionVersion int64) (string, error) {
 	if sessionVersion <= 0 {
@@ -105,7 +103,6 @@ func (s *Service) SignFirstParty(userID, sessionVersion int64) (string, error) {
 }
 
 // Lifetime 返回配置的 token 有效期，用于设置 FP Cookie 的 Max-Age，
-// 保证不超过 JWT 的过期时间。
 func (s *Service) Lifetime() time.Duration {
 	return s.cfg.Lifetime
 }
@@ -147,7 +144,6 @@ func (s *Service) sign(claims Claims) (string, error) {
 }
 
 // SignUnsubscribe 为通知退订链接签发短期有效的签名 token。
-// 该 token 只证明用户有权退订某个通知 kind，不能用于启用通知。
 func (s *Service) SignUnsubscribe(userID int64, kind string, lifetime time.Duration) (string, error) {
 	now := time.Now().UTC()
 	claims := Claims{
@@ -167,7 +163,7 @@ func (s *Service) SignUnsubscribe(userID int64, kind string, lifetime time.Durat
 }
 
 // ParseUnsubscribe 验证退订 token，返回用户 id 与 token 授权禁用的通知 kind。
-// 伪造、过期或 audience 不符的 token 一律拒绝，不检查用户是否存在。
+// 伪造、过期或 audience 不符的 token 一律拒绝。
 func (s *Service) ParseUnsubscribe(raw string) (int64, string, error) {
 	claims, err := s.Parse(raw, AudienceUnsubscribe, TokenKindUnsubscribe)
 	if err != nil {

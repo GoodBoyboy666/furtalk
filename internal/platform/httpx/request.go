@@ -14,15 +14,15 @@ import (
 )
 
 var (
-	// ErrMissingBody 在请求体为空时返回。
+	// ErrMissingBody 请求体为空。
 	ErrMissingBody = errors.New("httpx: request body is missing")
-	// ErrMalformedBody 在请求体不是合法 JSON 时返回。
+	// ErrMalformedBody 请求体不是合法 JSON。
 	ErrMalformedBody = errors.New("httpx: request body is malformed")
-	// ErrMultipleObjects 在请求体包含多个 JSON 值时返回。
+	// ErrMultipleObjects 请求体包含多个 JSON 值。
 	ErrMultipleObjects = errors.New("httpx: request body has multiple values")
-	// ErrInvalidID 在路径/查询参数不是正整数 id 时返回。
+	// ErrInvalidID 路径/查询参数不是正整数 id。
 	ErrInvalidID = errors.New("httpx: invalid id")
-	// ErrUnsupportedMediaType 在 Content-Type 不是 application/json 时返回。
+	// ErrUnsupportedMediaType Content-Type 不是 application/json。
 	ErrUnsupportedMediaType = errors.New("httpx: unsupported media type")
 )
 

@@ -17,7 +17,6 @@ import (
 )
 
 // Apple 的固定端点、issuer 与 scopes。
-// 端点由适配器代码所有，不可配置；cfg 中的同名值仅在测试时覆盖。
 const (
 	appleAuthorizeURL = "https://appleid.apple.com/auth/authorize"
 	appleTokenURL     = "https://appleid.apple.com/auth/token"
@@ -144,8 +143,8 @@ func (p *appleProvider) Exchange(ctx context.Context, req ExchangeRequest) (*Ide
 	return p.verifyIDToken(ctx, body.IDToken, req.Nonce)
 }
 
-// verifyIDToken 用 Apple 固定 JWKS 校验 ID token（Apple issuer 固定，go-oidc
-// 的固定 issuer verifier 适用）。校验前先解析 JWS 头并要求 alg 为 RS256；
+// verifyIDToken 用 Apple 固定 JWKS 校验 ID token（Apple issuer 固定，go-oidc 的固定 issuer verifier 适用）。
+// 校验前先解析 JWS 头并要求 alg 为 RS256；
 // go-oidc 负责签名、issuer、audience 与有效期，nonce 由本包恒定时间比较。
 // email_verified 只在语义明确为 true 且 email 非空时输出为 VerifiedEmail。
 func (p *appleProvider) verifyIDToken(ctx context.Context, raw string, nonce string) (*Identity, error) {

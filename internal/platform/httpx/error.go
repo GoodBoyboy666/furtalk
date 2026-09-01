@@ -10,13 +10,12 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// ErrorResponse 是错误响应的 JSON 信封，包含单个 error 对象。
+// ErrorResponse 错误响应的 JSON 信封，包含单个 error 对象。
 type ErrorResponse struct {
 	Error ErrorBody `json:"error"`
 }
 
-// ErrorBody 描述一个语义错误：机器可读的 code、人类可读的 message、
-// 关联的 request_id 以及可选的 details。
+// ErrorBody 机器可读的 code、人类可读的 message、关联的 request_id 以及可选的 details。
 type ErrorBody struct {
 	Code      string         `json:"code"`
 	Message   string         `json:"message"`
@@ -24,8 +23,7 @@ type ErrorBody struct {
 	Details   map[string]any `json:"details"`
 }
 
-// Mapping 描述一个语义错误在 HTTP 边界上的映射：
-// 目标错误、响应状态码、错误码与展示消息。
+// Mapping 目标错误、响应状态码、错误码与展示消息。
 type Mapping struct {
 	Target  error
 	Status  int
@@ -33,13 +31,13 @@ type Mapping struct {
 	Message string
 }
 
-// Translator 是不可变、确定性的语义错误翻译表。
+// Translator 不可变、确定性的语义错误翻译表。
 type Translator struct {
 	mappings []Mapping
 }
 
 // NewTranslator 合并若干错误映射组并校验合法性：
-// 目标错误必须非空且可比较，状态码必须落在 4xx/5xx，
+// 目标错误必须非空且可比较，状态码必须位于 4xx/5xx，
 // code 与 message 非空，且目标错误不能重复。
 func NewTranslator(groups ...[]Mapping) (*Translator, error) {
 	total := 0
@@ -94,7 +92,7 @@ func WriteError(c *gin.Context, err error) {
 	WriteErrorWithDetails(c, err, nil)
 }
 
-// WriteErrorWithDetails 使用上下文中的翻译器把 err 转为携带脱敏 details 的响应。
+// WriteErrorWithDetails 使用上下文中的翻译器把 err 转为脱敏的 details 的响应。
 // 未匹配到映射或未挂载翻译器时，回退为 500 内部错误。
 func WriteErrorWithDetails(c *gin.Context, err error, details map[string]any) {
 	translator, _ := c.Get(translatorContextKey)
@@ -108,7 +106,7 @@ func WriteErrorWithDetails(c *gin.Context, err error, details map[string]any) {
 	c.JSON(http.StatusInternalServerError, ResponseWithDetails(c, "internal_error", "服务器内部错误", details))
 }
 
-// Abort 以给定状态码与错误信息中止请求并写入响应。
+// Abort 中止请求并将给定状态码与错误信息写入响应。
 func Abort(c *gin.Context, status int, code, message string) {
 	c.AbortWithStatusJSON(status, Response(c, code, message))
 }

@@ -28,8 +28,8 @@ import (
 // masterKeyVersion 是当前 AES-GCM envelope 密钥版本。
 const masterKeyVersion byte = cryptox.ProviderEnvelopeVersion
 
-// CaptchaConfig 是 CAPTCHA 提供商的类型化配置，含机密。
-// Endpoint 仅 CAP 使用，是管理员配置的外部 Standalone 实例基址，属于公开字段。
+// CaptchaConfig  CAPTCHA 提供商的类型化配置，含机密。
+// Endpoint 仅 CAP 使用，管理员配置的外部 Standalone 实例基址，属于公开字段。
 type CaptchaConfig struct {
 	Provider  string `json:"provider"`
 	SiteKey   string `json:"site_key"`
@@ -37,7 +37,7 @@ type CaptchaConfig struct {
 	Endpoint  string `json:"endpoint"`
 }
 
-// AuthConfig 是 OAuth/OIDC provider 的通用类型化配置，客户端密钥在持久化前加密。
+// AuthConfig  OAuth/OIDC provider 的通用类型化配置，客户端密钥在持久化前加密。
 // 包含全部固定内置 provider 与自定义 OIDC 可能出现的字段；严格解码拒绝未知字段，
 // 每个 catalog 预设决定哪些字段公开、哪些字段加密（见 splitAuthConfig）。
 type AuthConfig struct {
@@ -52,22 +52,22 @@ type AuthConfig struct {
 	PrivateKey   string `json:"private_key"`
 }
 
-// SpamConfig 是垃圾检测 provider 的通用类型化配置，含机密。
+// SpamConfig 垃圾检测 provider 的通用类型化配置，含机密。
 // 固定 provider key 决定哪些字段公开、哪些字段加密（见 spamProviderSpec）。
 type SpamConfig struct {
-	// CheckNickname 是本地词库渠道字段；CheckNickname 开启时昵称也参与匹配。
+	// CheckNickname 本地词库渠道字段；CheckNickname 开启时昵称也参与匹配。
 	CheckNickname bool `json:"check_nickname"`
-	// Action 是本地/Akismet 二元检测器的命中动作，仅允许 pending 或 spam。
+	// Action 本地/Akismet 二元检测器的命中动作，仅允许 pending 或 spam。
 	Action string `json:"action"`
-	// APIKey 是 Akismet 的 API key，加密保存。
+	// APIKey  Akismet 的 API key，加密保存。
 	APIKey string `json:"api_key"`
-	// Region 与 BizType 是阿里云/腾讯云渠道字段；BizType 可选。
+	// Region 与 BizType 阿里云/腾讯云渠道字段；BizType 可选。
 	Region  string `json:"region"`
 	BizType string `json:"biz_type"`
-	// AccessKeyID 与 AccessKeySecret 是阿里云凭据，加密保存。
+	// AccessKeyID 与 AccessKeySecret 阿里云凭据，加密保存。
 	AccessKeyID     string `json:"access_key_id"`
 	AccessKeySecret string `json:"access_key_secret"`
-	// SecretID 与 SecretKey 是腾讯云凭据，加密保存。
+	// SecretID 与 SecretKey 腾讯云凭据，加密保存。
 	SecretID  string `json:"secret_id"`
 	SecretKey string `json:"secret_key"`
 }
@@ -82,12 +82,12 @@ type NotificationConfig struct {
 	DeviceKey          string `json:"device_key"`
 	ChannelAccessToken string `json:"channel_access_token"`
 	TargetID           string `json:"target_id"`
-	// SigningSecret 是可选签名密钥（feishu/dingtalk/webhook），三态处理：
+	// SigningSecret 可选签名密钥（feishu/dingtalk/webhook），三态处理：
 	// 缺省保留现值、显式 null 清除、非空替换。
 	SigningSecret *string `json:"signing_secret"`
 }
 
-// notificationConfigInput 是通知通道配置的严格解析输入。
+// notificationConfigInput 通知通道配置的严格解析输入。
 // SigningSecret 用 RawMessage 区分三种状态：缺失（nil）=保留、null=清除、非空=替换。
 type notificationConfigInput struct {
 	BotToken           string          `json:"bot_token"`
@@ -101,7 +101,7 @@ type notificationConfigInput struct {
 }
 
 // notificationProviderSpec 描述一个固定通知通道 key 的配置模式。
-// secretFields 是必填机密字段；optionalSecretFields 是可选的机密字段（三态处理）。
+// secretFields 必填机密字段；optionalSecretFields 是可选的机密字段（三态处理）。
 type notificationProviderSpec struct {
 	key                  string
 	publicFields         []string
@@ -109,7 +109,7 @@ type notificationProviderSpec struct {
 	optionalSecretFields []string
 }
 
-// notificationProviderKeys 是固定的通知通道 provider key 顺序（投递顺序）。
+// notificationProviderKeys 固定的通知通道 provider key 顺序（投递顺序）。
 // 独立命名空间，避免与 OAuth 的 line/discord 等 key 冲突。
 var notificationProviderKeys = []string{
 	"notification.telegram",
@@ -122,7 +122,7 @@ var notificationProviderKeys = []string{
 	"notification.discord",
 }
 
-// notificationProviderSpecs 是固定通知通道 provider 的配置矩阵。
+// notificationProviderSpecs 固定通知通道 provider 的配置矩阵。
 // 除 Bark 的 server_url 外，所有目的地字段均按机密加密保存。
 var notificationProviderSpecs = map[string]notificationProviderSpec{
 	"notification.telegram": {
@@ -183,10 +183,10 @@ type spamProviderSpec struct {
 	binary       bool
 }
 
-// spamProviderKeys 是固定的垃圾检测 provider key 顺序（执行顺序）。
+// spamProviderKeys 固定的垃圾检测 provider key 顺序（执行顺序）。
 var spamProviderKeys = []string{"spam.local", "spam.akismet", "spam.aliyun", "spam.tencent"}
 
-// spamProviderSpecs 是固定垃圾检测 provider 的配置矩阵。
+// spamProviderSpecs 固定垃圾检测 provider 的配置矩阵。
 var spamProviderSpecs = map[string]spamProviderSpec{
 	"spam.local": {
 		key:          "spam.local",
@@ -211,7 +211,7 @@ var spamProviderSpecs = map[string]spamProviderSpec{
 	},
 }
 
-// ValidSpamProviderKey 报告 key 是否为固定垃圾检测 provider key。
+// ValidSpamProviderKey 报告 key 否为固定垃圾检测 provider key。
 func ValidSpamProviderKey(providerKey string) bool {
 	_, ok := spamProviderSpecs[providerKey]
 	return ok
@@ -230,7 +230,7 @@ func validateSpamAction(action string) error {
 	return nil
 }
 
-// ProviderMeta 是提供商配置的只读管理表示（异类列表投影），不含 nonce、密文或明文机密。
+// ProviderMeta 提供商配置的只读管理表示（异类列表投影），不含 nonce、密文或明文机密。
 // Enabled 仅 OAuth/OIDC 有意义；CAPTCHA 提供商没有启用语义。
 type ProviderMeta struct {
 	ProviderKey  string
@@ -266,7 +266,7 @@ type NotificationTester interface {
 	TestNotification(ctx context.Context, providerKey string, cfg NotificationConfig) error
 }
 
-// networkProber 是生产环境的 prober。
+// networkProber 生产环境的 prober。
 type networkProber struct{}
 
 // ProbeCaptcha 对验证码提供商执行有界连通性检查。
@@ -674,7 +674,7 @@ func validateSpamRunnable(providerKey string, row *repository.SpamProviderRow) e
 	return nil
 }
 
-// SpamProvider 是返回给消费者的类型化、解密后的垃圾检测配置。
+// SpamProvider 返回给消费者的类型化、解密后的垃圾检测配置。
 type SpamProvider struct {
 	ProviderKey string
 	Enabled     bool
@@ -945,7 +945,7 @@ func (s *ProviderService) UpsertNotification(ctx context.Context, providerKey st
 	})
 }
 
-// NotificationProvider 是返回给消费者的类型化、解密后的通知通道配置。
+// NotificationProvider 返回给消费者的类型化、解密后的通知通道配置。
 type NotificationProvider struct {
 	ProviderKey string
 	Enabled     bool
@@ -1452,7 +1452,7 @@ func (s *ProviderService) captchaConfig(row *repository.CaptchaProviderRow) (*Ca
 	return &cfg, nil
 }
 
-// AuthProvider 是返回给消费者的类型化、解密后的 OAuth/OIDC 配置。
+// AuthProvider 返回给消费者的类型化、解密后的 OAuth/OIDC 配置。
 type AuthProvider struct {
 	ProviderKey  string
 	Kind         domain.ProviderKind
@@ -1463,13 +1463,13 @@ type AuthProvider struct {
 	AuthURL      string
 	TokenURL     string
 	IssuerURL    string
-	// InstanceURL 是自托管实例的规范化 HTTPS 基址（GitLab/Gitea/Mastodon）。
+	// InstanceURL 自托管实例的规范化 HTTPS 基址（GitLab/Gitea/Mastodon）。
 	InstanceURL string
-	// AppleTeamID 是 Apple client-secret JWT 的 iss。
+	// AppleTeamID  Apple client-secret JWT 的 iss。
 	AppleTeamID string
-	// AppleKeyID 是 Apple client-secret JWT 的 kid。
+	// AppleKeyID  Apple client-secret JWT 的 kid。
 	AppleKeyID string
-	// ApplePrivateKey 是 Apple 的 P-256 .p8 私钥。
+	// ApplePrivateKey  Apple 的 P-256 .p8 私钥。
 	ApplePrivateKey string
 }
 
@@ -1631,7 +1631,7 @@ func splitAuthConfig(providerKey string, kind domain.ProviderKind, raw json.RawM
 	return public, secret, nil
 }
 
-// customOIDCSpec 是未知 key 的默认配置模式：任意 key + oidc，注册模式为可信邮箱。
+// customOIDCSpec 未知 key 的默认配置模式：任意 key + oidc，注册模式为可信邮箱。
 var customOIDCSpec = oauth.ProviderSpec{
 	Key:          "custom-oidc",
 	Name:         "Custom OIDC",
@@ -1880,7 +1880,7 @@ type SMTPProber interface {
 	ProbeSMTP(ctx context.Context, cfg mailer.SMTPConfig) error
 }
 
-// smtpProber 是生产环境的 prober。
+// smtpProber 生产环境的 prober。
 type smtpProber struct{}
 
 // ProbeSMTP 对给定 SMTP 配置执行有界连通性检查。

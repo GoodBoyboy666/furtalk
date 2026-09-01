@@ -1,4 +1,4 @@
-// 邮箱域名名单策略与 Gravatar 头像 URL 的纯函数实现。
+// Package value 邮箱域名名单策略与 Gravatar 头像 URL 的纯函数实现。
 // 只依赖标准库；错误语义由使用方 service 层映射为 domain 错误。
 package value
 
@@ -10,12 +10,11 @@ import (
 	"strings"
 )
 
-// DefaultGravatarBaseURL 是 Gravatar 头像基址的默认值。
+// DefaultGravatarBaseURL Gravatar 头像Base URL的默认值。
 const DefaultGravatarBaseURL = "https://www.gravatar.com/avatar"
 
-// NormalizeEmailDomain 规范化并校验单个邮箱域名项：
+// NormalizeEmailDomain 格式化并校验单个邮箱域名：
 // 忽略首尾空白并转小写；拒绝 @、scheme、path、port、通配符与空标签。
-// 规范化后的域名用于精确匹配，example.com 不匹配 badexample.com 或 sub.example.com。
 func NormalizeEmailDomain(raw string) (string, error) {
 	domain := strings.ToLower(strings.TrimSpace(raw))
 	if domain == "" {
@@ -35,7 +34,7 @@ func NormalizeEmailDomain(raw string) (string, error) {
 	return domain, nil
 }
 
-// NormalizeEmailDomains 规范化并校验域名列表，规范化后的重复项被拒绝。
+// NormalizeEmailDomains 格式化并校验域名列表。
 func NormalizeEmailDomains(raw []string) ([]string, error) {
 	out := make([]string, 0, len(raw))
 	seen := make(map[string]bool, len(raw))
@@ -69,7 +68,7 @@ func validDomainLabel(label string) bool {
 	return true
 }
 
-// EmailDomain 返回规范化邮箱中 @ 之后的完整域名。
+// EmailDomain 返回格式化邮箱中 @ 之后的完整域名。
 func EmailDomain(normalizedEmail string) (string, error) {
 	at := strings.LastIndex(normalizedEmail, "@")
 	if at < 0 || at == len(normalizedEmail)-1 {
@@ -101,7 +100,7 @@ func containsDomain(list []string, domain string) bool {
 	return false
 }
 
-// ValidateGravatarBaseURL 校验 Gravatar 基址是绝对 http/https URL，
+// ValidateGravatarBaseURL 校验 Gravatar Base URL是绝对 http/https URL，
 // 且不允许 userinfo、query 或 fragment。
 func ValidateGravatarBaseURL(raw string) error {
 	u, err := url.Parse(strings.TrimSpace(raw))
@@ -123,8 +122,8 @@ func ValidateGravatarBaseURL(raw string) error {
 	return nil
 }
 
-// GravatarURL 由规范化邮箱与已校验基址生成头像 URL：
-// 去除基址末尾斜杠后追加 / 与 trim+lower 规范化邮箱的 SHA-256 小写十六进制。
+// GravatarURL 由格式化邮箱与已校验Base URL生成头像 URL：
+// 去除Base URL末尾斜杠后追加 / 与 trim+lower 格式化邮箱的 SHA-256 小写十六进制。
 func GravatarURL(normalizedEmail, baseURL string) string {
 	hash := gravatarHash(normalizedEmail)
 	return strings.TrimRight(baseURL, "/") + "/" + hash

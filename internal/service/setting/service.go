@@ -1,5 +1,4 @@
-// Package setting 是动态实例配置与提供商配置管理的业务层。
-// 只依赖 domain 与 repository；provider 密钥的加密/解密是本层的业务逻辑。
+// Package setting 动态实例配置与提供商配置管理的业务层。
 package setting
 
 import (
@@ -17,7 +16,7 @@ import (
 	"furtalk/internal/repository"
 )
 
-// maxReplyDepthLimit 是最大回复深度的上限。
+// maxReplyDepthLimit 最大回复深度的上限。
 const maxReplyDepthLimit = 50
 
 // 已知设置 key 的稳定常量。
@@ -30,28 +29,28 @@ const (
 	SettingKeyPrivacy            = "privacy"
 	SettingKeyCaptchaPolicy      = "captcha_policy"
 	SettingKeyNotifications      = "notifications"
-	// SettingKeyCaptchaProvider 是当前选择的 CAPTCHA provider key 设置。
+	// SettingKeyCaptchaProvider 当前选择的 CAPTCHA provider key 设置。
 	// 它是公开 string 设置；值为 provider key，空串表示未选择。
 	SettingKeyCaptchaProvider = repository.CaptchaProviderSettingKey
 
-	// SettingKeyEmailDomainWhitelist 是公开 json 设置：非空时仅精确命中的域名允许注册。
+	// SettingKeyEmailDomainWhitelist 公开 json 设置：非空时仅精确命中的域名允许注册。
 	SettingKeyEmailDomainWhitelist = "email_domain_whitelist"
-	// SettingKeyEmailDomainBlacklist 是公开 json 设置：白名单为空时精确命中的域名拒绝注册。
+	// SettingKeyEmailDomainBlacklist 公开 json 设置：白名单为空时精确命中的域名拒绝注册。
 	SettingKeyEmailDomainBlacklist = "email_domain_blacklist"
-	// SettingKeyGravatarBaseURL 是公开 string 设置：头像 URL 基址。
+	// SettingKeyGravatarBaseURL 公开 string 设置：头像 URL 基址。
 	SettingKeyGravatarBaseURL = "gravatar_base_url"
-	// SettingKeyCommentSort 是公开 string 设置：widget 默认排序，允许 asc/desc/hot。
+	// SettingKeyCommentSort 公开 string 设置：widget 默认排序，允许 asc/desc/hot。
 	SettingKeyCommentSort = "comment_sort"
-	// SettingKeyEmojiCatalogURL 是公开 string 设置：widget 远程表情目录的绝对 HTTPS URL。
+	// SettingKeyEmojiCatalogURL 公开 string 设置：widget 远程表情目录的绝对 HTTPS URL。
 	// 空串表示不配置；query 允许，userinfo 与 fragment 不允许。
 	SettingKeyEmojiCatalogURL = "emoji_catalog_url"
-	// SettingKeyUserAgreementURL 是可选的用户协议绝对 HTTPS 地址。
+	// SettingKeyUserAgreementURL 可选的用户协议绝对 HTTPS 地址。
 	SettingKeyUserAgreementURL = "user_agreement_url"
-	// SettingKeyPrivacyPolicyURL 是可选的隐私政策绝对 HTTPS 地址。
+	// SettingKeyPrivacyPolicyURL 可选的隐私政策绝对 HTTPS 地址。
 	SettingKeyPrivacyPolicyURL = "privacy_policy_url"
-	// SettingKeyLegalConsentVersion 是管理员命令维护的协议同意版本。
+	// SettingKeyLegalConsentVersion 管理员命令维护的协议同意版本。
 	SettingKeyLegalConsentVersion = "legal_consent_version"
-	// SettingKeyBrandPrimaryColor 是 Web 界面品牌主色。
+	// SettingKeyBrandPrimaryColor  Web 界面品牌主色。
 	SettingKeyBrandPrimaryColor = "brand_primary_color"
 
 	// SettingKeyInternalEpoch 持久化 Widget 凭证代次的保留内部 key。
@@ -59,13 +58,13 @@ const (
 	SettingKeyInternalEpoch = "internal.widget_credential_epoch"
 )
 
-// internalKeyPrefix 是保留的内部设置 key 前缀。
+// internalKeyPrefix 保留的内部设置 key 前缀。
 const internalKeyPrefix = "internal."
 
-// settingKeyPattern 是公开设置 key 的格式：小写字母开头，可含小写字母、数字、下划线与点。
+// settingKeyPattern 公开设置 key 的格式：小写字母开头，可含小写字母、数字、下划线与点。
 var settingKeyPattern = regexp.MustCompile(`^[a-z][a-z0-9_.]*$`)
 
-// SettingType 是设置项的公开类型。
+// SettingType 设置项的公开类型。
 type SettingType string
 
 // 支持的公开设置类型。
@@ -76,7 +75,7 @@ const (
 	SettingTypeJSON    SettingType = "json"
 )
 
-// SettingItem 是一个公开设置项：唯一 key、声明类型与合法 JSON 值。
+// SettingItem 一个公开设置项：唯一 key、声明类型与合法 JSON 值。
 // 同一类型下 value 的 JSON 形态必须匹配，所有类型拒绝 null。
 type SettingItem struct {
 	Key   string      `json:"key"`
@@ -90,7 +89,7 @@ type knownSetting struct {
 	typ SettingType
 }
 
-// knownSettings 是已知顶层 key 与其固定类型的注册表。
+// knownSettings 已知顶层 key 与其固定类型的注册表。
 var knownSettings = []knownSetting{
 	{key: SettingKeyCommentMode, typ: SettingTypeString},
 	{key: SettingKeyModeration, typ: SettingTypeString},
@@ -112,13 +111,13 @@ var knownSettings = []knownSetting{
 	{key: SettingKeyBrandPrimaryColor, typ: SettingTypeString},
 }
 
-// View 是一次 Get 的原子快照：类型化设置与凭证 epoch。
+// View 一次 Get 的原子快照：类型化设置与凭证 epoch。
 type View struct {
 	Settings domain.Settings
 	Epoch    int64
 }
 
-// TxRunner 是设置用例依赖的事务边界，由 platform/gormtx.Runner 实现。
+// TxRunner 设置用例依赖的事务边界，由 platform/gormtx.Runner 实现。
 type TxRunner interface {
 	RunInTx(ctx context.Context, fn func(ctx context.Context) error) error
 }

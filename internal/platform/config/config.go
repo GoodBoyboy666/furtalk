@@ -19,9 +19,7 @@ import (
 
 const envPrefix = "FURTALK"
 
-// Config 是静态配置的不可变快照，按功能拆分为嵌套 section。
-// 每个 platform 构造器只接收自己需要的 section，不接触整份配置。
-// warnings 由 Load 收集，程序化构造的配置不含告警记录。
+// Config 静态配置的不可变快照，按功能拆分为嵌套 section。
 type Config struct {
 	HTTP     HTTPConfig     `mapstructure:"http"`
 	Database DatabaseConfig `mapstructure:"database"`
@@ -51,7 +49,7 @@ type HTTPConfig struct {
 	RateLimitBurst    int           `mapstructure:"rate_limit_burst"`
 }
 
-// DatabaseConfig 承载按方言拆分的数据库连接字段。
+// DatabaseConfig 承载拆分的数据库连接字段。
 type DatabaseConfig struct {
 	Dialect  string `mapstructure:"dialect"`
 	Path     string `mapstructure:"path"`
@@ -63,13 +61,12 @@ type DatabaseConfig struct {
 	SSLMode  string `mapstructure:"ssl_mode"`
 }
 
-// CacheConfig 承载临时存储后端连接（Redis）。空 URL 表示进程内内存存储。
+// CacheConfig 承载Redis连接信息
 type CacheConfig struct {
 	RedisURL string `mapstructure:"redis_url"`
 }
 
 // TokensConfig 承载 JWT 签发/验签参数与 provider 机密加密主密钥。
-// JWTKey 与 SecretKey 都只接受配置提供的原始文本，按原始 UTF-8 字节参与校验。
 type TokensConfig struct {
 	JWTIssuer         string        `mapstructure:"jwt_issuer"`
 	JWTAlgorithm      string        `mapstructure:"jwt_algorithm"`
@@ -79,7 +76,7 @@ type TokensConfig struct {
 	SecretKey         string        `mapstructure:"secret_key"`
 }
 
-// WebAuthnConfig 承载 WebAuthn Relying Party 边界。
+// WebAuthnConfig 承载 WebAuthn Relying Party 参数。
 type WebAuthnConfig struct {
 	RPID      string   `mapstructure:"rp_id"`
 	RPOrigins []string `mapstructure:"rp_origins"`
@@ -91,7 +88,7 @@ type OAuthConfig struct {
 	ClientTimeout time.Duration `mapstructure:"client_timeout"`
 }
 
-// SMTPConfig 承载静态 SMTP 投递配置。
+// SMTPConfig 承载 SMTP 投递配置。
 type SMTPConfig struct {
 	Host     string        `mapstructure:"host"`
 	Port     int           `mapstructure:"port"`
@@ -103,14 +100,12 @@ type SMTPConfig struct {
 }
 
 // LoggingConfig 承载后端日志输出格式选择。
-// Format 只接受小写 "json" 或 "text"；缺省 text，机器采集需显式选择 json。
+// 默认为 text。
 type LoggingConfig struct {
 	Format string `mapstructure:"format"`
 }
 
-// Load 从嵌套环境变量、可选配置文件与内置默认值加载静态配置，
-// 并调用 Validate 校验。任一来源的值非法时返回错误。
-// 缺失必需字段时校验失败；建议字段缺失时收集告警随配置返回。
+// Load 从嵌套环境变量、可选配置文件与内置默认值加载静态配置
 func Load() (Config, error) {
 	v, err := newViper()
 	if err != nil {
@@ -183,9 +178,8 @@ const (
 	defaultLoggingFormat     = "text"
 )
 
-// recommendedDefault 描述一个建议配置项的 Viper 键与其安全默认值。
-// onlyWithSMTPHost 为 true 时仅当 SMTP 启用才参与缺失告警。
-// silent 为 true 时只注入默认值，不产生缺失告警（如 logging.format 的 text 缺省）。
+// recommendedDefault 建议配置项的 Viper 键与其安全默认值。
+// silent 为 true 时只注入默认值，不产生缺失告警。
 type recommendedDefault struct {
 	key              string
 	def              any
@@ -193,8 +187,7 @@ type recommendedDefault struct {
 	silent           bool
 }
 
-// recommendedDefaults 是建议配置的唯一默认值来源表：configureDefaults 用它
-// 注入默认值，Load 用它收集缺失告警，默认值只在表内声明一次而保持一致。
+// recommendedDefaults 建议配置的唯一默认值来源表
 var recommendedDefaults = []recommendedDefault{
 	{key: "http.address", def: ":8080"},
 	{key: "http.trusted_proxies", def: []string{}},
@@ -218,7 +211,7 @@ var recommendedDefaults = []recommendedDefault{
 	{key: "logging.format", def: defaultLoggingFormat, silent: true},
 }
 
-// requiredConfigFields 是启动必须显式提供的字段；缺失或空值时阻止应用启动。
+// requiredConfigFields 启动必须显式提供的字段，缺失或空值时阻止应用启动。
 var requiredConfigFields = []struct {
 	key   string
 	value func(c Config) string
@@ -231,7 +224,7 @@ var requiredConfigFields = []struct {
 	{key: "webauthn.rp_id", value: func(c Config) string { return c.WebAuthn.RPID }},
 }
 
-// Warning 描述一个因缺失而采用内置默认值的建议配置项。
+// Warning 一个因缺失而采用内置默认值的建议配置项。
 type Warning struct {
 	Key     string
 	Default any
@@ -242,8 +235,7 @@ func (c Config) Warnings() []Warning {
 	return append([]Warning(nil), c.warnings...)
 }
 
-// collectRecommendedWarnings 依据环境变量与配置文件的存在性收集缺失告警。
-// 非空环境变量或文件声明即为显式提供；显式值等于默认值不告警。
+// collectRecommendedWarnings 收集缺失告警。
 func (c Config) collectRecommendedWarnings(fileKeys map[string]bool) []Warning {
 	smtpEnabled := strings.TrimSpace(c.SMTP.Host) != ""
 	var warnings []Warning
@@ -276,7 +268,6 @@ func envNameForKey(key string) string {
 }
 
 // configFileKeys 返回配置文件实际声明的扁平键集合，不包含默认值与环境变量。
-// 文件缺失或读取失败时返回 nil，与纯环境变量部署一致。
 func configFileKeys(path string) map[string]bool {
 	if path == "" {
 		return nil
@@ -330,7 +321,7 @@ func (c Config) checkRequired() error {
 	return nil
 }
 
-// Validate 校验各 section 的静态配置并返回首个错误。
+// Validate 校验各 section 的静态配置。
 // 必需字段在格式/范围校验之前检查，缺失时直接返回字段错误。
 func (c Config) Validate() error {
 	if err := c.checkRequired(); err != nil {

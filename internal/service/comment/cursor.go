@@ -21,8 +21,8 @@ func encodeCursor(pinned bool, createdAt time.Time, id int64) string {
 	return base64.RawURLEncoding.EncodeToString([]byte(raw))
 }
 
-// encodeHotCursor 把 (like_count, created_at, id) 位置序列化为带 hot 前缀的
-// base64url 游标。hot 前缀让解码可以按排序模式拒绝错配的游标。
+// encodeHotCursor 把 (like_count, created_at, id) 位置序列化为带 hot 前缀的 base64url 游标。
+// hot 前缀让解码可以按排序模式拒绝错配的游标。
 func encodeHotCursor(pinned bool, likeCount int64, createdAt time.Time, id int64) string {
 	group := 0
 	if pinned {

@@ -9,8 +9,7 @@ import (
 )
 
 // AdminBatch 批量执行评论管理命令。
-// 所有目标都在同一个数据库事务中按稳定 ID 顺序校验和写入；任何一个
-// 目标失败都会使事务回滚。发布事件只在事务成功提交后发送。
+// 所有目标都在同一个数据库事务中按稳定 ID 顺序校验和写入
 func (s *Service) AdminBatch(ctx context.Context, input AdminBatchInput) (*domain.BatchResult, error) {
 	if len(input.IDs) == 0 || len(input.IDs) > maxLimit || !ValidAdminBatchAction(string(input.Action)) {
 		return nil, domain.ErrValidation
@@ -80,8 +79,6 @@ func (s *Service) AdminBatch(ctx context.Context, input AdminBatchInput) (*domai
 }
 
 // applyAdminBatchAction 应用批量动作并返回是否发生实际写入。
-// 状态动作允许合法的同状态 no-op；置顶动作仍先验证资格，避免把回复
-// 或未发布根评论错误地当作“已是目标状态”。
 func (s *Service) applyAdminBatchAction(ctx context.Context, comment *domain.Comment, action AdminBatchAction, now time.Time) (bool, error) {
 	if comment == nil {
 		return false, domain.ErrNotFound

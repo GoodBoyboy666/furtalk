@@ -27,7 +27,7 @@ const (
 	argon2SaltLen = 16
 )
 
-// publicPasswordLoginConcurrency 是单进程公开密码登录的 Argon2 并发上限。
+// publicPasswordLoginConcurrency 单进程公开密码登录的 Argon2 并发上限。
 const publicPasswordLoginConcurrency = 2
 
 // argon2Budget 以非阻塞信号量限制公开密码登录的昂贵哈希工作。
@@ -56,7 +56,7 @@ func (b *argon2Budget) acquire() (func(), bool) {
 
 var errBadHash = errors.New("identity: malformed password hash envelope")
 
-// PasswordLoginInput 是公开密码登录在业务边界需要的字段。
+// PasswordLoginInput 公开密码登录在业务边界需要的字段。
 // ClientIP 必须来自可信代理解析后的 HTTP 上下文，不在 identity 层重新解析请求头。
 type PasswordLoginInput struct {
 	Email        string

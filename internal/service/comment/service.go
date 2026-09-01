@@ -1,3 +1,4 @@
+// Package comment 评论业务层
 package comment
 
 import (
@@ -25,12 +26,12 @@ const (
 	maxNicknameLength  = 100
 )
 
-// CommentAction 是评论创建的 CAPTCHA 策略操作键。
+// CommentAction 评论创建的 CAPTCHA 策略操作键。
 const (
 	CommentAction = "comment"
 )
 
-// Service 实现线程、评论与 widget 凭证生命周期用例，是模块的门面。
+// Service 实现线程、评论与 widget 凭证生命周期用例。
 type Service struct {
 	txRunner  TxRunner
 	threads   *repository.ThreadRepo
@@ -52,7 +53,7 @@ type Service struct {
 	codeTTL   time.Duration
 }
 
-// Dependencies 是 comment 模块 builder 的装配输入。
+// Dependencies comment 模块 builder 的装配输入。
 type Dependencies struct {
 	TxRunner  TxRunner
 	Threads   *repository.ThreadRepo
@@ -107,7 +108,7 @@ type CaptchaProviderReader interface {
 	SelectedCaptcha(ctx context.Context) (*CaptchaConfig, error)
 }
 
-// CaptchaVerifier 是评论与 widget 会话用例消费的 CAPTCHA 验证边界。
+// CaptchaVerifier 评论与 widget 会话用例消费的 CAPTCHA 接口。
 type CaptchaVerifier interface {
 	Verify(ctx context.Context, action, token string) error
 }
@@ -149,12 +150,12 @@ type WidgetSettingsReader interface {
 	WidgetConfig(ctx context.Context) (mode string, epoch int64, err error)
 }
 
-// TxRunner 是评论用例使用的事务边界。
+// TxRunner 是评论用例使用的事务接口
 type TxRunner interface {
 	RunInTx(ctx context.Context, fn func(ctx context.Context) error) error
 }
 
-// EventPublisher 是提交后事件的发布边界。
+// EventPublisher 是提交后事件的发布接口。
 type EventPublisher interface {
 	Publish(domain.CommentEvent) error
 }

@@ -11,7 +11,7 @@ import (
 	"furtalk/internal/platform/value"
 )
 
-// Profile 是返回给 HTTP 适配层的用户数据，不包含凭证机密。
+// Profile 返回给 HTTP 适配层的用户数据，不包含凭证机密。
 type Profile struct {
 	ID            int64
 	Email         string
@@ -25,7 +25,7 @@ type Profile struct {
 	AvatarURL     string
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
-	// DeletedAt 是软删除时间，nil 表示账号未被软删除。
+	// DeletedAt 软删除时间，nil 表示账号未被软删除。
 	DeletedAt *time.Time
 }
 
@@ -93,7 +93,7 @@ func normalizeUserLimit(limit int) int {
 	return limit
 }
 
-// ListResult 是管理端用户列表及其与搜索条件匹配的总数。
+// ListResult 管理端用户列表及其与搜索条件匹配的总数。
 type ListResult struct {
 	Users []Profile
 	Total int64

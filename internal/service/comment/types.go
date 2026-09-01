@@ -1,4 +1,4 @@
-// Package comment 是评论与 widget 会话用例的业务层。
+// Package comment 评论与 widget 会话用例的业务层。
 // 数据经 repository 读写；设置策略与 CAPTCHA provider 由 setting 层提供；
 // 用户写入经 domain.UserWriter 由 identity 层代写。
 package comment
@@ -11,7 +11,7 @@ import (
 	"furtalk/internal/domain"
 )
 
-// AuthCodeRecord 是与已签发授权码绑定的元数据。
+// AuthCodeRecord 与已签发授权码绑定的元数据。
 // CredentialMode 记录用户批准签发的 widget 凭证模式；交换时必须与实时评论模式
 // 一致，缺失/未知模式一律失败关闭。
 type AuthCodeRecord struct {
@@ -23,7 +23,7 @@ type AuthCodeRecord struct {
 	CredentialMode string    `json:"credential_mode"`
 }
 
-// CaptchaProjection 是单个 action 的公共 CAPTCHA 渲染投影，只携带公开字段。
+// CaptchaProjection 单个 action 的公共 CAPTCHA 渲染投影，只携带公开字段。
 // APIEndpoint 仅 CAP 使用，已解析为官方 widget 端点。
 type CaptchaProjection struct {
 	Required    bool
@@ -32,13 +32,13 @@ type CaptchaProjection struct {
 	APIEndpoint string
 }
 
-// RuntimeCaptcha 是 widget 运行时配置中的按 action 公共 CAPTCHA 投影。
+// RuntimeCaptcha  widget 运行时配置中的按 action 公共 CAPTCHA 投影。
 // 渲染提示而非授权决策：写端点始终以实时策略为最终权威。
 type RuntimeCaptcha struct {
 	Comment *CaptchaProjection
 }
 
-// CaptchaConfig 是解密后的 CAPTCHA provider 配置（含机密）。
+// CaptchaConfig 解密后的 CAPTCHA provider 配置（含机密）。
 // Endpoint 仅 CAP 使用，是管理员配置的外部 Standalone 实例基址。
 type CaptchaConfig struct {
 	Provider  string
@@ -79,7 +79,7 @@ func (o *OptionalNullableString) UnmarshalJSON(data []byte) error {
 }
 
 // CreateInput 携带 widget 评论创建输入。
-// Credential 是可选的已解析 widget 凭据：匿名模式普通邮箱可缺省，
+// Credential 可选的已解析 widget 凭据：匿名模式普通邮箱可缺省，
 // 管理员邮箱与认证模式必须携带有效凭据。
 type CreateInput struct {
 	SiteID       int64
@@ -98,7 +98,7 @@ type CreateInput struct {
 	Credential   WidgetCredential
 }
 
-// CommentView 是评论的公共视图。
+// CommentView 评论的公共视图。
 type CommentView struct {
 	ID                 int64
 	SiteID             int64
@@ -120,19 +120,19 @@ type CommentView struct {
 	CreatedAt          time.Time
 	PublishedAt        *time.Time
 	DeletedAt          *time.Time
-	// LikeCount 是该评论的公开 Like 计数，始终存在。
+	// LikeCount 该评论的公开 Like 计数，始终存在。
 	LikeCount int64
 	// LikedByMe 只反映已验证查看者是否点赞；匿名读取恒为 false。
 	LikedByMe bool
 }
 
-// PinResult 是 Widget 置顶命令返回的权威状态。
+// PinResult  Widget 置顶命令返回的权威状态。
 type PinResult struct {
 	CommentID int64
 	IsPinned  bool
 }
 
-// ThreadView 是一个线程的扁平评论列表及其元数据。
+// ThreadView 一个线程的扁平评论列表及其元数据。
 type ThreadView struct {
 	ID              int64
 	SiteID          int64
@@ -144,7 +144,7 @@ type ThreadView struct {
 	NextCursor      *string
 }
 
-// LatestCommentView 是站点公开最新评论视图。
+// LatestCommentView 站点公开最新评论视图。
 type LatestCommentView struct {
 	ID              int64
 	SiteID          int64
@@ -165,7 +165,7 @@ type LatestCommentView struct {
 	PublishedAt     *time.Time
 }
 
-// AdminThreadView 是管理端线程列表/详情视图。
+// AdminThreadView 管理端线程列表/详情视图。
 type AdminThreadView struct {
 	ID              int64
 	SiteID          int64
@@ -178,7 +178,7 @@ type AdminThreadView struct {
 	UpdatedAt       time.Time
 }
 
-// AdminThreadListResult 是管理端线程的一页以及匹配总数。
+// AdminThreadListResult 管理端线程的一页以及匹配总数。
 type AdminThreadListResult struct {
 	Threads []AdminThreadView
 	Total   int64
@@ -190,7 +190,7 @@ type DeleteResult struct {
 	Hard          bool
 }
 
-// RuntimeConfig 是 widget 运行时配置数据。
+// RuntimeConfig  widget 运行时配置数据。
 type RuntimeConfig struct {
 	SiteID          int64
 	Name            string
@@ -203,14 +203,14 @@ type RuntimeConfig struct {
 	Captcha         *RuntimeCaptcha
 }
 
-// AuthorizationContextView 是授权页展示所需的只读上下文，不创建授权记录。
+// AuthorizationContextView 授权页展示所需的只读上下文，不创建授权记录。
 type AuthorizationContextView struct {
 	SiteID   int64
 	SiteName string
 	Origin   string
 }
 
-// AdminCommentView 是仅管理员可见的视图。
+// AdminCommentView 仅管理员可见的视图。
 type AdminCommentView struct {
 	CommentView
 	Email     string
@@ -223,13 +223,13 @@ type AdminCommentView struct {
 	UADevice  *string
 }
 
-// AdminListResult 是管理员评论的一页以及匹配总数。
+// AdminListResult 管理员评论的一页以及匹配总数。
 type AdminListResult struct {
 	Comments []AdminCommentView
 	Total    int64
 }
 
-// AdminBatchAction 是管理员评论批量命令的受控动作集合。
+// AdminBatchAction 管理员评论批量命令的受控动作集合。
 type AdminBatchAction string
 
 const (
@@ -243,7 +243,7 @@ const (
 	AdminBatchUnpin      AdminBatchAction = "unpin"
 )
 
-// ValidAdminBatchAction 报告动作是否属于评论批量命令白名单。
+// ValidAdminBatchAction 报告动作否属于评论批量命令白名单。
 func ValidAdminBatchAction(action string) bool {
 	switch AdminBatchAction(action) {
 	case AdminBatchPending, AdminBatchPublish, AdminBatchSpam,
@@ -255,14 +255,14 @@ func ValidAdminBatchAction(action string) bool {
 	}
 }
 
-// AdminBatchInput 是评论批量管理服务输入。
+// AdminBatchInput 评论批量管理服务输入。
 type AdminBatchInput struct {
 	IDs     []int64
 	Action  AdminBatchAction
 	Confirm bool
 }
 
-// AdminThreadBatchAction 是管理员评论区批量命令的受控动作集合。
+// AdminThreadBatchAction 管理员评论区批量命令的受控动作集合。
 type AdminThreadBatchAction string
 
 const (
@@ -281,7 +281,7 @@ func ValidAdminThreadBatchAction(action string) bool {
 	}
 }
 
-// AdminThreadBatchInput 是评论区批量管理服务输入。
+// AdminThreadBatchInput 评论区批量管理服务输入。
 type AdminThreadBatchInput struct {
 	IDs     []int64
 	Action  AdminThreadBatchAction
@@ -292,7 +292,7 @@ type AdminThreadBatchInput struct {
 type ThreadBatchAction = AdminThreadBatchAction
 type ThreadBatchInput = AdminThreadBatchInput
 
-// OwnerCommentView 是当前用户本人评论的展示视图，不含邮箱/IP/UA。
+// OwnerCommentView 当前用户本人评论的展示视图，不含邮箱/IP/UA。
 type OwnerCommentView struct {
 	CommentView
 	SiteName  string
@@ -301,49 +301,49 @@ type OwnerCommentView struct {
 	PageTitle *string
 }
 
-// OwnerCommentDetail 是本人评论详情视图及当前删除策略。
+// OwnerCommentDetail 本人评论详情视图及当前删除策略。
 type OwnerCommentDetail struct {
 	View           OwnerCommentView
 	UserDeleteMode string
 }
 
-// OwnerCommentListResult 是本人评论的一页、匹配总数与当前删除策略。
+// OwnerCommentListResult 本人评论的一页、匹配总数与当前删除策略。
 type OwnerCommentListResult struct {
 	Comments       []OwnerCommentView
 	Total          int64
 	UserDeleteMode string
 }
 
-// OwnerSiteView 是当前用户发表过评论的站点展示数据。
+// OwnerSiteView 当前用户发表过评论的站点展示数据。
 type OwnerSiteView struct {
 	ID   int64
 	Name string
 }
 
-// IssueInput 是第一方授权码签发请求。
+// IssueInput 第一方授权码签发请求。
 type IssueInput struct {
 	SiteID    int64
 	Origin    string
 	RequestID string
 	UserID    int64
-	// Role 是签发请求时的第一方主体当前角色，用于模式感知的授权矩阵判定。
+	// Role 签发请求时的第一方主体当前角色，用于模式感知的授权矩阵判定。
 	Role domain.Role
 }
 
-// AuthCodeResult 是一次性授权码响应。
+// AuthCodeResult 一次性授权码响应。
 type AuthCodeResult struct {
 	Code      string
 	RequestID string
 	ExpiresAt time.Time
 }
 
-// SessionResult 是成功的 widget 会话签发/交换结果。
+// SessionResult 成功的 widget 会话签发/交换结果。
 type SessionResult struct {
 	Token     string
 	ExpiresAt time.Time
 }
 
-// ProbeResult 是不含敏感信息的 widget 会话探测结果。
+// ProbeResult 不含敏感信息的 widget 会话探测结果。
 type ProbeResult struct {
 	Valid          bool
 	CredentialMode string

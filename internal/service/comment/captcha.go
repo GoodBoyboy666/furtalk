@@ -34,7 +34,7 @@ func (s *Service) checkCaptcha(ctx context.Context, policy map[string]bool, acti
 	return MapError(err)
 }
 
-// CaptchaGateway 是动态 CAPTCHA 验证器，每次 Verify 读取当前选择的 provider snapshot。
+// CaptchaGateway 动态 CAPTCHA 验证器，每次 Verify 读取当前选择的 provider snapshot。
 type CaptchaGateway struct {
 	reader CaptchaProviderReader
 

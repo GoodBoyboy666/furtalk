@@ -10,7 +10,7 @@ import (
 
 const maxUserBatchLimit = 100
 
-// AdminUserBatchAction 是管理员用户批量命令的受控动作集合。
+// AdminUserBatchAction 管理员用户批量命令的受控动作集合。
 // 角色不属于批量操作；角色编辑仍只通过单条用户更新命令完成。
 type AdminUserBatchAction string
 
@@ -36,7 +36,7 @@ func ValidAdminUserBatchAction(action string) bool {
 	}
 }
 
-// AdminUserBatchInput 是管理员用户批量管理服务输入。
+// AdminUserBatchInput 管理员用户批量管理服务输入。
 type AdminUserBatchInput struct {
 	ActingID int64
 	IDs      []int64

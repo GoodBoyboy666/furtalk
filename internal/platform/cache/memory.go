@@ -10,7 +10,7 @@ import (
 	"golang.org/x/sync/singleflight"
 )
 
-// DefaultMemoryLimit 是内存存储的最大存活条目数。
+// DefaultMemoryLimit 内存存储最大存活条目数。
 const DefaultMemoryLimit = 10000
 
 type memoryItem struct {
@@ -18,9 +18,8 @@ type memoryItem struct {
 	expires time.Time
 }
 
-// Memory 是进程内的有界 TTL 存储，可安全并发使用，并惰性淘汰过期条目。
-// 存活条目数达到上限时先淘汰过期条目；没有可淘汰的过期条目时，
-// 用 ErrCapacity 拒绝新的写入，让使用方安全失败而不是无限增长。
+// Memory 进程内的有限 TTL 存储，可安全并发使用，并惰性淘汰过期条目。
+// 存活条目数达到上限时先淘汰过期条目；没有可淘汰的过期条目时， 用 ErrCapacity 拒绝新写入。
 type Memory struct {
 	mu         sync.Mutex
 	items      map[string]memoryItem
@@ -30,7 +29,7 @@ type Memory struct {
 	namespaces map[string]map[string]time.Time
 }
 
-// NewMemory 构建一个有界内存存储。limit <= 0 时使用默认值。
+// NewMemory 构建一个有限内存存储。limit <= 0 时使用默认值。
 func NewMemory(limit int) *Memory {
 	if limit <= 0 {
 		limit = DefaultMemoryLimit
@@ -76,7 +75,7 @@ func (s *Memory) Set(ctx context.Context, key string, value any, ttl time.Durati
 	return nil
 }
 
-// Delete 删除一个键，键不存在时也不返回错误。
+// Delete 删除一个键，键不存在时不返回错误。
 func (s *Memory) Delete(ctx context.Context, key string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -85,7 +84,7 @@ func (s *Memory) Delete(ctx context.Context, key string) error {
 	return nil
 }
 
-// AtomicConsume 在单个临界区内读取并移除一个键。
+// AtomicConsume 原子取并移除一个键。
 func (s *Memory) AtomicConsume(ctx context.Context, key string) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -113,8 +112,7 @@ func (s *Memory) evictExpired(now time.Time) {
 	}
 }
 
-// AtomicEmailCodeVerify 在单个临界区内验证并消费邮箱验证码记录。
-// 正确提交只消费一次；错误提交的失败次数不会在并发下丢失，
+// AtomicEmailCodeVerify 原子验证并消费邮箱验证码记录。
 // 达到 maxAttempts 或已过期的记录会被删除。
 func (s *Memory) AtomicEmailCodeVerify(ctx context.Context, key, submittedHash string, maxAttempts int) (EmailCodeVerifyResult, error) {
 	s.mu.Lock()
@@ -153,8 +151,7 @@ func (s *Memory) AtomicEmailCodeVerify(ctx context.Context, key, submittedHash s
 	return EmailCodeAttempted, nil
 }
 
-// GetOrLoad 从存储中获取 key，未命中时在每键 singleflight 下执行 load() 并存储结果。
-// 授权缓存的未命中回填依赖该方法。load 成功时以给定 TTL 写入 key 下并返回。
+// GetOrLoad 从存储中获取 key，未命中时执行 load() 并存储结果。
 func (s *Memory) GetOrLoad(ctx context.Context, key string, out any, ttl time.Duration, load func() (any, error)) error {
 	err := s.Get(ctx, key, out)
 	if err == nil {

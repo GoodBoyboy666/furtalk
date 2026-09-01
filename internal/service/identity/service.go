@@ -1,6 +1,5 @@
-// Package identity 是身份与授权用例的业务层。
+// Package identity 身份与授权用例的业务层。
 // 数据经 repository 读写；设置策略与 OAuth provider 解密由 setting 层提供；
-// 本包不触碰 GORM，也不依赖任何 HTTP 框架。
 package identity
 
 import (
@@ -35,19 +34,19 @@ const (
 	emailCodeLength      = 6
 	minPasswordLength    = 8
 	emailCodePurpose     = "login"
-	// passwordResetPurpose 是密码重置验证码的用途键，与登录验证码隔离。
+	// passwordResetPurpose 密码重置验证码的用途键，与登录验证码隔离。
 	passwordResetPurpose = "password_reset"
-	// passwordResetCodeTTL 是密码重置验证码的有效期。
+	// passwordResetCodeTTL 密码重置验证码的有效期。
 	passwordResetCodeTTL = 10 * time.Minute
-	// passwordResetMaxAttempts 是密码重置验证码允许的最大失败次数。
+	// passwordResetMaxAttempts 密码重置验证码允许的最大失败次数。
 	passwordResetMaxAttempts = 5
-	// EmailCodeAction 是邮箱验证码发送的 CAPTCHA 策略操作键。
+	// EmailCodeAction 邮箱验证码发送的 CAPTCHA 策略操作键。
 	EmailCodeAction = "email_code"
-	// EmailCodeLoginAction 是邮箱验证码登录的 CAPTCHA 策略操作键。
+	// EmailCodeLoginAction 邮箱验证码登录的 CAPTCHA 策略操作键。
 	EmailCodeLoginAction = "email_code_login"
-	// PasswordLoginAction 是邮箱密码登录的 CAPTCHA 策略操作键。
+	// PasswordLoginAction 邮箱密码登录的 CAPTCHA 策略操作键。
 	PasswordLoginAction = "password_login"
-	// PasswordResetAction 是匿名请求密码重置验证码的 CAPTCHA 策略操作键。
+	// PasswordResetAction 匿名请求密码重置验证码的 CAPTCHA 策略操作键。
 	// 默认关闭；开启时只门禁请求验证码阶段，提交验证码与新密码不重复要求。
 	PasswordResetAction = "password_reset"
 )
@@ -87,7 +86,7 @@ type Service struct {
 	passwordBudget  *argon2Budget
 }
 
-// Dependencies 是 identity 模块构建函数的装配输入。
+// Dependencies  identity 模块构建函数的装配输入。
 type Dependencies struct {
 	TxRunner       TxRunner
 	Users          *repository.UserRepo
@@ -111,7 +110,7 @@ type Dependencies struct {
 	Logger         *slog.Logger
 }
 
-// PasswordLoginAdmission 是公开密码登录使用的窄流程预算端口。
+// PasswordLoginAdmission 公开密码登录使用的窄流程预算端口。
 // 生产实现由 app 注入共享的 ratelimit.PolicyRegistry。
 type PasswordLoginAdmission interface {
 	Allow(policy, subject string) bool
@@ -188,7 +187,7 @@ type CaptchaPolicyReader interface {
 	CaptchaPolicy(ctx context.Context) (map[string]bool, error)
 }
 
-// CaptchaVerifier 是邮箱验证码发送前的 CAPTCHA 校验边界。
+// CaptchaVerifier 邮箱验证码发送前的 CAPTCHA 校验边界。
 // 只返回 nil 或 domain 的 CAPTCHA 错误（必要时包装这些 sentinel）。
 type CaptchaVerifier interface {
 	Verify(ctx context.Context, action, token string) error
@@ -200,10 +199,10 @@ type OAuthProviderReader interface {
 	OAuthProvider(ctx context.Context, providerKey string) (*AuthProvider, error)
 }
 
-// AuthProvider 是解密后的 OAuth/OIDC 提供商配置，由 setting 层提供。
+// AuthProvider 解密后的 OAuth/OIDC 提供商配置，由 setting 层提供。
 type AuthProvider = setting.AuthProvider
 
-// TxRunner 是身份用例使用的事务边界。
+// TxRunner 身份用例使用的事务边界。
 type TxRunner interface {
 	RunInTx(ctx context.Context, fn func(ctx context.Context) error) error
 }

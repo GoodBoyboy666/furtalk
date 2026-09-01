@@ -1,4 +1,4 @@
-// Package cryptox 提供保护静态存储的提供方密钥的低层加密方案：
+// Package cryptox 提供低层加密方案：
 // AES-256-GCM 信封，格式为
 //
 //	envelope = key_version(1 byte) || nonce(12 bytes) || ciphertext
@@ -35,11 +35,11 @@ const (
 )
 
 var (
-	// ErrBadEnvelope 在信封无法解析，或嵌入的 key version 与当前主密钥版本不匹配时返回。
+	// ErrBadEnvelope 信封无法解析，或嵌入的 key version 与当前主密钥版本不匹配。
 	ErrBadEnvelope = errors.New("cryptox: invalid secret envelope")
-	// ErrKeyLength 在 AES-256 密钥不是正好 32 字节时返回。
+	// ErrKeyLength AES-256 密钥不为 32 字节。
 	ErrKeyLength = errors.New("cryptox: AES-256 key must be exactly 32 bytes")
-	// ErrSourceKeyLength 在 KDF 输入不足 32 字节时返回。
+	// ErrSourceKeyLength KDF 输入不足 32 字节。
 	ErrSourceKeyLength = errors.New("cryptox: source key must be at least 32 bytes")
 )
 

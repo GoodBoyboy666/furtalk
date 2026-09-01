@@ -12,15 +12,12 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// ErrInvalidNamespace reports an invalid namespace declaration.
+// ErrInvalidNamespace Namespace声明不合法。
 var ErrInvalidNamespace = errors.New("cache: invalid namespace")
 
-// ErrInvalidNamespaceTTL reports a namespace write with no live lifetime.
+// ErrInvalidNamespaceTTL Namespace写入时 TTL 不是正数，没有有效的存活时间。
 var ErrInvalidNamespaceTTL = errors.New("cache: namespace ttl must be positive")
 
-// namespaceBackend is the atomic boundary used by the production cache
-// implementations.  It deliberately stays private: callers should use the
-// Namespace adapter rather than depending on a particular cache backend.
 type namespaceBackend interface {
 	namespaceGet(context.Context, string, string, string, any) error
 	namespaceSet(context.Context, string, string, string, any, time.Duration, int) error
@@ -28,11 +25,7 @@ type namespaceBackend interface {
 	namespaceConsume(context.Context, string, string, string) (string, error)
 }
 
-// Namespace owns a bounded key namespace on top of a Store.  The caller
-// supplies only a suffix; the namespace owns its prefix and quota accounting.
-// Memory and Redis implement namespaceBackend, making admission and record
-// creation one atomic operation in production.  Other Store implementations
-// use the small synchronized fallback, which is useful for test doubles.
+// Namespace 一个有容量有限的键Namespace。
 type Namespace struct {
 	store   Store
 	backend namespaceBackend
@@ -45,10 +38,7 @@ type Namespace struct {
 	now     func() time.Time
 }
 
-// NewNamespace constructs a bounded cache namespace.  Invalid declarations
-// return nil; production declarations are fixed constants and should be
-// validated during construction with NewNamespaceChecked when errors need to
-// be surfaced by a composition root.
+// NewNamespace 构造一个有容量有限的缓存Namespace。
 func NewNamespace(store Store, name, prefix string, limit int) *Namespace {
 	ns, err := NewNamespaceChecked(store, name, prefix, limit)
 	if err != nil {
@@ -57,8 +47,7 @@ func NewNamespace(store Store, name, prefix string, limit int) *Namespace {
 	return ns
 }
 
-// NewNamespaceChecked is the error-returning form of NewNamespace for
-// composition roots and callers that need explicit validation errors.
+// NewNamespaceChecked NewNamespace 的返回错误版本，供组装根或其他需要显式处理校验错误的调用方使用。
 func NewNamespaceChecked(store Store, name, prefix string, limit int) (*Namespace, error) {
 	if store == nil {
 		return nil, fmt.Errorf("%w: nil store", ErrInvalidNamespace)
@@ -86,7 +75,7 @@ func NewNamespaceChecked(store Store, name, prefix string, limit int) (*Namespac
 	return ns, nil
 }
 
-// Name returns the fixed, non-secret namespace identifier.
+// Name 返回Namespace的固定标识符。
 func (n *Namespace) Name() string {
 	if n == nil {
 		return ""
@@ -94,7 +83,7 @@ func (n *Namespace) Name() string {
 	return n.name
 }
 
-// Limit returns the namespace's maximum number of live entries.
+// Limit 返回Namespace允许的存活条目数量上限。
 func (n *Namespace) Limit() int {
 	if n == nil {
 		return 0
@@ -113,7 +102,7 @@ func (n *Namespace) valid() error {
 	return nil
 }
 
-// Get reads and decodes a namespaced value.
+// Get 读取并解码Namespace内的值。
 func (n *Namespace) Get(ctx context.Context, suffix string, out any) error {
 	if err := n.valid(); err != nil {
 		return err
@@ -132,8 +121,8 @@ func (n *Namespace) Get(ctx context.Context, suffix string, out any) error {
 	return err
 }
 
-// Set admits and writes a namespaced value, returning ErrCapacity when the
-// namespace is full.  Replacing an existing live key keeps the same slot.
+// Set 在Namespace中写入一个值，Namespace已满时返回 ErrCapacity。
+// 覆盖仍然存活的已有键时沿用原来的名额，不会额外占位。
 func (n *Namespace) Set(ctx context.Context, suffix string, value any, ttl time.Duration) error {
 	if err := n.valid(); err != nil {
 		return err
@@ -147,7 +136,7 @@ func (n *Namespace) Set(ctx context.Context, suffix string, value any, ttl time.
 	return n.setFallback(ctx, suffix, value, ttl)
 }
 
-// Delete removes a namespaced value and releases its quota slot.
+// Delete 删除Namespace内的值，并释放其占用的配额名额。
 func (n *Namespace) Delete(ctx context.Context, suffix string) error {
 	if err := n.valid(); err != nil {
 		return err
@@ -165,8 +154,7 @@ func (n *Namespace) Delete(ctx context.Context, suffix string) error {
 	return err
 }
 
-// AtomicConsume reads and removes a namespaced value, releasing its slot in
-// the same backend operation.
+// AtomicConsume 原子读取并删除Namespace内的值。
 func (n *Namespace) AtomicConsume(ctx context.Context, suffix string) (string, error) {
 	if err := n.valid(); err != nil {
 		return "", err
@@ -192,8 +180,7 @@ func (n *Namespace) setFallback(ctx context.Context, suffix string, value any, t
 
 	_, tracked := n.members[key]
 	if !tracked {
-		// A wrapper may be created over a pre-seeded test store.  Treat a live
-		// existing record as replacement so it does not consume two slots.
+		// 包装器可能建立在预先写入过数据的测试 store 之上。此时把仍然存活的已有记录视为覆盖写入，避免占用两个名额。
 		var existing json.RawMessage
 		err := n.store.Get(ctx, key, &existing)
 		if err == nil {
@@ -220,9 +207,7 @@ func (n *Namespace) cleanupFallbackLocked(now time.Time) {
 	}
 }
 
-// namespaceGet implements the memory backend's namespaced read.  Expiration
-// and membership release happen under the same cache mutex as ordinary
-// records, so a read racing an admission cannot leave a stale slot behind.
+// namespaceGet 实现 memory 后端的Namespace读取。
 func (s *Memory) namespaceGet(_ context.Context, name, prefix, suffix string, out any) error {
 	key := prefix + suffix
 	s.mu.Lock()
@@ -236,9 +221,7 @@ func (s *Memory) namespaceGet(_ context.Context, name, prefix, suffix string, ou
 	return json.Unmarshal(item.data, out)
 }
 
-// namespaceSet implements atomic memory admission and publication.  Namespace
-// membership is bounded independently from the ordinary cache map and is
-// cleaned only for this namespace on the request path.
+// namespaceSet 实现 memory 后端的原子准入与写入。
 func (s *Memory) namespaceSet(_ context.Context, name, prefix, suffix string, value any, ttl time.Duration, limit int) error {
 	data, err := json.Marshal(value)
 	if err != nil {
@@ -268,8 +251,7 @@ func (s *Memory) namespaceSet(_ context.Context, name, prefix, suffix string, va
 	if expires, ok := members[key]; ok && now.Before(expires) && exists && now.Before(item.expires) {
 		tracked = true
 	} else if exists && now.Before(item.expires) {
-		// The key may have been seeded through the ordinary Store in a test.
-		// Claim it as a replacement rather than charging a second slot.
+		// 测试中该键可能已经通过普通 Store 写入过。这里将其视为覆盖写入，而不是再扣一个名额。
 		if len(members) >= limit {
 			return ErrCapacity
 		}
@@ -289,8 +271,7 @@ func (s *Memory) namespaceSet(_ context.Context, name, prefix, suffix string, va
 	}
 	if !tracked && len(s.items) >= s.limit {
 		s.evictExpired(now)
-		// evictExpired removes empty namespace maps while releasing expired
-		// memberships; reattach this namespace before publishing the new member.
+		// evictExpired 在清理过期成员的同时会移除空的Namespace map；发布新成员之前需要把这个Namespace重新挂回去。
 		if len(members) == 0 {
 			s.namespaces[name] = members
 		}
@@ -353,9 +334,7 @@ func (s *Memory) removeNamespaceMembershipLocked(key string) {
 	}
 }
 
-// Redis namespace operations.  The record key intentionally preserves the
-// established `<prefix><suffix>` shape.  The quota key is fixed by namespace
-// name and never incorporates request data except as a sorted-set member.
+// Redis Namespace操作。记录键有意沿用既有的 `<prefix><suffix>` 拼接形式。
 func namespaceQuotaKey(name string) string {
 	return "furtalk:cache:namespace-quota:" + name
 }
@@ -415,9 +394,7 @@ func (s *Redis) namespaceConsume(ctx context.Context, name, prefix, suffix strin
 	return decoded, nil
 }
 
-// Redis scripts keep quota membership and record mutation in one atomic
-// operation.  Expired members are removed by score; no KEYS/SCAN operation is
-// used on the request path.
+// Redis 脚本把配额成员维护与记录变更放在同一个原子操作中完成。过期成员按 score 清理，请求路径上不会使用 KEYS/SCAN。
 var namespaceSetScript = redis.NewScript(`
 local nowParts = redis.call("TIME")
 local now = tonumber(nowParts[1]) * 1000 + math.floor(tonumber(nowParts[2]) / 1000)

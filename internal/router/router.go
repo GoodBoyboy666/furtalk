@@ -1,4 +1,4 @@
-// Package router 是路由层：统一注册路由与中间件。
+// Package router 路由层：统一注册路由与中间件。
 // 不 import 任何 service；业务中间件与注册函数由组合根注入。
 package router
 
@@ -10,6 +10,7 @@ import (
 	"furtalk/internal/platform/config"
 	"furtalk/internal/platform/httpx"
 	"furtalk/internal/platform/ratelimit"
+
 	"github.com/gin-gonic/gin"
 )
 

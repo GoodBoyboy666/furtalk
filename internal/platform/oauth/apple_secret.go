@@ -12,11 +12,11 @@ import (
 	gojwt "github.com/golang-jwt/jwt/v5"
 )
 
-// appleClientSecretTTL 是 Apple client-secret JWT 的生存期。
-// JWT 随每次 token 交换现场生成、短期有效，绝不持久化或记录。
+// appleClientSecretTTL Apple client-secret JWT 的生存期。
+// JWT 随每次 token 交换现场生成、短期有效。
 const appleClientSecretTTL = 10 * time.Minute
 
-// appleClientSecretAudience 是 Apple client-secret JWT 的固定 audience。
+// appleClientSecretAudience Apple client-secret JWT 的固定 audience。
 const appleClientSecretAudience = "https://appleid.apple.com"
 
 // parseApplePrivateKey 解析 Apple 的 PKCS#8 DER PEM P-256 私钥（.p8）。
@@ -42,7 +42,7 @@ func parseApplePrivateKey(raw string) (*ecdsa.PrivateKey, error) {
 }
 
 // ValidateApplePrivateKey 校验配置的 Apple 私钥可被解析用于生成 client-secret JWT。
-// 供管理端连通性测试等外部消费者使用；错误文本不包含私钥字节。
+// 供管理端连通性测试等外部消费者使用。
 func ValidateApplePrivateKey(raw string) error {
 	_, err := parseApplePrivateKey(raw)
 	return err
@@ -50,8 +50,7 @@ func ValidateApplePrivateKey(raw string) error {
 
 // clientSecret 为一次 token 交换现场生成短期 ES256 client-secret JWT。
 // header 携带 kid=key_id；claims 为 iss=team_id、sub=client_id、
-// aud=https://appleid.apple.com、iat=now、exp=now+TTL。生成的 JWT 不落盘、
-// 不进入日志或错误文本。
+// aud=https://appleid.apple.com、iat=now、exp=now+TTL。
 func (p *appleProvider) clientSecret(now time.Time) (string, error) {
 	claims := gojwt.MapClaims{
 		"iss": p.teamID,

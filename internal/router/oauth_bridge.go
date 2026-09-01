@@ -7,10 +7,11 @@ import (
 
 	"furtalk/internal/platform/httpx"
 	"furtalk/internal/platform/ratelimit"
+
 	"github.com/gin-gonic/gin"
 )
 
-// oauthBridgeFieldLimit 是 Apple form_post 桥接受的单字段上限，防止超大载荷。
+// oauthBridgeFieldLimit  Apple form_post 桥接受的单字段上限，防止超大载荷。
 const (
 	oauthBridgeStateLimit = 512
 	oauthBridgeCodeLimit  = 4096

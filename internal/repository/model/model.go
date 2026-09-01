@@ -1,6 +1,4 @@
-// Package model 持有跨模块共享的 GORM 持久化行。
-// 行只在本包声明，供 repository 层做防腐转换；行不得离开 repository 层。
-// 各行的 GORM tag 与原实现一致，保证数据库 schema 不变。
+// Package model GORM model。
 package model
 
 import (
@@ -10,8 +8,6 @@ import (
 )
 
 // All 按依赖顺序返回全部持久化模型。
-// 稳定顺序让 schema 生成保持确定性：它是 Atlas loader（tools/atlas-loader）的
-// 期望 schema 来源，也是测试库 AutoMigrate 的模型集合。
 func All() []any {
 	return []any{
 		&User{},
@@ -28,9 +24,6 @@ func All() []any {
 	}
 }
 
-// User 是 users 表的 GORM 行。
-// 密码状态直接落在用户行：password_hash 与 password_changed_at 要么同时为空
-// （未配置密码登录），要么同时非空（已配置密码），由 CHECK 约束保证。
 type User struct {
 	ID                 int64              `gorm:"primaryKey;autoIncrement;generated:identity"`
 	Email              string             `gorm:"column:email;type:text;not null"`
@@ -49,7 +42,6 @@ type User struct {
 	UpdatedAt          time.Time          `gorm:"column:updated_at;precision:6;autoUpdateTime"`
 }
 
-// ToUser 把持久化行转换为业务用户。
 func (r User) ToUser() domain.User {
 	return domain.User{
 		ID:                 r.ID,
@@ -68,7 +60,6 @@ func (r User) ToUser() domain.User {
 	}
 }
 
-// ToSite 把持久化行转换为业务站点。
 func (r Site) ToSite() domain.Site {
 	return domain.Site{
 		ID:           r.ID,
@@ -80,9 +71,6 @@ func (r Site) ToSite() domain.Site {
 	}
 }
 
-// PasskeyCredential 是 passkey_credentials 表的 GORM 行。
-// public_key 不写显式 type：gorm 对 []byte 默认映射为 SQLite blob / PostgreSQL bytea，
-// 显式 type:blob 会让 PostgreSQL 生成无效的 blob 类型。
 type PasskeyCredential struct {
 	ID              int64      `gorm:"primaryKey;autoIncrement;generated:identity"`
 	UserID          int64      `gorm:"column:user_id;not null"`
@@ -99,7 +87,6 @@ type PasskeyCredential struct {
 	User            User       `gorm:"foreignKey:UserID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
 }
 
-// ToPasskeyCredential 把持久化行转换为业务 passkey 凭证。
 func (r PasskeyCredential) ToPasskeyCredential() domain.PasskeyCredential {
 	return domain.PasskeyCredential{
 		ID:              r.ID,
@@ -117,7 +104,6 @@ func (r PasskeyCredential) ToPasskeyCredential() domain.PasskeyCredential {
 	}
 }
 
-// ExternalIdentity 是 external_identities 表的 GORM 行。
 type ExternalIdentity struct {
 	ID              int64      `gorm:"primaryKey;autoIncrement;generated:identity"`
 	UserID          int64      `gorm:"column:user_id;not null;uniqueIndex:uq_external_identities_user_provider,priority:1"`
@@ -129,7 +115,6 @@ type ExternalIdentity struct {
 	User            User       `gorm:"foreignKey:UserID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
 }
 
-// ToExternalIdentity 把持久化行转换为业务外部身份。
 func (r ExternalIdentity) ToExternalIdentity() domain.ExternalIdentity {
 	return domain.ExternalIdentity{
 		ID:              r.ID,
@@ -142,7 +127,6 @@ func (r ExternalIdentity) ToExternalIdentity() domain.ExternalIdentity {
 	}
 }
 
-// NotificationPreferences 是 notification_preferences 表的 GORM 行。
 type NotificationPreferences struct {
 	ID                int64     `gorm:"primaryKey;autoIncrement;generated:identity"`
 	UserID            int64     `gorm:"column:user_id;not null;uniqueIndex:uq_notification_preferences_user"`
@@ -152,7 +136,6 @@ type NotificationPreferences struct {
 	User              User      `gorm:"foreignKey:UserID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
 }
 
-// ToNotificationPreferences 把持久化行转换为业务通知偏好。
 func (r NotificationPreferences) ToNotificationPreferences() domain.NotificationPreferences {
 	return domain.NotificationPreferences{
 		ID:                r.ID,
@@ -163,7 +146,6 @@ func (r NotificationPreferences) ToNotificationPreferences() domain.Notification
 	}
 }
 
-// Site 是 sites 表的 GORM 行。
 type Site struct {
 	ID           int64             `gorm:"primaryKey;autoIncrement;generated:identity"`
 	Name         string            `gorm:"column:name;type:text;not null"`
@@ -173,7 +155,6 @@ type Site struct {
 	UpdatedAt    time.Time         `gorm:"column:updated_at;precision:6;autoUpdateTime"`
 }
 
-// SiteOrigin 是 site_origins 表的 GORM 行。
 type SiteOrigin struct {
 	ID        int64     `gorm:"primaryKey;autoIncrement;generated:identity"`
 	SiteID    int64     `gorm:"column:site_id;not null;uniqueIndex:uq_site_origins_site_origin,priority:1"`
@@ -182,12 +163,10 @@ type SiteOrigin struct {
 	Site      Site      `gorm:"foreignKey:SiteID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
 }
 
-// ToOrigin 把持久化行转换为业务 origin 记录。
 func (r SiteOrigin) ToOrigin() domain.Origin {
 	return domain.Origin{ID: r.ID, Origin: r.Origin}
 }
 
-// Thread 是 threads 表的 GORM 行。
 type Thread struct {
 	ID              int64     `gorm:"primaryKey;autoIncrement;generated:identity;uniqueIndex:uq_threads_site_id,priority:2"`
 	SiteID          int64     `gorm:"column:site_id;not null;uniqueIndex:uq_threads_site_id,priority:1;uniqueIndex:uq_threads_site_page,priority:1"`
@@ -200,7 +179,6 @@ type Thread struct {
 	Site            Site      `gorm:"foreignKey:SiteID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
 }
 
-// ToThread 把持久化行转换为业务线程。
 func (r Thread) ToThread() domain.Thread {
 	return domain.Thread{
 		ID:              r.ID,
@@ -214,9 +192,6 @@ func (r Thread) ToThread() domain.Thread {
 	}
 }
 
-// Comment 是 comments 表的 GORM 行。
-// 复合外键 (site_id, thread_id) / (site_id, parent_id) / (site_id, root_id)
-// 对 UNIQUE (site_id, id) 的约束语义保持不变。
 type Comment struct {
 	ID                 int64                 `gorm:"primaryKey;autoIncrement;generated:identity;uniqueIndex:uq_comments_site_id,priority:2;index:idx_comments_public,priority:5;index:idx_comments_site_status,priority:4;index:idx_comments_user,priority:3;index:idx_comments_site_parent,priority:4;index:idx_comments_site_root,priority:4"`
 	SiteID             int64                 `gorm:"column:site_id;not null;uniqueIndex:uq_comments_site_id,priority:1;index:idx_comments_public,priority:1;index:idx_comments_site_status,priority:1;index:idx_comments_site_parent,priority:1;index:idx_comments_site_root,priority:1"`
@@ -249,7 +224,6 @@ type Comment struct {
 	ReplyToUser        *User                 `gorm:"foreignKey:ReplyToUserID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL;"`
 }
 
-// ToComment 把持久化行转换为业务评论。
 func (r Comment) ToComment() domain.Comment {
 	return domain.Comment{
 		ID:                 r.ID,
@@ -278,10 +252,6 @@ func (r Comment) ToComment() domain.Comment {
 	}
 }
 
-// CommentLike 是 comment_likes 表的 GORM 行：一个账号对一条评论的一次 Like。
-// 唯一键 (site_id, comment_id, user_id) 让幂等依赖数据库约束而非应用竞态；
-// (site_id, comment_id) 前缀索引为计数/存在性查找服务。没有冗余计数列，
-// 评论/用户硬删除通过复合外键 ON DELETE CASCADE 自动清理。
 type CommentLike struct {
 	ID        int64     `gorm:"primaryKey;autoIncrement;generated:identity"`
 	SiteID    int64     `gorm:"column:site_id;not null;uniqueIndex:uq_comment_likes_site_comment_user,priority:1;index:idx_comment_likes_site_comment,priority:1"`
@@ -293,7 +263,6 @@ type CommentLike struct {
 	User      User      `gorm:"foreignKey:UserID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
 }
 
-// DynamicSetting 是 dynamic_settings 表的 GORM 行。
 type DynamicSetting struct {
 	ID        int64     `gorm:"primaryKey;autoIncrement;generated:identity"`
 	Key       string    `gorm:"column:key;type:text;not null;uniqueIndex:uq_dynamic_settings_key"`
@@ -303,7 +272,6 @@ type DynamicSetting struct {
 	UpdatedAt time.Time `gorm:"column:updated_at;precision:6;autoUpdateTime"`
 }
 
-// BootstrapState 是 bootstrap_states 单例表的 GORM 行。
 type BootstrapState struct {
 	ID            int64     `gorm:"primaryKey;autoIncrement;generated:identity"`
 	SingletonKey  int       `gorm:"column:singleton_key;not null;default:1;uniqueIndex:uq_bootstrap_state_singleton;check:ck_bootstrap_state_singleton,singleton_key = 1"`

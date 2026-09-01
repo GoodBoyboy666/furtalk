@@ -12,13 +12,13 @@ import (
 
 // 响应 DTO 与映射。字段名与历史 HTTP 契约完全一致。
 
-// NotificationPreferencesResponse 是通知偏好的响应体。
+// NotificationPreferencesResponse 通知偏好的响应体。
 type NotificationPreferencesResponse struct {
 	ReplyEnabled      bool `json:"reply_enabled"`
 	ModerationEnabled bool `json:"moderation_enabled"`
 }
 
-// MeResponse 是当前用户资料的响应体。
+// MeResponse 当前用户资料的响应体。
 type MeResponse struct {
 	ID                      string                          `json:"id"`
 	Email                   string                          `json:"email"`
@@ -54,36 +54,36 @@ func toMeResponse(p identity.Profile) MeResponse {
 	}
 }
 
-// PasskeyRegistrationOptionsResponse 是 passkey 注册选项的响应体。
+// PasskeyRegistrationOptionsResponse  passkey 注册选项的响应体。
 type PasskeyRegistrationOptionsResponse struct {
 	Challenge string `json:"challenge"`
 	Options   any    `json:"options"`
 }
 
-// PasskeyLoginOptionsResponse 是 passkey 登录选项的响应体。
+// PasskeyLoginOptionsResponse  passkey 登录选项的响应体。
 type PasskeyLoginOptionsResponse struct {
 	Challenge string `json:"challenge"`
 	Options   any    `json:"options"`
 }
 
-// AuthProviderMetadata 是公开 OAuth/OIDC 提供商的元数据。
+// AuthProviderMetadata 公开 OAuth/OIDC 提供商的元数据。
 type AuthProviderMetadata struct {
 	Key  string `json:"key"`
 	Kind string `json:"kind"`
 	Name string `json:"name"`
 }
 
-// AuthProvidersResponse 是公开提供商列表响应。
+// AuthProvidersResponse 公开提供商列表响应。
 type AuthProvidersResponse struct {
 	Providers []AuthProviderMetadata `json:"providers"`
 }
 
-// OAuthStartResponse 是 OAuth 开始端点返回的授权 URL。
+// OAuthStartResponse  OAuth 开始端点返回的授权 URL。
 type OAuthStartResponse struct {
 	AuthURL string `json:"auth_url"`
 }
 
-// OAuthCompleteRequest 是 OAuth 登录完成端点的请求。
+// OAuthCompleteRequest  OAuth 登录完成端点的请求。
 // handoff 与 (state, code, error) 互斥，二者只能提交其一。
 type OAuthCompleteRequest struct {
 	State   string `json:"state"`
@@ -92,13 +92,13 @@ type OAuthCompleteRequest struct {
 	Handoff string `json:"handoff"`
 }
 
-// OAuthCompleteResponse 是 OAuth 登录完成端点的成功响应，
-// redirect 是已净化的站内回跳地址。
+// OAuthCompleteResponse  OAuth 登录完成端点的成功响应，
+// redirect 已净化的站内回跳地址。
 type OAuthCompleteResponse struct {
 	Redirect string `json:"redirect"`
 }
 
-// IdentityMetadata 是登录方式的元数据。
+// IdentityMetadata 登录方式的元数据。
 type IdentityMetadata struct {
 	Kind       string     `json:"kind"`
 	ID         string     `json:"id,omitempty"`
@@ -108,12 +108,12 @@ type IdentityMetadata struct {
 	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
 }
 
-// IdentitiesResponse 是登录方式列表响应。
+// IdentitiesResponse 登录方式列表响应。
 type IdentitiesResponse struct {
 	Identities []IdentityMetadata `json:"identities"`
 }
 
-// AdminUserResponse 是管理端用户资料响应体。
+// AdminUserResponse 管理端用户资料响应体。
 type AdminUserResponse struct {
 	ID            string     `json:"id"`
 	Email         string     `json:"email"`
@@ -129,7 +129,7 @@ type AdminUserResponse struct {
 	DeletedAt     *time.Time `json:"deleted_at"`
 }
 
-// AdminUserListResponse 是管理端用户列表响应，携带按搜索条件统计的真实总数。
+// AdminUserListResponse 管理端用户列表响应，携带按搜索条件统计的真实总数。
 type AdminUserListResponse struct {
 	Users []AdminUserResponse `json:"users"`
 	Total int64               `json:"total"`
@@ -152,7 +152,7 @@ func toAdminUserResponse(p identity.Profile) AdminUserResponse {
 	}
 }
 
-// RuntimeConfigResponse 是公开的 widget 运行时配置数据。
+// RuntimeConfigResponse 公开的 widget 运行时配置数据。
 type RuntimeConfigResponse struct {
 	SiteID         string `json:"site_id"`
 	Name           string `json:"name"`
@@ -161,12 +161,12 @@ type RuntimeConfigResponse struct {
 	UserDeleteMode string `json:"user_delete_mode"`
 	MaxReplyDepth  int    `json:"max_reply_depth"`
 	CommentSort    string `json:"comment_sort"`
-	// EmojiCatalogURL 是可选的 widget 远程表情目录地址；未配置时字段缺省。
+	// EmojiCatalogURL 可选的 widget 远程表情目录地址；未配置时字段缺省。
 	EmojiCatalogURL string                  `json:"emoji_catalog_url,omitempty"`
 	Captcha         *RuntimeCaptchaResponse `json:"captcha"`
 }
 
-// CaptchaActionResponse 是单个 action 的公共 CAPTCHA 渲染投影。
+// CaptchaActionResponse 单个 action 的公共 CAPTCHA 渲染投影。
 // APIEndpoint 仅 CAP 返回，已解析为官方 widget 端点。
 type CaptchaActionResponse struct {
 	Required    bool   `json:"required"`
@@ -175,12 +175,12 @@ type CaptchaActionResponse struct {
 	APIEndpoint string `json:"api_endpoint,omitempty"`
 }
 
-// RuntimeCaptchaResponse 是 widget 运行时配置中的按 action CAPTCHA 投影。
+// RuntimeCaptchaResponse  widget 运行时配置中的按 action CAPTCHA 投影。
 type RuntimeCaptchaResponse struct {
 	Comment *CaptchaActionResponse `json:"comment,omitempty"`
 }
 
-// CommentResponse 是公开的评论视图。
+// CommentResponse 公开的评论视图。
 type CommentResponse struct {
 	ID             string  `json:"id"`
 	SiteID         string  `json:"site_id"`
@@ -196,32 +196,32 @@ type CommentResponse struct {
 	AuthorWebsite  *string `json:"author_website"`
 	AuthorRole     string  `json:"author_role"`
 	AvatarURL      string  `json:"avatar_url"`
-	// ReplyToUserID 是被回复作者的 id；根评论为 nil，被回复者注销后也为 nil。
+	// ReplyToUserID 被回复作者的 id；根评论为 nil，被回复者注销后也为 nil。
 	ReplyToUserID *string `json:"reply_to_user_id"`
-	// ReplyToNickname 是被回复作者的当前昵称；缺失或已注销时为 nil。
+	// ReplyToNickname 被回复作者的当前昵称；缺失或已注销时为 nil。
 	ReplyToNickname *string    `json:"reply_to_nickname"`
 	CreatedAt       time.Time  `json:"created_at"`
 	PublishedAt     *time.Time `json:"published_at"`
-	// LikeCount 是公开的 Like 计数，始终存在。
+	// LikeCount 公开的 Like 计数，始终存在。
 	LikeCount int64 `json:"like_count"`
 	// LikedByMe 只反映已验证查看者是否点赞；匿名读取恒为 false。
 	LikedByMe bool `json:"liked_by_me"`
 }
 
-// LikeResponse 是 Like 添加/移除的权威结果。
+// LikeResponse  Like 添加/移除的权威结果。
 type LikeResponse struct {
 	CommentID string `json:"comment_id"`
 	LikeCount int64  `json:"like_count"`
 	Liked     bool   `json:"liked"`
 }
 
-// CommentPinResponse 是 Widget 置顶变更返回的权威结果。
+// CommentPinResponse  Widget 置顶变更返回的权威结果。
 type CommentPinResponse struct {
 	CommentID string `json:"comment_id"`
 	IsPinned  bool   `json:"is_pinned"`
 }
 
-// ThreadMetaResponse 是线程元数据。
+// ThreadMetaResponse 线程元数据。
 type ThreadMetaResponse struct {
 	ID              string  `json:"id"`
 	SiteID          string  `json:"site_id"`
@@ -231,14 +231,14 @@ type ThreadMetaResponse struct {
 	CommentsEnabled bool    `json:"comments_enabled"`
 }
 
-// ThreadCommentsResponse 是一个线程的评论列表。
+// ThreadCommentsResponse 一个线程的评论列表。
 type ThreadCommentsResponse struct {
 	Thread     ThreadMetaResponse `json:"thread"`
 	Comments   []CommentResponse  `json:"comments"`
 	NextCursor *string            `json:"next_cursor"`
 }
 
-// LatestCommentResponse 是站点公开最新评论视图。
+// LatestCommentResponse 站点公开最新评论视图。
 type LatestCommentResponse struct {
 	ID              string     `json:"id"`
 	SiteID          string     `json:"site_id"`
@@ -259,12 +259,12 @@ type LatestCommentResponse struct {
 	PublishedAt     *time.Time `json:"published_at"`
 }
 
-// LatestCommentListResponse 是站点公开最新评论列表。
+// LatestCommentListResponse 站点公开最新评论列表。
 type LatestCommentListResponse struct {
 	Comments []LatestCommentResponse `json:"comments"`
 }
 
-// MeCommentResponse 是本人评论的展示视图，不含邮箱/IP/UA 等管理字段。
+// MeCommentResponse 本人评论的展示视图，不含邮箱/IP/UA 等管理字段。
 type MeCommentResponse struct {
 	ID             string  `json:"id"`
 	SiteID         string  `json:"site_id"`
@@ -282,65 +282,65 @@ type MeCommentResponse struct {
 	AuthorNickname string  `json:"author_nickname"`
 	AuthorWebsite  *string `json:"author_website"`
 	AvatarURL      string  `json:"avatar_url"`
-	// ReplyToUserID 是被回复作者的 id；根评论为 nil，被回复者注销后也为 nil。
+	// ReplyToUserID 被回复作者的 id；根评论为 nil，被回复者注销后也为 nil。
 	ReplyToUserID *string `json:"reply_to_user_id"`
-	// ReplyToNickname 是被回复作者的当前昵称；缺失或已注销时为 nil。
+	// ReplyToNickname 被回复作者的当前昵称；缺失或已注销时为 nil。
 	ReplyToNickname *string    `json:"reply_to_nickname"`
 	CreatedAt       time.Time  `json:"created_at"`
 	PublishedAt     *time.Time `json:"published_at"`
 	DeletedAt       *time.Time `json:"deleted_at"`
 }
 
-// MeCommentListResponse 是本人评论的一页、匹配总数与当前删除策略。
+// MeCommentListResponse 本人评论的一页、匹配总数与当前删除策略。
 type MeCommentListResponse struct {
 	Comments       []MeCommentResponse `json:"comments"`
 	Total          int64               `json:"total"`
 	UserDeleteMode string              `json:"user_delete_mode"`
 }
 
-// MeCommentDetailResponse 是本人评论详情与当前删除策略。
+// MeCommentDetailResponse 本人评论详情与当前删除策略。
 type MeCommentDetailResponse struct {
 	MeCommentResponse
 	UserDeleteMode string `json:"user_delete_mode"`
 }
 
-// MeCommentSiteResponse 是本人评论的站点选项。
+// MeCommentSiteResponse 本人评论的站点选项。
 type MeCommentSiteResponse struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
 }
 
-// MeCommentSitesResponse 是本人评论站点选项列表。
+// MeCommentSitesResponse 本人评论站点选项列表。
 type MeCommentSitesResponse struct {
 	Sites []MeCommentSiteResponse `json:"sites"`
 }
 
-// CommentDeleteResponse 是删除操作结果。
+// CommentDeleteResponse 删除操作结果。
 type CommentDeleteResponse struct {
 	DeletedRootID string `json:"deleted_root_id"`
 	Hard          bool   `json:"hard"`
 }
 
-// AuthorizationIssueResponse 是一次性授权码响应。
+// AuthorizationIssueResponse 一次性授权码响应。
 type AuthorizationIssueResponse struct {
 	Code      string    `json:"code"`
 	RequestID string    `json:"request_id"`
 	ExpiresAt time.Time `json:"expires_at"`
 }
 
-// AuthorizationContextResponse 是授权页展示所需的只读上下文。
+// AuthorizationContextResponse 授权页展示所需的只读上下文。
 type AuthorizationContextResponse struct {
 	SiteID   string `json:"site_id"`
 	SiteName string `json:"site_name"`
 	Origin   string `json:"origin"`
 }
 
-// WidgetAuthorizationRequiredResponse 是评论创建需要显式授权的受控响应。
+// WidgetAuthorizationRequiredResponse 评论创建需要显式授权的受控响应。
 type WidgetAuthorizationRequiredResponse struct {
 	NeedAuthCode bool `json:"need_auth_code"`
 }
 
-// WidgetSessionResponse 是不敏感的 session 探测结果。
+// WidgetSessionResponse 不敏感的 session 探测结果。
 type WidgetSessionResponse struct {
 	Valid          bool       `json:"valid"`
 	CredentialMode string     `json:"credential_mode,omitempty"`
@@ -350,7 +350,7 @@ type WidgetSessionResponse struct {
 	ExpiresAt      *time.Time `json:"expires_at,omitempty"`
 }
 
-// AdminCommentResponse 是仅管理员可见的视图。
+// AdminCommentResponse 仅管理员可见的视图。
 type AdminCommentResponse struct {
 	ID             string  `json:"id"`
 	SiteID         string  `json:"site_id"`
@@ -366,9 +366,9 @@ type AdminCommentResponse struct {
 	AuthorNickname string  `json:"author_nickname"`
 	AuthorWebsite  *string `json:"author_website"`
 	AvatarURL      string  `json:"avatar_url"`
-	// ReplyToUserID 是被回复作者的 id；根评论为 nil，被回复者注销后也为 nil。
+	// ReplyToUserID 被回复作者的 id；根评论为 nil，被回复者注销后也为 nil。
 	ReplyToUserID *string `json:"reply_to_user_id"`
-	// ReplyToNickname 是被回复作者的当前昵称；缺失或已注销时为 nil。
+	// ReplyToNickname 被回复作者的当前昵称；缺失或已注销时为 nil。
 	ReplyToNickname *string    `json:"reply_to_nickname"`
 	IPMode          string     `json:"ip_mode"`
 	IPValue         *string    `json:"ip_value"`
@@ -382,26 +382,26 @@ type AdminCommentResponse struct {
 	DeletedAt       *time.Time `json:"deleted_at"`
 }
 
-// AdminCommentListResponse 是管理员评论的一页数据与匹配总数。
+// AdminCommentListResponse 管理员评论的一页数据与匹配总数。
 type AdminCommentListResponse struct {
 	Comments []AdminCommentResponse `json:"comments"`
 	Total    int64                  `json:"total"`
 }
 
-// AdminCommentTrendPointResponse 是一个按本地日历日统计的趋势点。
+// AdminCommentTrendPointResponse 一个按本地日历日统计的趋势点。
 type AdminCommentTrendPointResponse struct {
 	Date  string `json:"date"`
 	Count int64  `json:"count"`
 }
 
-// AdminCommentTrendResponse 是管理员概览的评论趋势响应。
+// AdminCommentTrendResponse 管理员概览的评论趋势响应。
 type AdminCommentTrendResponse struct {
 	Days     int                              `json:"days"`
 	Timezone string                           `json:"timezone"`
 	Points   []AdminCommentTrendPointResponse `json:"points"`
 }
 
-// AdminThreadResponse 是管理端线程视图。
+// AdminThreadResponse 管理端线程视图。
 type AdminThreadResponse struct {
 	ID              string    `json:"id"`
 	SiteID          string    `json:"site_id"`
@@ -414,7 +414,7 @@ type AdminThreadResponse struct {
 	UpdatedAt       time.Time `json:"updated_at"`
 }
 
-// AdminThreadListResponse 是管理端线程的一页数据与匹配总数。
+// AdminThreadListResponse 管理端线程的一页数据与匹配总数。
 type AdminThreadListResponse struct {
 	Threads []AdminThreadResponse `json:"threads"`
 	Total   int64                 `json:"total"`
@@ -647,13 +647,13 @@ func toAdminThreadResponse(view comment.AdminThreadView) AdminThreadResponse {
 	}
 }
 
-// OriginResponse 是站点允许来源的响应体，携带稳定 ID 供管理端引用。
+// OriginResponse 站点允许来源的响应体，携带稳定 ID 供管理端引用。
 type OriginResponse struct {
 	ID     string `json:"id"`
 	Origin string `json:"origin"`
 }
 
-// SiteResponse 是站点的 HTTP 响应。
+// SiteResponse 站点的 HTTP 响应。
 type SiteResponse struct {
 	ID           string           `json:"id"`
 	Name         string           `json:"name"`
@@ -664,7 +664,7 @@ type SiteResponse struct {
 	UpdatedAt    time.Time        `json:"updated_at"`
 }
 
-// SiteListResponse 是站点列表响应。
+// SiteListResponse 站点列表响应。
 type SiteListResponse struct {
 	Sites []SiteResponse `json:"sites"`
 }
@@ -692,12 +692,12 @@ func toSiteResponse(s domain.Site) SiteResponse {
 	}
 }
 
-// SettingsResponse 是设置读取或 PATCH 后的响应，只含公开设置项列表。
+// SettingsResponse 设置读取或 PATCH 后的响应，只含公开设置项列表。
 type SettingsResponse struct {
 	Settings []setting.SettingItem `json:"settings"`
 }
 
-// PublicConfigResponse 是匿名读取的站点协议与 Web 主题配置白名单。
+// PublicConfigResponse 匿名读取的站点协议与 Web 主题配置白名单。
 // 该 DTO 刻意不复用 SettingsResponse，避免泄露管理员设置或 provider 配置。
 type PublicConfigResponse struct {
 	UserAgreementURL    string `json:"user_agreement_url"`
@@ -706,14 +706,14 @@ type PublicConfigResponse struct {
 	BrandPrimaryColor   string `json:"brand_primary_color"`
 }
 
-// LegalConsentResetResponse 是管理员主动要求重新同意后的新版本。
+// LegalConsentResetResponse 管理员主动要求重新同意后的新版本。
 type LegalConsentResetResponse struct {
 	LegalConsentVersion int64 `json:"legal_consent_version"`
 }
 
-// ProviderMetadata 是提供商元数据的 HTTP 表示，不含机密。
+// ProviderMetadata 提供商元数据的 HTTP 表示，不含机密。
 // Enabled 仅 OAuth/OIDC 与 Spam 返回；CAPTCHA 提供商省略该字段。
-// PublicConfig 是自由表单的公开字段 map，字段集合与 ProviderUpsertRequest 的
+// PublicConfig 自由表单的公开字段 map，字段集合与 ProviderUpsertRequest 的
 // 公开字段一致（client_id、instance_url、issuer_url、team_id、key_id、endpoint、
 // action、region 等；spam.local 的词库固定为 configs/spam/keywords.txt）；
 // secret 字段永不出现，编辑留空即保留现有 envelope。
@@ -725,12 +725,12 @@ type ProviderMetadata struct {
 	PublicConfig map[string]any `json:"public_config"`
 }
 
-// ProvidersResponse 是提供商列表响应。
+// ProvidersResponse 提供商列表响应。
 type ProvidersResponse struct {
 	Providers []ProviderMetadata `json:"providers"`
 }
 
-// PublicCaptchaConfig 是启用的 CAPTCHA provider 的公共投影。
+// PublicCaptchaConfig 启用的 CAPTCHA provider 的公共投影。
 // APIEndpoint 仅 CAP 返回，且已解析为官方 widget 端点。
 type PublicCaptchaConfig struct {
 	Provider    string `json:"provider"`
@@ -738,7 +738,7 @@ type PublicCaptchaConfig struct {
 	APIEndpoint string `json:"api_endpoint,omitempty"`
 }
 
-// CaptchaConfigResponse 是按 action 查询的公共 CAPTCHA 配置响应。
+// CaptchaConfigResponse 按 action 查询的公共 CAPTCHA 配置响应。
 type CaptchaConfigResponse struct {
 	Required bool                 `json:"required"`
 	Captcha  *PublicCaptchaConfig `json:"captcha,omitempty"`
@@ -755,7 +755,7 @@ func toCaptchaConfigResponse(cfg *setting.PublicCaptchaConfig) CaptchaConfigResp
 	return CaptchaConfigResponse{Required: true, Captcha: &captchaDTO}
 }
 
-// BootstrapStatusResponse 是 bootstrap 状态响应。
+// BootstrapStatusResponse  bootstrap 状态响应。
 type BootstrapStatusResponse struct {
 	Required bool `json:"required"`
 }
