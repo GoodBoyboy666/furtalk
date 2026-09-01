@@ -121,7 +121,11 @@ func (s *Service) AdminCreateUser(ctx context.Context, input AdminCreateUserInpu
 // 角色/状态变化保持最后活跃管理员守卫，提交后同步失效 authz 缓存。
 func (s *Service) AdminUpdateUser(ctx context.Context, targetID int64, input AdminUpdateUserInput) (*Profile, error) {
 	var roleStatusChanged bool
-	err := s.txRunner.RunInTx(ctx, func(ctx context.Context) error {
+	runInTx := s.txRunner.RunInTx
+	if input.Role != nil || input.Status != nil {
+		runInTx = s.runAdminMutation
+	}
+	err := runInTx(ctx, func(ctx context.Context) error {
 		current, err := s.users.FindByID(ctx, targetID)
 		if err != nil {
 			return err
@@ -273,7 +277,7 @@ func (s *Service) AdminDeleteUser(ctx context.Context, actingID, targetID int64,
 	if mode == domain.UserDeleteModeHard && !confirm {
 		return domain.ErrConfirmationRequired
 	}
-	err := s.txRunner.RunInTx(ctx, func(txCtx context.Context) error {
+	err := s.runAdminMutation(ctx, func(txCtx context.Context) error {
 		target, findErr := s.users.FindByID(txCtx, targetID)
 		if findErr != nil {
 			return findErr

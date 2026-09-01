@@ -65,7 +65,12 @@ func (s *Service) AdminBatchUsers(ctx context.Context, input AdminUserBatchInput
 
 	result := &domain.BatchResult{Action: string(input.Action), RequestedCount: len(ids)}
 	changedAuthz := make([]int64, 0, len(ids))
-	err := s.txRunner.RunInTx(ctx, func(txCtx context.Context) error {
+	runInTx := s.txRunner.RunInTx
+	switch input.Action {
+	case AdminUserBatchDisable, AdminUserBatchSoftDelete, AdminUserBatchHardDelete:
+		runInTx = s.runAdminMutation
+	}
+	err := runInTx(ctx, func(txCtx context.Context) error {
 		now := s.now().UTC().Truncate(time.Microsecond)
 		for _, id := range ids {
 			user, findErr := s.users.FindByID(txCtx, id)

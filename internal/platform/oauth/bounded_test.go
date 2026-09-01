@@ -143,6 +143,19 @@ func TestBoundedClientPreservesInjectedTransportAndTimeout(t *testing.T) {
 	}
 }
 
+func TestBoundedClientAppliesSafeFallbackForNonPositiveTimeout(t *testing.T) {
+	for _, timeout := range []time.Duration{0, -time.Second} {
+		base := &http.Client{Timeout: 2 * time.Minute}
+		client := boundedClient(base, timeout)
+		if client.Timeout != defaultOAuthClientTimeout {
+			t.Fatalf("timeout %s produced client timeout %s, want %s", timeout, client.Timeout, defaultOAuthClientTimeout)
+		}
+		if client == base {
+			t.Fatal("bounded client must clone the injected client")
+		}
+	}
+}
+
 func TestOIDCDiscoveryPreservesOversizedResponseCategory(t *testing.T) {
 	body := &trackingBody{reader: bytes.NewReader(bytes.Repeat([]byte{'x'}, int(maxOAuthResponseBytes)+1))}
 	client := boundedClient(&http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {

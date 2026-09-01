@@ -86,7 +86,7 @@ webauthn:
 
 oauth:
   # [推荐] OAuth HTTP 超时。
-  # client_timeout: "10s"
+  # client_timeout: "10s"  # 必须大于 0 且不超过 60s。
 
 # [默认] 后端日志输出格式：json（机器可采集）或 text（终端阅读，缺省值，不告警）。
 logging:

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 
 // adminTestCache 记录缓存删除键，供 authz 失效断言使用。
 type adminTestCache struct {
+	mu      sync.Mutex
 	deleted []string
 	err     error
 }
@@ -30,6 +32,8 @@ func (c *adminTestCache) Set(ctx context.Context, key string, value any, ttl tim
 }
 
 func (c *adminTestCache) Delete(ctx context.Context, key string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if c.err != nil {
 		return c.err
 	}

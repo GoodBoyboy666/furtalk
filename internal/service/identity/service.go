@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"sync"
 	"time"
 
 	"furtalk/internal/domain"
@@ -53,35 +54,37 @@ const (
 
 // Service 实现身份用例，是模块的门面。
 type Service struct {
-	txRunner       TxRunner
-	users          *repository.UserRepo
-	passkeys       *repository.PasskeyRepo
-	identities     *repository.ExternalIdentityRepo
-	prefs          *repository.PreferenceRepo
-	emailCodes     EmailCodeStore
-	passkeyStore   *cache.Namespace
-	oauthState     *cache.Namespace
-	oauthHandoff   *cache.Namespace
-	cache          cache.Store
-	policy         PolicyReader
-	captchaPolicy  CaptchaPolicyReader
-	captcha        CaptchaVerifier
-	providers      OAuthProviderReader
-	signer         TokenSigner
-	mailer         mailer.Mailer
-	templates      mailer.TemplateRenderer
-	log            *slog.Logger
-	now            func() time.Time
-	codeTTL        time.Duration
-	maxAttempts    int
-	passkeyAdapter PasskeyAdapter
-	oauth          OAuthProviderFactory
-	baseURL        string
-	failFast       func(error)
-	commentDeleter domain.CommentDeleter
-	authzLocks     authzLockRegistry
-	admission      PasswordLoginAdmission
-	passwordBudget *argon2Budget
+	txRunner        TxRunner
+	users           *repository.UserRepo
+	passkeys        *repository.PasskeyRepo
+	identities      *repository.ExternalIdentityRepo
+	prefs           *repository.PreferenceRepo
+	emailCodes      EmailCodeStore
+	passkeyStore    *cache.Namespace
+	oauthState      *cache.Namespace
+	oauthHandoff    *cache.Namespace
+	cache           cache.Store
+	policy          PolicyReader
+	captchaPolicy   CaptchaPolicyReader
+	captcha         CaptchaVerifier
+	providers       OAuthProviderReader
+	signer          TokenSigner
+	mailer          mailer.Mailer
+	templates       mailer.TemplateRenderer
+	log             *slog.Logger
+	now             func() time.Time
+	codeTTL         time.Duration
+	maxAttempts     int
+	passkeyAdapter  PasskeyAdapter
+	oauth           OAuthProviderFactory
+	baseURL         string
+	failFast        func(error)
+	commentDeleter  domain.CommentDeleter
+	authzLocks      authzLockRegistry
+	adminMutation   sync.Mutex
+	credentialLocks userLockRegistry
+	admission       PasswordLoginAdmission
+	passwordBudget  *argon2Budget
 }
 
 // Dependencies 是 identity 模块构建函数的装配输入。
@@ -150,6 +153,19 @@ func NewService(deps Dependencies) *Service {
 		admission:      deps.Admission,
 		passwordBudget: newArgon2Budget(publicPasswordLoginConcurrency),
 	}
+}
+
+// runAdminMutation 在进程内串行化管理员变更，并在事务内锁定活跃管理员集合。
+// 管理员互斥锁覆盖事务提交或回滚，避免提交前释放造成新的检查竞态。
+func (s *Service) runAdminMutation(ctx context.Context, fn func(context.Context) error) error {
+	s.adminMutation.Lock()
+	defer s.adminMutation.Unlock()
+	return s.txRunner.RunInTx(ctx, func(txCtx context.Context) error {
+		if _, err := s.users.LockActiveAdmins(txCtx); err != nil {
+			return err
+		}
+		return fn(txCtx)
+	})
 }
 
 // SetCommentDeleter 安装评论清理写接口。

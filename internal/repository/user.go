@@ -62,18 +62,13 @@ func (r *UserRepo) FindByEmailNormalized(ctx context.Context, normalized string)
 
 // FindByID 按主键返回一个用户。
 func (r *UserRepo) FindByID(ctx context.Context, id int64) (*domain.User, error) {
-	var row model.User
-	err := gormtx.DB(ctx, r.db).
-		Where("id = ?", id).
-		First(&row).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, domain.ErrNotFound
-	}
-	if err != nil {
-		return nil, fmt.Errorf("find user by id: %w", err)
-	}
-	user := row.ToUser()
-	return &user, nil
+	return r.findByID(ctx, id, false)
+}
+
+// FindByIDLocked 在写事务内按主键读取用户，并在支持的方言上锁定用户行。
+// SQLite 不支持 FOR UPDATE，沿用事务的单写者与忙等待语义。
+func (r *UserRepo) FindByIDLocked(ctx context.Context, id int64) (*domain.User, error) {
+	return r.findByID(ctx, id, true)
 }
 
 // List 按 id 顺序返回用户，可用匹配规范化邮箱或昵称的搜索词收窄结果。
@@ -182,6 +177,23 @@ func (r *UserRepo) CountByRoleAndStatus(ctx context.Context, role domain.Role, s
 		return 0, fmt.Errorf("count users by role and status: %w", err)
 	}
 	return count, nil
+}
+
+// LockActiveAdmins 在写事务内按稳定 id 顺序锁定全部活跃管理员并返回行数。
+// PostgreSQL 使用 FOR UPDATE；SQLite 不支持该子句，沿用事务的写者锁语义。
+func (r *UserRepo) LockActiveAdmins(ctx context.Context) (int64, error) {
+	db := gormtx.DB(ctx, r.db).Model(&model.User{}).Select("id")
+	if db.Dialector.Name() != "sqlite" {
+		db = db.Clauses(clause.Locking{Strength: "UPDATE"})
+	}
+	var rows []struct {
+		ID int64
+	}
+	if err := db.Where("role = ? AND status = ?", domain.RoleAdmin, domain.UserStatusActive).
+		Order("id").Find(&rows).Error; err != nil {
+		return 0, fmt.Errorf("lock active administrators: %w", err)
+	}
+	return int64(len(rows)), nil
 }
 
 // Count 按与 List 相同的搜索词统计匹配用户总数，与分页 limit 无关。
@@ -422,6 +434,26 @@ func (r *UserRepo) HasPassword(ctx context.Context, userID int64) (bool, error) 
 		return false, fmt.Errorf("find user for password state: %w", err)
 	}
 	return row.PasswordHash != nil, nil
+}
+
+// findByID 按主键读取用户，可选地在 PostgreSQL 上锁定目标行。
+func (r *UserRepo) findByID(ctx context.Context, id int64, locked bool) (*domain.User, error) {
+	db := gormtx.DB(ctx, r.db)
+	if locked && db.Dialector.Name() != "sqlite" {
+		db = db.Clauses(clause.Locking{Strength: "UPDATE"})
+	}
+	var row model.User
+	err := db.
+		Where("id = ?", id).
+		First(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, domain.ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("find user by id: %w", err)
+	}
+	user := row.ToUser()
+	return &user, nil
 }
 
 // fromUser 把业务用户转为持久化行。

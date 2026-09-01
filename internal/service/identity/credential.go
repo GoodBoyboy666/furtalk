@@ -65,7 +65,12 @@ func (s *Service) ListIdentities(ctx context.Context, userID int64) ([]Identity,
 
 // DeletePasskey 移除 passkey 凭证；若它是用户最后的登录方式则拒绝。
 func (s *Service) DeletePasskey(ctx context.Context, userID, passkeyID int64) error {
+	unlock := s.credentialLocks.lock(userID)
+	defer unlock()
 	return s.txRunner.RunInTx(ctx, func(ctx context.Context) error {
+		if _, err := s.users.FindByIDLocked(ctx, userID); err != nil {
+			return err
+		}
 		row, err := s.passkeys.GetByUserIDAndID(ctx, userID, passkeyID)
 		if err != nil {
 			return err
@@ -99,7 +104,12 @@ func (s *Service) RenamePasskey(ctx context.Context, userID, passkeyID int64, na
 
 // DeleteExternalIdentity 解除外部身份绑定；若它是用户最后的登录方式则拒绝。
 func (s *Service) DeleteExternalIdentity(ctx context.Context, userID, identityID int64) error {
+	unlock := s.credentialLocks.lock(userID)
+	defer unlock()
 	return s.txRunner.RunInTx(ctx, func(ctx context.Context) error {
+		if _, err := s.users.FindByIDLocked(ctx, userID); err != nil {
+			return err
+		}
 		row, err := s.identities.GetByUserIDAndID(ctx, userID, identityID)
 		if err != nil {
 			return err

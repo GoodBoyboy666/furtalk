@@ -85,6 +85,36 @@ func TestValidateRejectsNonPositiveHTTPServerLimits(t *testing.T) {
 	}
 }
 
+func TestValidateOAuthClientTimeoutBounds(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		value time.Duration
+		want  bool
+	}{
+		{name: "zero", value: 0, want: false},
+		{name: "negative", value: -time.Second, want: false},
+		{name: "default", value: defaultOAuthTimeout, want: true},
+		{name: "maximum", value: maxOAuthClientTimeout, want: true},
+		{name: "over maximum", value: maxOAuthClientTimeout + time.Nanosecond, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := validTestConfig("https://furtalk.example.com")
+			cfg.OAuth.ClientTimeout = tt.value
+			err := cfg.Validate()
+			if tt.want && err != nil {
+				t.Fatalf("Validate() returned %v for %s", err, tt.name)
+			}
+			if !tt.want && err == nil {
+				t.Fatalf("Validate() accepted %s timeout %s", tt.name, tt.value)
+			}
+		})
+	}
+}
+
 func validTestConfig(baseURL string) Config {
 	return Config{
 		HTTP: HTTPConfig{
@@ -114,6 +144,7 @@ func validTestConfig(baseURL string) Config {
 			RPOrigins: []string{"https://furtalk.example.com"},
 			RPName:    "Furtalk",
 		},
+		OAuth: OAuthConfig{ClientTimeout: defaultOAuthTimeout},
 	}
 }
 

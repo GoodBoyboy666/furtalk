@@ -177,6 +177,7 @@ const (
 	defaultJWTLifetime       = 7 * 24 * time.Hour
 	defaultWidgetLifetime    = 24 * time.Hour
 	defaultOAuthTimeout      = 10 * time.Second
+	maxOAuthClientTimeout    = 60 * time.Second
 	defaultSMTPPort          = 587
 	defaultSMTPTimeout       = 30 * time.Second
 	defaultLoggingFormat     = "text"
@@ -392,6 +393,12 @@ func (c Config) Validate() error {
 	}
 	if c.Tokens.WidgetJWTLifetime <= 0 {
 		return errors.New("widget JWT lifetime must be positive")
+	}
+	if c.OAuth.ClientTimeout <= 0 {
+		return errors.New("oauth client timeout must be positive")
+	}
+	if c.OAuth.ClientTimeout > maxOAuthClientTimeout {
+		return errors.New("oauth client timeout must not exceed 60s")
 	}
 	if c.HTTP.BodyLimit <= 0 {
 		return errors.New("body limit must be positive")

@@ -13,6 +13,9 @@ import (
 // 它与现有 CAPTCHA、Spam 预算及 x/oauth2 token 响应上限保持一致。
 const maxOAuthResponseBytes int64 = 1 << 20
 
+// defaultOAuthClientTimeout 是平台层直接构造 OAuth client 时的安全兜底。
+const defaultOAuthClientTimeout = 10 * time.Second
+
 // ErrResponseTooLarge 表示 OAuth/OIDC provider 响应超过 maxOAuthResponseBytes。
 // sentinel 不携带 endpoint 或 body，调用方可分类错误而不会泄露 provider 细节。
 var ErrResponseTooLarge = errors.New("oauth: provider response too large")
@@ -79,9 +82,10 @@ func boundedClient(base *http.Client, timeout time.Duration) *http.Client {
 		base = http.DefaultClient
 	}
 	client := *base
-	if timeout > 0 {
-		client.Timeout = timeout
+	if timeout <= 0 {
+		timeout = defaultOAuthClientTimeout
 	}
+	client.Timeout = timeout
 	transport := client.Transport
 	if transport == nil {
 		transport = http.DefaultTransport

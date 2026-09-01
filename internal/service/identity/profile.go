@@ -140,46 +140,7 @@ func (s *Service) Create(ctx context.Context, email, nickname string, role domai
 
 // UpdateRoleStatus 修改用户的角色或状态，保护最后一名活跃管理员，并在提交后同步失效 authz 缓存。
 func (s *Service) UpdateRoleStatus(ctx context.Context, targetID int64, role *domain.Role, status *domain.UserStatus) (*Profile, error) {
-	current, err := s.users.FindByID(ctx, targetID)
-	if err != nil {
-		return nil, err
-	}
-	nextRole := current.Role
-	nextStatus := current.Status
-	if role != nil {
-		if *role != domain.RoleUser && *role != domain.RoleAdmin {
-			return nil, fmt.Errorf("%w: role must be user or admin", domain.ErrValidation)
-		}
-		nextRole = *role
-	}
-	if status != nil {
-		if *status != domain.UserStatusActive && *status != domain.UserStatusDisabled {
-			return nil, fmt.Errorf("%w: status must be active or disabled", domain.ErrValidation)
-		}
-		nextStatus = *status
-	}
-
-	if current.Role == domain.RoleAdmin && current.Status == domain.UserStatusActive &&
-		(nextRole != domain.RoleAdmin || nextStatus != domain.UserStatusActive) {
-		count, err := s.users.CountByRoleAndStatus(ctx, domain.RoleAdmin, domain.UserStatusActive)
-		if err != nil {
-			return nil, err
-		}
-		if count <= 1 {
-			return nil, domain.ErrLastAdmin
-		}
-	}
-
-	if nextRole == current.Role && nextStatus == current.Status {
-		return s.getWithPrefs(ctx, targetID)
-	}
-	if err := s.users.UpdateRoleStatus(ctx, targetID, nextRole, nextStatus); err != nil {
-		return nil, err
-	}
-	if err := s.invalidateAuthz(ctx, targetID); err != nil {
-		return nil, err
-	}
-	return s.getWithPrefs(ctx, targetID)
+	return s.AdminUpdateUser(ctx, targetID, AdminUpdateUserInput{Role: role, Status: status})
 }
 
 func (s *Service) getWithPrefs(ctx context.Context, userID int64) (*Profile, error) {
