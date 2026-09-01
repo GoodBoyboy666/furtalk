@@ -50,24 +50,6 @@ func (r *ThreadRepo) ResolveOrCreate(ctx context.Context, siteID int64, pageKey 
 	return &thread, nil
 }
 
-// ResolveOrCreateLazy 返回 (site_id, page_key) 对应的 thread，不存在时插入，
-// 冲突时什么都不做（不更新元数据与时间戳），供只读的惰性发现使用。
-func (r *ThreadRepo) ResolveOrCreateLazy(ctx context.Context, siteID int64, pageKey string) (*domain.Thread, error) {
-	row := &model.Thread{SiteID: siteID, PageKey: pageKey}
-	err := gormtx.DB(ctx, r.db).Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "site_id"}, {Name: "page_key"}},
-		DoNothing: true,
-	}).Create(row).Error
-	if err != nil {
-		return nil, fmt.Errorf("lazy resolve thread: %w", err)
-	}
-	if row.ID == 0 {
-		return r.GetBySiteAndKey(ctx, siteID, pageKey)
-	}
-	thread := row.ToThread()
-	return &thread, nil
-}
-
 // GetBySiteAndKey 返回 (site_id, page_key) 对应的 thread。
 func (r *ThreadRepo) GetBySiteAndKey(ctx context.Context, siteID int64, pageKey string) (*domain.Thread, error) {
 	var row model.Thread

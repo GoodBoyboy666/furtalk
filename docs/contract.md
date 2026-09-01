@@ -216,8 +216,8 @@
 
 - Thread 由 `(site_id, page_key)` 唯一标识；`page_key` 是评论读取/创建的必填参数，
   空值或超过 512 字符返回 422 `invalid_input`。
-- 公开读取缺失页面时惰性创建默认开启（`comments_enabled=true`）的唯一 Thread；
-  重复读取复用该记录，无任何写入。
+- 公开读取严格只读：缺失页面返回默认开启（`comments_enabled=true`）的合成空 Thread
+  （`id="0"`），重复读取不写入 `threads`；首次评论创建时才在事务内持久化唯一 Thread。
 - `GET /widget/sites/{site_id}/comments` 响应的 `thread` 对象携带
   `comments_enabled`；公开 Widget 路由只输出该字段。
 - Thread 关闭后，公开读取仍返回历史评论；创建入口（Widget 根评论、Widget 回复、
@@ -270,7 +270,7 @@
 线程管理响应项包含十进制字符串 ID、站点名、页面标识、可空 URL/标题、
 `comments_enabled` 与发现/更新时间。管理员可编辑 `page_key` 与 `page_title`
 （修改不会改变线程 ID，也不会移动评论；修改 `page_key` 后，原值与线程的关联解除，
-外部 Widget 以原值访问时按惰性解析语义可能创建新的空线程），也可以切换
+外部 Widget 以原值访问时返回非持久化的 ID=0 空视图），也可以切换
 评论开关。删除线程是破坏性操作：需 `confirm=true` 显式确认，硬删除线程及其
 下全部评论；历史评论的正文归属无法修改。
 

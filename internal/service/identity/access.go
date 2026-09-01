@@ -24,6 +24,9 @@ func authzKey(userID int64) string {
 
 // Resolve 返回用户 id 的当前主体，优先从 authz 缓存读取。
 func (s *Service) Resolve(ctx context.Context, userID int64) (domain.Principal, error) {
+	unlock := s.authzLocks.lock(userID)
+	defer unlock()
+
 	var info domain.AuthzInfo
 	key := authzKey(userID)
 	err := s.cache.GetOrLoad(ctx, key, &info, authzCacheTTL, func() (any, error) {

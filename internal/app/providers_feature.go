@@ -7,7 +7,6 @@ import (
 	"furtalk/internal/domain"
 	"furtalk/internal/platform/cache"
 	"furtalk/internal/platform/eventbus"
-	"furtalk/internal/platform/logging"
 	"furtalk/internal/platform/mailer"
 	"furtalk/internal/platform/notifier"
 	"furtalk/internal/platform/passkey"
@@ -68,7 +67,7 @@ func newServices(
 	store cache.Store,
 	bus *eventbus.Bus[domain.CommentEvent],
 	logger *slog.Logger,
-	readiness *readinessState,
+	fatal *fatalCoordinator,
 	smtp smtpDelivery,
 	templates mailer.TemplateRenderer,
 	signer *identity.Signer,
@@ -84,11 +83,6 @@ func newServices(
 	captchaConfigService := setting.NewCaptchaConfigService(settingsService, providerService)
 	sitesService := site.NewService(repos.sites)
 	smtpService := setting.NewSMTPProbe(smtpConfig)
-
-	failFast := func(err error) {
-		readiness.MarkNotReady()
-		logger.Error("fail-fast: authorization cache invalidation failed", logging.Error(err))
-	}
 
 	captchaGateway := comment.NewCaptchaGateway(captchaGatewayReader{svc: providerService})
 
@@ -109,7 +103,7 @@ func newServices(
 		PasskeyAdapter: passkeyAdapter,
 		OAuthFactory:   oauthFactory,
 		BaseURL:        cfg.PublicBaseURL,
-		FailFast:       failFast,
+		FailFast:       fatal.Fatal,
 		Logger:         logger,
 	})
 

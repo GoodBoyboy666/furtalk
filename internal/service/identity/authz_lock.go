@@ -1,0 +1,43 @@
+package identity
+
+import "sync"
+
+// authzLockRegistry 按用户串行化授权缓存操作，零值可直接使用；不同用户
+// 使用不同的锁，不会被全局互相阻塞。
+type authzLockRegistry struct {
+	mu      sync.Mutex
+	entries map[int64]*authzLockEntry
+}
+
+type authzLockEntry struct {
+	mu   sync.Mutex
+	refs int
+}
+
+// lock 获取用户级锁并返回释放函数。refs 同时计数持有者与等待者，避免同一
+// 用户仍有排队操作时提前删除锁条目。
+func (r *authzLockRegistry) lock(userID int64) func() {
+	r.mu.Lock()
+	if r.entries == nil {
+		r.entries = make(map[int64]*authzLockEntry)
+	}
+	entry := r.entries[userID]
+	if entry == nil {
+		entry = &authzLockEntry{}
+		r.entries[userID] = entry
+	}
+	entry.refs++
+	r.mu.Unlock()
+
+	entry.mu.Lock()
+	return func() {
+		entry.mu.Unlock()
+
+		r.mu.Lock()
+		entry.refs--
+		if entry.refs == 0 {
+			delete(r.entries, userID)
+		}
+		r.mu.Unlock()
+	}
+}

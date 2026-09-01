@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"furtalk/internal/domain"
-	"furtalk/internal/platform/logging"
 	"furtalk/internal/platform/value"
 )
 
@@ -177,10 +176,8 @@ func (s *Service) UpdateRoleStatus(ctx context.Context, targetID int64, role *do
 	if err := s.users.UpdateRoleStatus(ctx, targetID, nextRole, nextStatus); err != nil {
 		return nil, err
 	}
-	if err := s.cache.Delete(ctx, authzKey(targetID)); err != nil {
-		logging.FromContext(ctx, s.log).ErrorContext(ctx, "authz cache invalidation failed", logging.ID("user_id", targetID), logging.Error(err))
-		s.failFast(err)
-		return nil, domain.ErrCacheInvalidation
+	if err := s.invalidateAuthz(ctx, targetID); err != nil {
+		return nil, err
 	}
 	return s.getWithPrefs(ctx, targetID)
 }

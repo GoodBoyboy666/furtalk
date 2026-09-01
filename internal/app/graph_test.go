@@ -72,6 +72,7 @@ func TestFeatureProviderOutputsReachServices(t *testing.T) {
 		reflect.TypeOf((identity.OAuthProviderFactory)(nil)): false,
 		reflect.TypeOf((*comment.WidgetSigner)(nil)):         false,
 		reflect.TypeOf((*comment.WidgetJWTVerifier)(nil)):    false,
+		reflect.TypeOf((*fatalCoordinator)(nil)):             false,
 	}
 
 	constructor := reflect.TypeOf(newServices)

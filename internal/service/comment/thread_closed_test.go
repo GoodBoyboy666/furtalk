@@ -249,53 +249,79 @@ func TestCreateReplyFirstPartyAdminDoesNotBypassClosed(t *testing.T) {
 	}
 }
 
-// TestListPublicLazilyCreatesOpenThread 证明首次读取缺失页面时惰性创建默认开启的
-// 唯一线程；重复读取复用同一记录且不刷新 updated_at。
-func TestListPublicLazilyCreatesOpenThread(t *testing.T) {
+// TestListPublicMissingThreadIsReadOnlyUntilCommentCreate 证明公开读取缺失页面时
+// 返回合成空线程且零写入；首次评论创建才持久化真实线程，后续读取返回该线程与评论。
+func TestListPublicMissingThreadIsReadOnlyUntilCommentCreate(t *testing.T) {
 	db := newReplyTestDB(t)
+	ctx := context.Background()
 	site := &domain.Site{Name: "Site", CanonicalURL: "https://example.com", Status: domain.SiteStatusActive}
-	if err := repository.NewSiteRepo(db).Create(context.Background(), site); err != nil {
+	siteRepo := repository.NewSiteRepo(db)
+	if err := siteRepo.Create(ctx, site); err != nil {
 		t.Fatalf("create site: %v", err)
+	}
+	if _, err := siteRepo.AddOrigin(ctx, site.ID, "https://widget.example.com"); err != nil {
+		t.Fatalf("add origin: %v", err)
+	}
+	user := &domain.User{
+		Email:           "missing-page@example.com",
+		EmailNormalized: "missing-page@example.com",
+		Nickname:        "reader",
+		Role:            domain.RoleUser,
+		Status:          domain.UserStatusActive,
+	}
+	if err := repository.NewUserRepo(db).Create(ctx, user); err != nil {
+		t.Fatalf("create user: %v", err)
 	}
 	runner := &recordingTxRunner{inner: gormtx.NewRunner(db)}
 	bus := &recordingEventBus{}
 	svc := newWidgetService(db, runner, bus, &replyCaptchaVerifier{})
-
-	first, err := svc.ListPublic(context.Background(), site.ID, "missing-page", "", "", 50, nil)
-	if err != nil {
-		t.Fatalf("first read: %v", err)
-	}
-	if first.ID == 0 {
-		t.Fatal("thread id = 0, want a persisted row")
-	}
-	if !first.CommentsEnabled {
-		t.Fatal("comments_enabled = false, want default true for new thread")
-	}
-	if len(first.Comments) != 0 {
-		t.Fatalf("comments = %d, want 0", len(first.Comments))
-	}
-
 	threadRepo := repository.NewThreadRepo(db)
-	got, err := threadRepo.GetBySiteAndKey(context.Background(), site.ID, "missing-page")
-	if err != nil {
-		t.Fatalf("get thread: %v", err)
-	}
-	before := got.UpdatedAt
 
-	time.Sleep(20 * time.Millisecond)
-	second, err := svc.ListPublic(context.Background(), site.ID, "missing-page", "", "", 50, nil)
+	for i := 0; i < 2; i++ {
+		view, err := svc.ListPublic(ctx, site.ID, "missing-page", "", "", 50, nil)
+		if err != nil {
+			t.Fatalf("read %d: %v", i+1, err)
+		}
+		if view.ID != 0 || !view.CommentsEnabled || len(view.Comments) != 0 || view.NextCursor != nil {
+			t.Fatalf("synthetic view = %+v, want ID=0 enabled empty with no cursor", view)
+		}
+		if _, err := threadRepo.GetBySiteAndKey(ctx, site.ID, "missing-page"); !errors.Is(err, domain.ErrNotFound) {
+			t.Fatalf("read %d persisted a thread: %v", i+1, err)
+		}
+	}
+
+	created, err := svc.Create(ctx, CreateInput{
+		SiteID:       site.ID,
+		PageKey:      "missing-page",
+		Origin:       "https://widget.example.com",
+		Email:        user.Email,
+		Nickname:     user.Nickname,
+		BodyMarkdown: "first comment",
+	})
 	if err != nil {
-		t.Fatalf("second read: %v", err)
+		t.Fatalf("create comment: %v", err)
 	}
-	if second.ID != first.ID {
-		t.Fatalf("thread id changed: first=%d second=%d", first.ID, second.ID)
-	}
-	got2, err := threadRepo.GetBySiteAndKey(context.Background(), site.ID, "missing-page")
+	thread, err := threadRepo.GetBySiteAndKey(ctx, site.ID, "missing-page")
 	if err != nil {
-		t.Fatalf("get thread after second read: %v", err)
+		t.Fatalf("get persisted thread: %v", err)
 	}
-	if !got2.UpdatedAt.Equal(before) {
-		t.Fatalf("updated_at changed on lazy read: before=%v after=%v", before, got2.UpdatedAt)
+	if thread.ID <= 0 || created.ThreadID != thread.ID {
+		t.Fatalf("created thread/comment ids = %d/%d, want matching positive ids", thread.ID, created.ThreadID)
+	}
+	var count int64
+	if err := db.Table("threads").Where("site_id = ? AND page_key = ?", site.ID, "missing-page").Count(&count).Error; err != nil {
+		t.Fatalf("count persisted threads: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("persisted thread count = %d, want 1", count)
+	}
+
+	view, err := svc.ListPublic(ctx, site.ID, "missing-page", "", "", 50, nil)
+	if err != nil {
+		t.Fatalf("read persisted thread: %v", err)
+	}
+	if view.ID != thread.ID || len(view.Comments) != 1 || view.Comments[0].ID != created.ID {
+		t.Fatalf("persisted view = %+v, want thread %d and comment %d", view, thread.ID, created.ID)
 	}
 }
 

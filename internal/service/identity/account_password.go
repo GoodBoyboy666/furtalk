@@ -67,6 +67,9 @@ func (s *Service) ChangePassword(ctx context.Context, userID int64, currentPassw
 // invalidateAuthz 删除用户 authz 缓存，失败按 fail-fast 契约处理。
 // 密码/会话代次变更提交后必须调用，旧缓存不能继续接受已失效的 JWT。
 func (s *Service) invalidateAuthz(ctx context.Context, userID int64) error {
+	unlock := s.authzLocks.lock(userID)
+	defer unlock()
+
 	if err := s.cache.Delete(ctx, authzKey(userID)); err != nil {
 		logging.FromContext(ctx, s.log).ErrorContext(ctx, "authz cache invalidation failed", logging.ID("user_id", userID), logging.Error(err))
 		s.failFast(err)

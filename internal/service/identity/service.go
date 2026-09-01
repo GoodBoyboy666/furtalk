@@ -66,6 +66,7 @@ type Service struct {
 	baseURL        string
 	failFast       func(error)
 	commentDeleter domain.CommentDeleter
+	authzLocks     authzLockRegistry
 }
 
 // Dependencies 是 identity 模块构建函数的装配输入。

@@ -14,7 +14,7 @@ import (
 // 缺省排序使用实例策略的 comment_sort；显式 sort 只影响本次浏览，不写设置。
 // hot 使用 (like_count, created_at, id) 降序；其游标带版本标记，只能用于 hot。
 // viewerID 非空时各评论携带该查看者是否点赞的观众状态，否则恒为 false。
-// 缺失的页面会惰性创建默认开启的唯一线程，使重复读取复用同一记录且不产生无意义的时间戳写入。
+// 缺失的页面返回 ID=0、默认开启的合成空线程；公开读取不创建持久化记录。
 func (s *Service) ListPublic(ctx context.Context, siteID int64, pageKey, cursorRaw, sortRaw string, limit int, viewerID *int64) (*ThreadView, error) {
 	if err := s.validateSiteActive(ctx, siteID); err != nil {
 		return nil, err
@@ -35,7 +35,16 @@ func (s *Service) ListPublic(ctx context.Context, siteID int64, pageKey, cursorR
 	if err != nil {
 		return nil, err
 	}
-	thread, err := s.threads.ResolveOrCreateLazy(ctx, siteID, pageKey)
+	thread, err := s.threads.GetBySiteAndKey(ctx, siteID, pageKey)
+	if errors.Is(err, domain.ErrNotFound) {
+		return &ThreadView{
+			ID:              0,
+			SiteID:          siteID,
+			PageKey:         pageKey,
+			CommentsEnabled: true,
+			Comments:        []CommentView{},
+		}, nil
+	}
 	if err != nil {
 		return nil, err
 	}
