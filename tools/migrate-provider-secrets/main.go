@@ -124,14 +124,14 @@ func parseFlags(args []string) (config, error) {
 	set := flag.NewFlagSet("migrate-provider-secrets", flag.ContinueOnError)
 	set.SetOutput(io.Discard)
 	set.BoolVar(&cfg.execute, "execute", false, "commit the conversion; default is a complete dry-run")
-	set.StringVar(&cfg.databaseDialect, "target-dialect", env("FURTALK_DATABASE_DIALECT"), "target database dialect: sqlite or postgres")
-	set.StringVar(&cfg.databasePath, "target-path", env("FURTALK_DATABASE_PATH"), "target SQLite database path")
-	set.StringVar(&cfg.databaseHost, "target-host", env("FURTALK_DATABASE_HOST"), "target PostgreSQL host")
+	set.StringVar(&cfg.databaseDialect, "target-dialect", trimmedEnv("FURTALK_DATABASE_DIALECT"), "target database dialect: sqlite or postgres")
+	set.StringVar(&cfg.databasePath, "target-path", trimmedEnv("FURTALK_DATABASE_PATH"), "target SQLite database path")
+	set.StringVar(&cfg.databaseHost, "target-host", trimmedEnv("FURTALK_DATABASE_HOST"), "target PostgreSQL host")
 	set.IntVar(&cfg.databasePort, "target-port", envInt("FURTALK_DATABASE_PORT"), "target PostgreSQL port")
-	set.StringVar(&cfg.databaseName, "target-name", env("FURTALK_DATABASE_NAME"), "target PostgreSQL database name")
-	set.StringVar(&cfg.databaseUser, "target-user", env("FURTALK_DATABASE_USER"), "target PostgreSQL user")
-	set.StringVar(&cfg.databasePass, "target-password", env("FURTALK_DATABASE_PASSWORD"), "target PostgreSQL password")
-	set.StringVar(&cfg.databaseSSLMode, "target-ssl-mode", env("FURTALK_DATABASE_SSL_MODE"), "target PostgreSQL SSL mode")
+	set.StringVar(&cfg.databaseName, "target-name", trimmedEnv("FURTALK_DATABASE_NAME"), "target PostgreSQL database name")
+	set.StringVar(&cfg.databaseUser, "target-user", trimmedEnv("FURTALK_DATABASE_USER"), "target PostgreSQL user")
+	set.StringVar(&cfg.databasePass, "target-password", rawEnv("FURTALK_DATABASE_PASSWORD"), "target PostgreSQL password")
+	set.StringVar(&cfg.databaseSSLMode, "target-ssl-mode", trimmedEnv("FURTALK_DATABASE_SSL_MODE"), "target PostgreSQL SSL mode")
 	set.Usage = func() {
 		fmt.Fprintln(set.Output(), "usage: migrate-provider-secrets [options]")
 		fmt.Fprintln(set.Output(), "provider keys are read only from FURTALK_TOKENS_SECRET_KEY and FURTALK_TOKENS_LEGACY_SECRET_KEY.")
@@ -168,12 +168,14 @@ func parseFlags(args []string) (config, error) {
 		}
 	}
 
-	newRaw := []byte(env("FURTALK_TOKENS_SECRET_KEY"))
-	if len(newRaw) < 32 {
+	newRawValue := rawEnv("FURTALK_TOKENS_SECRET_KEY")
+	newRaw := []byte(newRawValue)
+	if strings.TrimSpace(newRawValue) == "" || len(newRaw) < 32 {
 		return cfg, errors.New("FURTALK_TOKENS_SECRET_KEY must contain at least 32 bytes")
 	}
-	legacyRaw := []byte(env("FURTALK_TOKENS_LEGACY_SECRET_KEY"))
-	if len(legacyRaw) == 0 {
+	legacyRawValue := rawEnv("FURTALK_TOKENS_LEGACY_SECRET_KEY")
+	legacyRaw := []byte(legacyRawValue)
+	if strings.TrimSpace(legacyRawValue) == "" {
 		if len(newRaw) != 32 {
 			return cfg, errors.New("FURTALK_TOKENS_LEGACY_SECRET_KEY is required unless the new key is exactly 32 bytes")
 		}
@@ -355,10 +357,12 @@ func printReport(w io.Writer, report Report) error {
 	return nil
 }
 
-func env(key string) string { return strings.TrimSpace(os.Getenv(key)) }
+func rawEnv(key string) string { return os.Getenv(key) }
+
+func trimmedEnv(key string) string { return strings.TrimSpace(rawEnv(key)) }
 
 func envInt(key string) int {
-	value := env(key)
+	value := trimmedEnv(key)
 	if value == "" {
 		return 0
 	}

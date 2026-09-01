@@ -29,6 +29,12 @@ The new key must contain at least 32 bytes. The legacy key must contain
 exactly 32 bytes. If the legacy variable is omitted, the new key is reused
 only when it is exactly 32 bytes.
 
+Both key values are consumed verbatim as raw UTF-8 bytes, matching the
+application configuration contract. Leading and trailing whitespace is part of
+the key and is never trimmed; keep variable expansions quoted when invoking the
+tool. PostgreSQL passwords are likewise passed to the database connector
+without trimming.
+
 Database variables are:
 
 ```text
