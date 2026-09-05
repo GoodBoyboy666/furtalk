@@ -13,7 +13,8 @@ import (
 func TestNamespaceRedisSharedAtomicLimitAndRelease(t *testing.T) {
 	mr := miniredis.RunT(t)
 	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
-	store := NewRedis(client)
+	store := NewRedisWithClient(client)
+	t.Cleanup(func() { _ = store.Close() })
 	first := NewNamespace(store, "oauth", "oauth-state:", 1)
 	second := NewNamespace(store, "oauth", "oauth-state:", 1)
 	ctx := context.Background()
@@ -38,7 +39,8 @@ func TestNamespaceRedisSharedAtomicLimitAndRelease(t *testing.T) {
 
 func TestNamespaceRedisConsumeReleasesQuota(t *testing.T) {
 	mr := miniredis.RunT(t)
-	store := NewRedis(redis.NewClient(&redis.Options{Addr: mr.Addr()}))
+	store := NewRedisWithClient(redis.NewClient(&redis.Options{Addr: mr.Addr()}))
+	t.Cleanup(func() { _ = store.Close() })
 	ns := NewNamespace(store, "handoff", "oauth-handoff:", 1)
 	ctx := context.Background()
 	if err := ns.Set(ctx, "token", "payload", time.Minute); err != nil {

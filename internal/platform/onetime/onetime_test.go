@@ -59,7 +59,7 @@ func TestStoreCorruptRecordIsInvalidAndRemoved(t *testing.T) {
 func TestStoreMalformedRawRedisRecordIsInvalidAndRemoved(t *testing.T) {
 	mr := miniredis.RunT(t)
 	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
-	backend := cache.NewRedis(client)
+	backend := cache.NewRedisWithClient(client)
 	t.Cleanup(func() { _ = backend.Close() })
 	ctx := context.Background()
 	if err := client.Set(ctx, "corrupt", []byte("{not-json"), time.Minute).Err(); err != nil {
@@ -87,7 +87,7 @@ func TestStoreRequiresAtomicBackend(t *testing.T) {
 
 func TestStoreRedisContract(t *testing.T) {
 	mr := miniredis.RunT(t)
-	backend := cache.NewRedis(redis.NewClient(&redis.Options{Addr: mr.Addr()}))
+	backend := cache.NewRedisWithClient(redis.NewClient(&redis.Options{Addr: mr.Addr()}))
 	t.Cleanup(func() { _ = backend.Close() })
 	runStoreContract(t, backend)
 	ctx := context.Background()

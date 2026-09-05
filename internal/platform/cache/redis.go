@@ -17,8 +17,14 @@ type Redis struct {
 	group  singleflight.Group
 }
 
-// NewRedis 包装一个就绪的 redis.Client。连接的生命周期由使用方负责。
-func NewRedis(client *redis.Client) *Redis {
+// NewRedis 创建并持有由 opts 配置的 Redis client。
+func NewRedis(opts *redis.Options) *Redis {
+	return NewRedisWithClient(redis.NewClient(opts))
+}
+
+// NewRedisWithClient 使用现有的 Redis client 创建存储，并接管其所有权。
+// 返回的 Redis 关闭时会关闭传入的 client。
+func NewRedisWithClient(client *redis.Client) *Redis {
 	return &Redis{client: client}
 }
 

@@ -1,7 +1,5 @@
-// Package cache 提供 OAuth 状态、授权查询与其他临时数据的缓存。
-// 支持两种可互换的实现：进程内的有限 TTL 存储与基于 Redis 的存储。
-// 配置 Redis 后依赖 Redis，
-// 运行时错误按致命错误处理。
+// Package cache 基础临时数据的缓存。
+// 支持两种实现：进程内的有限 TTL 存储与基于 Redis 的存储。
 package cache
 
 import (
@@ -30,12 +28,7 @@ const pingTimeout = 5 * time.Second
 // healthInterval Redis 运行时健康探测的运行间隔。
 const healthInterval = 30 * time.Second
 
-// AtomicJSONComparer is an optional capability for linearizable compare-and-
-// swap and compare-and-delete operations on JSON values.
-//
-// The expected value must match the exact bytes currently stored under key.
-// A stale or missing expectation returns false without an error. Implementations
-// preserve the current entry TTL when replacing a value.
+// AtomicJSONComparer 对 JSON 值进行线性化的比较并交换以及比较并删除操作
 type AtomicJSONComparer interface {
 	CompareAndSwapJSON(ctx context.Context, key string, expected, replacement json.RawMessage) (bool, error)
 	CompareAndDeleteJSON(ctx context.Context, key string, expected json.RawMessage) (bool, error)
@@ -66,7 +59,6 @@ type Close interface {
 	Close() error
 }
 
-// Config 是缓存需要的静态配置。
 type Config struct {
 	RedisURL string
 }
@@ -82,12 +74,11 @@ func NewStore(cfg Config, logger *slog.Logger) (Store, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse redis url: %w", err)
 	}
-	client := redis.NewClient(opts)
-	store := NewRedis(client)
+	store := NewRedis(opts)
 	ctx, cancel := context.WithTimeout(context.Background(), pingTimeout)
 	defer cancel()
 	if err := store.Ping(ctx); err != nil {
-		_ = client.Close()
+		_ = store.Close()
 		return nil, fmt.Errorf("redis unavailable at startup: %w", err)
 	}
 	logger.Info("cache backend", "backend", "redis")

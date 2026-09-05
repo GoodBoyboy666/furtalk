@@ -19,9 +19,19 @@ func TestAtomicJSONComparerMemory(t *testing.T) {
 
 func TestAtomicJSONComparerRedis(t *testing.T) {
 	mr := miniredis.RunT(t)
-	store := NewRedis(redis.NewClient(&redis.Options{Addr: mr.Addr()}))
+	store := NewRedisWithClient(redis.NewClient(&redis.Options{Addr: mr.Addr()}))
 	t.Cleanup(func() { _ = store.Close() })
 	runAtomicJSONContract(t, store)
+}
+
+func TestNewRedisCreatesConfiguredClient(t *testing.T) {
+	mr := miniredis.RunT(t)
+	store := NewRedis(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { _ = store.Close() })
+
+	if err := store.Ping(context.Background()); err != nil {
+		t.Fatalf("ping configured client: %v", err)
+	}
 }
 
 func runAtomicJSONContract(t *testing.T, store Store) {
