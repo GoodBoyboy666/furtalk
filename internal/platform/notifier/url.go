@@ -2,9 +2,9 @@ package notifier
 
 import (
 	"fmt"
-	"net/url"
 	"strings"
-	"unicode"
+
+	"furtalk/internal/platform/urlx"
 )
 
 // Validate 校验解密后的配置可以发送：平台字段完整且 URL 形态合规。
@@ -30,7 +30,7 @@ func (cfg Config) Validate() error {
 		if strings.TrimSpace(cfg.DeviceKey) == "" {
 			return fmt.Errorf("%w: bark device key is required", ErrConfig)
 		}
-		if err := ValidateTrustedURL(cfg.ServerURL); err != nil {
+		if err := validateBarkBaseURL(cfg.ServerURL); err != nil {
 			return err
 		}
 	case PlatformSlack:
@@ -58,26 +58,20 @@ func (cfg Config) Validate() error {
 	return nil
 }
 
+func validateBarkBaseURL(raw string) error {
+	if _, err := urlx.ParseHTTPBase(raw); err != nil {
+		return fmt.Errorf("%w: bark server url must be an absolute http(s) base url", ErrConfig)
+	}
+	return nil
+}
+
 // ValidateTrustedURL 校验管理员可配置的绝对 http(s) 出站地址（Bark server_url / 通用 WebHook）。
 // 有意允许 HTTP、HTTPS 与私网目标：这是受信管理员部署决策，不增加公网限制或私网阻断。
 // 仍拒绝解析错误、空主机、userinfo、fragment、控制字符与非 http(s) scheme。
 func ValidateTrustedURL(raw string) error {
-	trimmed := strings.TrimSpace(raw)
-	if trimmed == "" {
-		return fmt.Errorf("%w: url is required", ErrConfig)
-	}
-	if err := rejectControlChars(trimmed); err != nil {
-		return err
-	}
-	u, err := url.Parse(trimmed)
-	if err != nil || u.Host == "" {
+	u, err := urlx.ParseHTTP(raw)
+	if err != nil {
 		return fmt.Errorf("%w: url must be an absolute http(s) url", ErrConfig)
-	}
-	if u.Scheme != "http" && u.Scheme != "https" {
-		return fmt.Errorf("%w: url scheme must be http or https", ErrConfig)
-	}
-	if u.User != nil {
-		return fmt.Errorf("%w: url must not contain userinfo", ErrConfig)
 	}
 	if u.Fragment != "" {
 		return fmt.Errorf("%w: url must not contain a fragment", ErrConfig)
@@ -105,19 +99,9 @@ func ValidateWebhookURL(p Platform, raw string) error {
 
 // validateOfficialWebhookURL 校验官方 webhook 地址形态。
 func validateOfficialWebhookURL(raw, host, pathPrefix, requiredQuery string) error {
-	trimmed := strings.TrimSpace(raw)
-	if err := rejectControlChars(trimmed); err != nil {
-		return err
-	}
-	u, err := url.Parse(trimmed)
-	if err != nil || u.Host == "" {
+	u, err := urlx.ParseHTTPS(raw)
+	if err != nil {
 		return fmt.Errorf("%w: webhook url must be an absolute https url", ErrConfig)
-	}
-	if u.Scheme != "https" {
-		return fmt.Errorf("%w: webhook url must use https", ErrConfig)
-	}
-	if u.User != nil {
-		return fmt.Errorf("%w: webhook url must not contain userinfo", ErrConfig)
 	}
 	if u.Fragment != "" {
 		return fmt.Errorf("%w: webhook url must not contain a fragment", ErrConfig)
@@ -143,19 +127,9 @@ func validateOfficialWebhookURL(raw, host, pathPrefix, requiredQuery string) err
 // validateSlackWebhookURL 校验 Slack incoming webhook 地址。
 // 支持 hooks.slack.com 与 hooks.slack-gov.com 的 /services/ 路径。
 func validateSlackWebhookURL(raw string) error {
-	trimmed := strings.TrimSpace(raw)
-	if err := rejectControlChars(trimmed); err != nil {
-		return err
-	}
-	u, err := url.Parse(trimmed)
-	if err != nil || u.Host == "" {
+	u, err := urlx.ParseHTTPS(raw)
+	if err != nil {
 		return fmt.Errorf("%w: slack webhook url must be an absolute https url", ErrConfig)
-	}
-	if u.Scheme != "https" {
-		return fmt.Errorf("%w: slack webhook url must use https", ErrConfig)
-	}
-	if u.User != nil {
-		return fmt.Errorf("%w: slack webhook url must not contain userinfo", ErrConfig)
 	}
 	if u.Fragment != "" {
 		return fmt.Errorf("%w: slack webhook url must not contain a fragment", ErrConfig)
@@ -166,16 +140,6 @@ func validateSlackWebhookURL(raw string) error {
 	}
 	if !strings.HasPrefix(u.Path, "/services/") {
 		return fmt.Errorf("%w: slack webhook url path is not the official endpoint", ErrConfig)
-	}
-	return nil
-}
-
-// rejectControlChars 拒绝 URL 中的控制字符，防止隐藏字符绕过主机/路径校验。
-func rejectControlChars(raw string) error {
-	for _, r := range raw {
-		if unicode.IsControl(r) {
-			return fmt.Errorf("%w: url must not contain control characters", ErrConfig)
-		}
 	}
 	return nil
 }

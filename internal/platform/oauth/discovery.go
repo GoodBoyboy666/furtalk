@@ -6,11 +6,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 	"sync"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
+
+	"furtalk/internal/platform/urlx"
 )
 
 // discoveryProvider 是基于 OIDC discovery 的单实例适配器（GitLab/Gitea）。
@@ -33,8 +34,15 @@ type discoveryProvider struct {
 }
 
 func newDiscoveryProvider(cfg Config, client *http.Client) (*discoveryProvider, error) {
-	if strings.TrimSpace(cfg.InstanceURL) == "" {
+	if cfg.InstanceURL == "" {
 		return nil, fmt.Errorf("%w: %s instance url is required", ErrUnsupported, cfg.ProviderKey)
+	}
+	// ProviderService enforces HTTPS for persisted instances. The platform
+	// adapter accepts HTTP here as well so injected test/local transports can use
+	// httptest endpoints without weakening the service boundary.
+	instance, err := urlx.ParseHTTPBase(cfg.InstanceURL)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s instance url is invalid", ErrUnsupported, cfg.ProviderKey)
 	}
 	name := "GitLab"
 	if cfg.ProviderKey == "gitea" {
@@ -45,7 +53,7 @@ func newDiscoveryProvider(cfg Config, client *http.Client) (*discoveryProvider, 
 		name:         name,
 		clientID:     cfg.ClientID,
 		clientSecret: cfg.ClientSecret,
-		instanceURL:  strings.TrimRight(cfg.InstanceURL, "/"),
+		instanceURL:  instance.String(),
 		httpClient:   client,
 	}, nil
 }
@@ -87,7 +95,11 @@ func (p *discoveryProvider) discovery(ctx context.Context) (*oidc.Provider, erro
 // issuer、authorization_endpoint、token_endpoint 与 jwks_uri 必须齐全；
 // userinfo_endpoint 由 ID token 缺少已验证邮箱时才用到，允许缺失。
 func (p *discoveryProvider) fetchDiscoveryDocument(ctx context.Context) (*oidc.ProviderConfig, error) {
-	endpoint := p.instanceURL + "/.well-known/openid-configuration"
+	instance, err := urlx.ParseHTTPBase(p.instanceURL)
+	if err != nil {
+		return nil, err
+	}
+	endpoint := urlx.JoinPathSegments(instance, ".well-known", "openid-configuration").String()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return nil, err

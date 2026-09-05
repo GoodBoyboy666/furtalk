@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net/url"
 	"strings"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"furtalk/internal/platform/eventbus"
 	"furtalk/internal/platform/logging"
 	"furtalk/internal/platform/mailer"
+	"furtalk/internal/platform/urlx"
 	"furtalk/internal/repository"
 )
 
@@ -429,7 +431,15 @@ func (s *Service) unsubscribeURL(userID int64, kind string) string {
 		s.log.Warn("notifications: sign unsubscribe token", logging.ID("user_id", userID), logging.Error(err))
 		return ""
 	}
-	return s.baseURL + "/unsubscribe?token=" + token
+	base, err := urlx.ParseHTTPBase(s.baseURL)
+	if err != nil {
+		return ""
+	}
+	u := urlx.JoinPathSegments(base, "unsubscribe")
+	query := url.Values{}
+	query.Set("token", token)
+	u.RawQuery = query.Encode()
+	return u.String()
 }
 
 // send 以有界超时投递一条消息。

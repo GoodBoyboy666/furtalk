@@ -5,9 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 
 	"golang.org/x/oauth2"
+
+	"furtalk/internal/platform/urlx"
 )
 
 // Discord OAuth2 授权请求所需的固定 scopes。
@@ -52,13 +53,17 @@ func newDiscordProvider(cfg Config, client *http.Client) *discordProvider {
 	if apiURL == "" {
 		apiURL = discordAPIURL
 	}
+	userInfoURL := ""
+	if base, err := urlx.ParseHTTPBase(apiURL); err == nil {
+		userInfoURL = urlx.JoinPathSegments(base, "users", "@me").String()
+	}
 	return &discordProvider{
 		key:          cfg.ProviderKey,
 		clientID:     cfg.ClientID,
 		clientSecret: cfg.ClientSecret,
 		authURL:      authURL,
 		tokenURL:     tokenURL,
-		userInfoURL:  strings.TrimRight(apiURL, "/") + "/users/@me",
+		userInfoURL:  userInfoURL,
 		httpClient:   client,
 	}
 }

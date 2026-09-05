@@ -8,6 +8,8 @@ import (
 	"strconv"
 
 	"golang.org/x/oauth2"
+
+	"furtalk/internal/platform/urlx"
 )
 
 // githubScopes 是 GitHub OAuth 授权申请的范围。
@@ -29,6 +31,11 @@ func newGitHubProvider(cfg Config, client *http.Client) *githubProvider {
 	apiURL := cfg.APIURL
 	if apiURL == "" {
 		apiURL = "https://api.github.com"
+	}
+	if base, err := urlx.ParseHTTPBase(apiURL); err == nil {
+		apiURL = base.String()
+	} else {
+		apiURL = ""
 	}
 	return &githubProvider{
 		key:          cfg.ProviderKey,
@@ -118,7 +125,11 @@ type githubEmail struct {
 
 func (p *githubProvider) fetchUser(ctx context.Context, token *oauth2.Token) (*githubUser, error) {
 	client := p.oauthConfig("").Client(p.httpContext(ctx), token)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.apiURL+"/user", nil)
+	base, err := urlx.ParseHTTPBase(p.apiURL)
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, urlx.JoinPathSegments(base, "user").String(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -140,7 +151,11 @@ func (p *githubProvider) fetchUser(ctx context.Context, token *oauth2.Token) (*g
 
 func (p *githubProvider) fetchVerifiedEmail(ctx context.Context, token *oauth2.Token) (string, error) {
 	client := p.oauthConfig("").Client(p.httpContext(ctx), token)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.apiURL+"/user/emails", nil)
+	base, err := urlx.ParseHTTPBase(p.apiURL)
+	if err != nil {
+		return "", err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, urlx.JoinPathSegments(base, "user", "emails").String(), nil)
 	if err != nil {
 		return "", err
 	}

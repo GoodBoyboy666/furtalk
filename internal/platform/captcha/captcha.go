@@ -12,6 +12,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"furtalk/internal/platform/urlx"
 )
 
 var (
@@ -66,31 +68,34 @@ func New(cfg Config, client *http.Client) (Verifier, error) {
 func siteVerifyURL(cfg Config) (string, error) {
 	switch cfg.Provider {
 	case "turnstile":
-		return overrideOrDefault(cfg.Endpoint, "https://challenges.cloudflare.com/turnstile/v0/siteverify"), nil
+		return validatedOverrideOrDefault(cfg.Endpoint, "https://challenges.cloudflare.com/turnstile/v0/siteverify")
 	case "recaptcha":
-		return overrideOrDefault(cfg.Endpoint, "https://www.google.com/recaptcha/api/siteverify"), nil
+		return validatedOverrideOrDefault(cfg.Endpoint, "https://www.google.com/recaptcha/api/siteverify")
 	case "hcaptcha":
-		return overrideOrDefault(cfg.Endpoint, "https://hcaptcha.com/siteverify"), nil
+		return validatedOverrideOrDefault(cfg.Endpoint, "https://hcaptcha.com/siteverify")
 	case "cap":
 		if strings.TrimSpace(cfg.Endpoint) == "" {
 			return "", fmt.Errorf("%w: cap endpoint is required", ErrUnavailable)
 		}
-		base, err := normalizeBaseURL(cfg.Endpoint)
+		base, err := urlx.ParseHTTPBase(cfg.Endpoint)
 		if err != nil {
-			return "", err
+			return "", fmt.Errorf("%w: invalid cap endpoint: %v", ErrUnavailable, err)
 		}
-		return base + "/" + cfg.SiteKey + "/siteverify", nil
+		return urlx.JoinPathSegments(base, cfg.SiteKey, "siteverify").String(), nil
 	default:
 		return "", fmt.Errorf("%w: %q", ErrUnsupported, cfg.Provider)
 	}
 }
 
-// overrideOrDefault Endpoint覆盖为空时回退到Provider的固定默认值。
-func overrideOrDefault(override, fallback string) string {
+func validatedOverrideOrDefault(override, fallback string) (string, error) {
 	if strings.TrimSpace(override) == "" {
-		return fallback
+		return fallback, nil
 	}
-	return override
+	u, err := urlx.ParseHTTPBase(override)
+	if err != nil {
+		return "", fmt.Errorf("%w: invalid endpoint: %v", ErrUnavailable, err)
+	}
+	return u.String(), nil
 }
 
 // WidgetAPIURL 给浏览器控件使用的公共 API Endpoint。
@@ -98,22 +103,11 @@ func WidgetAPIURL(cfg Config) string {
 	if cfg.Provider != "cap" || strings.TrimSpace(cfg.Endpoint) == "" {
 		return ""
 	}
-	base, err := normalizeBaseURL(cfg.Endpoint)
+	base, err := urlx.ParseHTTPBase(cfg.Endpoint)
 	if err != nil {
 		return ""
 	}
-	return base + "/" + cfg.SiteKey + "/"
-}
-
-// normalizeBaseURL 校验并格式化绝对 http(s) 实例 URL。
-func normalizeBaseURL(raw string) (string, error) {
-	u, err := url.Parse(strings.TrimSpace(raw))
-	if err != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http") {
-		return "", fmt.Errorf("%w: invalid endpoint", ErrUnavailable)
-	}
-	u.Path = strings.TrimSuffix(u.Path, "/")
-	u.RawPath, u.RawQuery, u.Fragment = "", "", ""
-	return u.String(), nil
+	return urlx.JoinPathDirectory(base, cfg.SiteKey).String()
 }
 
 type verifier struct {

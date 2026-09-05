@@ -2,11 +2,10 @@ package setting
 
 import (
 	"fmt"
-	"net/url"
 	"strings"
-	"unicode"
 
 	"furtalk/internal/domain"
+	"furtalk/internal/platform/urlx"
 )
 
 const defaultGravatarBaseURL = "https://www.gravatar.com/avatar"
@@ -67,8 +66,8 @@ func validateEmojiCatalogURL(raw string) error {
 	if len(value) > 2048 {
 		return fmt.Errorf("%w: emoji catalog url must be at most 2048 characters", domain.ErrValidation)
 	}
-	u, err := url.Parse(value)
-	if err != nil || u.Host == "" || u.Scheme != "https" || u.User != nil || u.Fragment != "" {
+	u, err := urlx.ParseHTTPS(value)
+	if err != nil || u.Fragment != "" {
 		return fmt.Errorf("%w: emoji catalog url must be an absolute https url without userinfo or fragment", domain.ErrValidation)
 	}
 	return nil
@@ -82,13 +81,8 @@ func normalizePublicHTTPSURL(raw string) (string, error) {
 	if len(value) > 2048 {
 		return "", fmt.Errorf("%w: url must be at most 2048 characters", domain.ErrValidation)
 	}
-	for _, r := range value {
-		if unicode.IsControl(r) {
-			return "", fmt.Errorf("%w: url must not contain control characters", domain.ErrValidation)
-		}
-	}
-	u, err := url.Parse(value)
-	if err != nil || !u.IsAbs() || u.Host == "" || u.Scheme != "https" || u.User != nil {
+	u, err := urlx.ParseHTTPS(value)
+	if err != nil {
 		return "", fmt.Errorf("%w: url must be an absolute https url without userinfo", domain.ErrValidation)
 	}
 	return u.String(), nil

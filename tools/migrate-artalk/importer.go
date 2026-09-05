@@ -6,15 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"net/url"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
 	"furtalk/internal/domain"
 	"furtalk/internal/platform/clientip"
 	"furtalk/internal/platform/gormtx"
+	"furtalk/internal/platform/urlx"
 	"furtalk/internal/platform/value"
 	"furtalk/internal/repository"
 )
@@ -630,38 +629,11 @@ func normalizeOrigin(raw string) (string, error) {
 	if raw == "" {
 		return "", fmt.Errorf("origin is empty")
 	}
-	u, err := url.Parse(raw)
-	if err != nil || u.Host == "" || u.User != nil {
-		return "", fmt.Errorf("%q is not an absolute HTTP(S) URL", raw)
+	normalized, err := migrationOrigin(raw)
+	if err != nil {
+		return "", fmt.Errorf("%q is not a valid canonical origin: %w", raw, err)
 	}
-	if u.Scheme != "https" && u.Scheme != "http" {
-		return "", fmt.Errorf("%q does not use HTTP(S)", raw)
-	}
-	hostname := strings.ToLower(u.Hostname())
-	if hostname == "" || strings.Contains(hostname, "*") {
-		return "", fmt.Errorf("%q has an invalid host", raw)
-	}
-	if u.Scheme == "http" && hostname != "localhost" && hostname != "127.0.0.1" && hostname != "::1" {
-		return "", fmt.Errorf("%q uses insecure HTTP for a non-local host", raw)
-	}
-	port := u.Port()
-	if port != "" {
-		portNumber, err := strconv.Atoi(port)
-		if err != nil || portNumber < 1 || portNumber > 65535 {
-			return "", fmt.Errorf("%q has an invalid port", raw)
-		}
-	}
-	if (u.Scheme == "https" && port == "443") || (u.Scheme == "http" && port == "80") {
-		port = ""
-	}
-	host := hostname
-	if strings.Contains(hostname, ":") {
-		host = "[" + hostname + "]"
-	}
-	if port != "" {
-		host = net.JoinHostPort(hostname, port)
-	}
-	return u.Scheme + "://" + host, nil
+	return normalized, nil
 }
 
 func originsFromArtran(record Artran) []string {
@@ -672,11 +644,27 @@ func originsFromArtran(record Artran) []string {
 		}
 	}
 	if pageURL := absoluteHTTPURL(record.pageKey()); pageURL != "" {
-		if normalized, err := normalizeOrigin(pageURL); err == nil {
+		if normalized, err := originFromPageURL(pageURL); err == nil {
 			origins = appendUnique(origins, normalized)
 		}
 	}
 	return origins
+}
+
+func originFromPageURL(raw string) (string, error) {
+	return migrationOrigin(raw)
+}
+
+// migrationOrigin accepts legacy site/page URLs that may include a deployment
+// path, then derives the exact origin through urlx. This preserves Artalk's
+// historical import behavior while applying the shared host/scheme checks.
+func migrationOrigin(raw string) (string, error) {
+	u, err := urlx.ParseHTTP(raw)
+	if err != nil {
+		return "", err
+	}
+	u.Path, u.RawPath, u.RawQuery, u.Fragment, u.ForceQuery = "", "", "", "", false
+	return urlx.CanonicalOrigin(u.String())
 }
 
 func preferredCanonical(origins []string) string {
@@ -692,7 +680,7 @@ func preferredCanonical(origins []string) string {
 }
 
 func originScore(origin string) int {
-	u, _ := url.Parse(origin)
+	u, _ := urlx.ParseHTTP(origin)
 	local := u.Hostname() == "localhost" || u.Hostname() == "127.0.0.1" || u.Hostname() == "::1"
 	if u.Scheme == "https" && !local {
 		return 3
@@ -704,8 +692,8 @@ func originScore(origin string) int {
 }
 
 func absoluteHTTPURL(raw string) string {
-	u, err := url.Parse(strings.TrimSpace(raw))
-	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
+	u, err := urlx.ParseHTTP(raw)
+	if err != nil {
 		return ""
 	}
 	return u.String()

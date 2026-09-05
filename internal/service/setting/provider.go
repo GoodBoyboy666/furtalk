@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"net/url"
 	"sort"
 	"strings"
 	"time"
@@ -22,6 +21,7 @@ import (
 	"furtalk/internal/platform/notifier"
 	"furtalk/internal/platform/oauth"
 	"furtalk/internal/platform/spam"
+	"furtalk/internal/platform/urlx"
 	"furtalk/internal/repository"
 )
 
@@ -1359,12 +1359,20 @@ func authProbeTarget(provider *AuthProvider) (string, error) {
 		if provider.InstanceURL == "" {
 			return "", fmt.Errorf("%w: instance url is required", domain.ErrValidation)
 		}
-		return provider.InstanceURL + "/.well-known/openid-configuration", nil
+		instance, err := urlx.ParseHTTPSBase(provider.InstanceURL)
+		if err != nil {
+			return "", fmt.Errorf("%w: instance url is invalid", domain.ErrValidation)
+		}
+		return urlx.JoinPathSegments(instance, ".well-known", "openid-configuration").String(), nil
 	case "mastodon":
 		if provider.InstanceURL == "" {
 			return "", fmt.Errorf("%w: instance url is required", domain.ErrValidation)
 		}
-		return provider.InstanceURL + "/.well-known/oauth-authorization-server", nil
+		instance, err := urlx.ParseHTTPSBase(provider.InstanceURL)
+		if err != nil {
+			return "", fmt.Errorf("%w: instance url is invalid", domain.ErrValidation)
+		}
+		return urlx.JoinPathSegments(instance, ".well-known", "oauth-authorization-server").String(), nil
 	case "microsoft":
 		return microsoftDiscovery, nil
 	case "line":
@@ -1699,9 +1707,11 @@ func validateAuthConfig(providerKey string, cfg *AuthConfig, spec oauth.Provider
 		}
 	}
 	if _, inCatalog := oauth.LookupProvider(providerKey); !inCatalog {
-		if !validHTTPSURL(cfg.IssuerURL) || !strings.HasPrefix(cfg.IssuerURL, "https://") {
+		normalized, err := urlx.ParseHTTPSBase(cfg.IssuerURL)
+		if err != nil {
 			return fmt.Errorf("%w: oidc issuer url must be an absolute https url", domain.ErrValidation)
 		}
+		cfg.IssuerURL = normalized.String()
 	}
 	return nil
 }
@@ -1806,35 +1816,25 @@ func (c CaptchaConfig) Validate() error {
 		return fmt.Errorf("%w: captcha site key and secret key are required", domain.ErrValidation)
 	}
 	if c.Provider == "cap" {
-		if !validHTTPSURL(c.Endpoint) {
+		if _, err := urlx.ParseHTTPBase(c.Endpoint); err != nil {
 			return fmt.Errorf("%w: cap endpoint must be an absolute http(s) url", domain.ErrValidation)
 		}
 		return nil
 	}
-	if strings.TrimSpace(c.Endpoint) != "" && !validHTTPSURL(c.Endpoint) {
-		return fmt.Errorf("%w: captcha endpoint must be an absolute http(s) url", domain.ErrValidation)
+	if strings.TrimSpace(c.Endpoint) != "" {
+		if _, err := urlx.ParseHTTPBase(c.Endpoint); err != nil {
+			return fmt.Errorf("%w: captcha endpoint must be an absolute http(s) base url", domain.ErrValidation)
+		}
 	}
 	return nil
 }
 
-// validHTTPSURL 判断字符串是否为带主机名的 http/https 绝对 URL。
-func validHTTPSURL(raw string) bool {
-	u, err := url.Parse(raw)
-	if err != nil || u.Host == "" {
-		return false
-	}
-	return u.Scheme == "https" || u.Scheme == "http"
-}
-
-// normalizeHTTPSURL 校验并规范化绝对 http(s) URL：
-// 去除尾部斜杠与查询/片段，不改动主机与协议。
+// normalizeHTTPSURL 校验并规范化绝对 http(s) base URL。
 func normalizeHTTPSURL(raw string) (string, error) {
-	u, err := url.Parse(strings.TrimSpace(raw))
-	if err != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http") {
+	u, err := urlx.ParseHTTPBase(raw)
+	if err != nil {
 		return "", fmt.Errorf("%w: captcha endpoint must be an absolute http(s) url", domain.ErrValidation)
 	}
-	u.Path = strings.TrimSuffix(u.Path, "/")
-	u.RawPath, u.RawQuery, u.Fragment = "", "", ""
 	return u.String(), nil
 }
 
@@ -1842,30 +1842,14 @@ func normalizeHTTPSURL(raw string) (string, error) {
 // 仅接受 https，拒绝 userinfo/query/fragment，主机名小写并去掉默认端口与尾部斜杠；
 // rootOnly 时禁止部署子路径（Mastodon 的规范部署根是 origin）。
 func normalizeInstanceURL(raw string, rootOnly bool) (string, error) {
-	u, err := url.Parse(strings.TrimSpace(raw))
-	if err != nil || u.Host == "" || u.Scheme != "https" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+	u, err := urlx.ParseHTTPSBase(raw)
+	if err != nil {
 		return "", fmt.Errorf("%w: instance url must be an absolute https url without userinfo, query or fragment", domain.ErrValidation)
 	}
-	if rootOnly && u.Path != "" && u.Path != "/" {
+	if rootOnly && u.Path != "" {
 		return "", fmt.Errorf("%w: mastodon instance url must be a root origin without a path", domain.ErrValidation)
 	}
-	u.Scheme = "https"
-	u.Host = normalizeURLHost(u)
-	u.Path = strings.TrimSuffix(u.Path, "/")
-	u.RawPath, u.RawQuery, u.Fragment = "", "", ""
 	return u.String(), nil
-}
-
-// normalizeURLHost 小写化主机名、保留非默认端口并去掉默认 https 端口（443）。
-func normalizeURLHost(u *url.URL) string {
-	name := strings.ToLower(u.Hostname())
-	if strings.Contains(name, ":") {
-		name = "[" + name + "]"
-	}
-	if port := u.Port(); port != "" && port != "443" {
-		name += ":" + port
-	}
-	return name
 }
 
 // SMTPProbe 对静态 SMTP 配置执行有界连通性检查。

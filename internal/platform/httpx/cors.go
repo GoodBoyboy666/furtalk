@@ -2,11 +2,11 @@ package httpx
 
 import (
 	"net/http"
-	"net/url"
 	"strconv"
-	"strings"
 
 	"github.com/gin-gonic/gin"
+
+	"furtalk/internal/platform/urlx"
 )
 
 // CORSForSiteParam 路由注册时显式选择的 CORS 策略。
@@ -135,28 +135,12 @@ func rejectPreflight(c *gin.Context) {
 //
 // 返回精确的规范 origin，用于与存储的 origins 做字节级比较。
 func CanonicalOrigin(raw string) (string, bool) {
-	origin := strings.TrimSpace(raw)
-	if origin == "" || origin == "null" {
+	if raw == "null" {
 		return "", false
 	}
-	if strings.ContainsAny(origin, " \t\r\n,") {
+	origin, err := urlx.CanonicalOrigin(raw)
+	if err != nil {
 		return "", false
-	}
-	if strings.Contains(origin, "*") {
-		return "", false
-	}
-	u, err := url.Parse(origin)
-	if err != nil || u.Host == "" {
-		return "", false
-	}
-	if u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Path != "" {
-		return "", false
-	}
-	if u.Scheme != "https" {
-		host := strings.ToLower(u.Hostname())
-		if u.Scheme != "http" || (host != "localhost" && host != "127.0.0.1" && host != "::1") {
-			return "", false
-		}
 	}
 	return origin, true
 }

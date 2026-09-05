@@ -60,6 +60,44 @@ func TestExplicitPasskeyRPIDRejectsPort(t *testing.T) {
 	}
 }
 
+func TestValidateWebURLContracts(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		mutate func(*Config)
+	}{
+		{name: "public base non-http scheme", mutate: func(c *Config) { c.HTTP.PublicBaseURL = "ftp://furtalk.example.com" }},
+		{name: "jwt issuer userinfo", mutate: func(c *Config) { c.Tokens.JWTIssuer = "https://user:pass@furtalk.example.com" }},
+		{name: "webauthn external http", mutate: func(c *Config) { c.WebAuthn.RPOrigins = []string{"http://furtalk.example.com"} }},
+		{name: "webauthn wildcard", mutate: func(c *Config) { c.WebAuthn.RPOrigins = []string{"https://*.furtalk.example.com"} }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := validTestConfig("https://furtalk.example.com")
+			tt.mutate(&cfg)
+			if err := cfg.Validate(); err == nil {
+				t.Fatal("Validate() accepted an invalid web URL")
+			}
+		})
+	}
+}
+
+func TestNormalizeWebURLsCanonicalizesOrigins(t *testing.T) {
+	cfg := validTestConfig("https://Example.COM:443")
+	cfg.Tokens.JWTIssuer = "https://Issuer.Example:443"
+	cfg.WebAuthn.RPOrigins = []string{"https://Passkeys.Example:443"}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("Validate() returned %v", err)
+	}
+	if err := cfg.normalizeWebURLs(); err != nil {
+		t.Fatalf("normalizeWebURLs() returned %v", err)
+	}
+	if cfg.HTTP.PublicBaseURL != "https://example.com" || cfg.Tokens.JWTIssuer != "https://issuer.example" || cfg.WebAuthn.RPOrigins[0] != "https://passkeys.example" {
+		t.Fatalf("normalized web URLs = %q, %q, %q", cfg.HTTP.PublicBaseURL, cfg.Tokens.JWTIssuer, cfg.WebAuthn.RPOrigins[0])
+	}
+}
+
 func TestValidateRejectsNonPositiveHTTPServerLimits(t *testing.T) {
 	t.Parallel()
 

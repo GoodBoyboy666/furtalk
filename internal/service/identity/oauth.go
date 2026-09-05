@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/url"
 	"strings"
 	"time"
 
@@ -13,6 +12,7 @@ import (
 	"furtalk/internal/platform/crypto"
 	"furtalk/internal/platform/logging"
 	"furtalk/internal/platform/oauth"
+	"furtalk/internal/platform/urlx"
 	"furtalk/internal/platform/value"
 )
 
@@ -518,7 +518,11 @@ func (s *Service) buildProvider(providerConfig *AuthProvider) (OAuthProvider, er
 }
 
 func (s *Service) oauthRedirectURI(providerKey string) string {
-	return strings.TrimRight(s.baseURL, "/") + "/oauth/callback/" + url.PathEscape(providerKey)
+	base, err := urlx.ParseHTTPBase(s.baseURL)
+	if err != nil {
+		return ""
+	}
+	return urlx.JoinPathSegments(base, "oauth", "callback", providerKey).String()
 }
 
 // providerDisplayName 从固定 provider catalog 投影展示名；
@@ -538,16 +542,7 @@ func sanitizeRedirect(raw string) string {
 	if raw == "" {
 		return "/"
 	}
-	for _, r := range raw {
-		if r == '\\' || r < 0x20 || r == 0x7f {
-			return "/"
-		}
-	}
-	u, err := url.Parse(raw)
-	if err != nil {
-		return "/"
-	}
-	if u.IsAbs() || u.Host != "" {
+	if _, err := urlx.ParseLocalReference(raw); err != nil {
 		return "/"
 	}
 	return raw

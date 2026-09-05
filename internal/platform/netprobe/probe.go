@@ -7,14 +7,15 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"time"
+
+	"furtalk/internal/platform/urlx"
 )
 
 // ProbeURL 对 URL 执行 GET，并接受任何 HTTP 响应作为可达性证明。
 func ProbeURL(ctx context.Context, rawURL string, timeout time.Duration) error {
-	u, err := url.Parse(rawURL)
-	if err != nil || (u.Scheme != "https" && u.Scheme != "http") {
+	u, err := urlx.ParseHTTP(rawURL)
+	if err != nil || u.Fragment != "" {
 		return fmt.Errorf("netprobe: invalid url %q", rawURL)
 	}
 	reqCtx, cancel := context.WithTimeout(ctx, timeout)

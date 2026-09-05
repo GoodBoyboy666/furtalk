@@ -118,9 +118,12 @@ func TestCaptchaEndpointValidation(t *testing.T) {
 		{name: "cap missing endpoint", key: "cap", conf: map[string]any{"provider": "cap", "site_key": "s", "secret_key": "sec"}, wantErr: true},
 		{name: "cap relative endpoint", key: "cap", conf: map[string]any{"provider": "cap", "site_key": "s", "secret_key": "sec", "endpoint": "cap.example.com"}, wantErr: true},
 		{name: "cap bad scheme", key: "cap", conf: map[string]any{"provider": "cap", "site_key": "s", "secret_key": "sec", "endpoint": "ftp://cap.example.com"}, wantErr: true},
+		{name: "cap endpoint query", key: "cap", conf: map[string]any{"provider": "cap", "site_key": "s", "secret_key": "sec", "endpoint": "https://cap.example.com?x=1"}, wantErr: true},
+		{name: "cap endpoint userinfo", key: "cap", conf: map[string]any{"provider": "cap", "site_key": "s", "secret_key": "sec", "endpoint": "https://user:pass@cap.example.com"}, wantErr: true},
 		{name: "non-cap without endpoint", key: "turnstile", conf: map[string]any{"provider": "turnstile", "site_key": "s", "secret_key": "sec"}, wantErr: false},
 		{name: "non-cap with endpoint", key: "hcaptcha", conf: map[string]any{"provider": "hcaptcha", "site_key": "s", "secret_key": "sec", "endpoint": "https://proxy.example.com/siteverify"}, wantErr: false},
 		{name: "non-cap bad endpoint", key: "recaptcha", conf: map[string]any{"provider": "recaptcha", "site_key": "s", "secret_key": "sec", "endpoint": "google.com"}, wantErr: true},
+		{name: "non-cap endpoint fragment", key: "recaptcha", conf: map[string]any{"provider": "recaptcha", "site_key": "s", "secret_key": "sec", "endpoint": "https://proxy.example.com/siteverify#frag"}, wantErr: true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

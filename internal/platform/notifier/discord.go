@@ -5,8 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"net/url"
 	"unicode/utf8"
+
+	"furtalk/internal/platform/urlx"
 )
 
 // discordMaxRunes 是 Discord 消息 content 的字符上限。
@@ -16,7 +17,7 @@ const discordMaxRunes = 2000
 // wait=true 强制服务端返回创建后的 Message 以获得权威结果；
 // allowed_mentions.parse=[] 抑制全部用户提及；content 转义 Markdown 控制字符。
 func (d *Dispatcher) sendDiscord(ctx context.Context, cfg Config, msg Message) error {
-	endpoint, err := url.Parse(cfg.WebhookURL)
+	endpoint, err := urlx.ParseHTTPS(cfg.WebhookURL)
 	if err != nil {
 		return &DeliveryError{Class: "network", Detail: "request_failed"}
 	}

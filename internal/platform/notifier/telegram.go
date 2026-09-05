@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+
+	"furtalk/internal/platform/urlx"
 )
 
 // telegramMaxRunes 是 Telegram sendMessage text 的字符上限（1..4096）。
@@ -15,7 +17,11 @@ const telegramMaxRunes = 4096
 // 固定端点嵌入令牌路径；JSON 载荷不带 parse_mode/entities，并禁用链接预览；
 // 成功判定为 HTTP 2xx 且 ok==true。
 func (d *Dispatcher) sendTelegram(ctx context.Context, cfg Config, msg Message) error {
-	url := "https://api.telegram.org/bot" + cfg.BotToken + "/sendMessage"
+	base, err := urlx.ParseHTTPSBase("https://api.telegram.org")
+	if err != nil {
+		return &DeliveryError{Class: "network", Detail: "request_failed"}
+	}
+	endpoint := urlx.JoinPathSegments(base, "bot"+cfg.BotToken, "sendMessage").String()
 	payload := map[string]any{
 		"chat_id": cfg.ChatID,
 		"text":    composeText(msg.Title, msg.Text, msg.PageURL, telegramMaxRunes),
@@ -27,7 +33,7 @@ func (d *Dispatcher) sendTelegram(ctx context.Context, cfg Config, msg Message) 
 	if err != nil {
 		return &DeliveryError{Class: "response", Detail: "encode_failed"}
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
 		return &DeliveryError{Class: "network", Detail: "request_failed"}
 	}

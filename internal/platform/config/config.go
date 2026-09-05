@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net"
 	"net/mail"
-	"net/url"
 	"os"
 	"reflect"
 	"strings"
@@ -15,6 +14,8 @@ import (
 
 	"github.com/go-viper/mapstructure/v2"
 	"github.com/spf13/viper"
+
+	"furtalk/internal/platform/urlx"
 )
 
 const envPrefix = "FURTALK"
@@ -124,8 +125,31 @@ func Load() (Config, error) {
 	if err := c.Validate(); err != nil {
 		return Config{}, err
 	}
+	if err := c.normalizeWebURLs(); err != nil {
+		return Config{}, err
+	}
 	c.warnings = c.collectRecommendedWarnings(configFileKeys(v.ConfigFileUsed()))
 	return c, nil
+}
+
+// normalizeWebURLs stores the same canonical origin representation that CORS,
+// site storage, and WebAuthn use at runtime. Validate is intentionally a value
+// receiver for compatibility, so Load performs the post-validation mutation
+// on the configuration snapshot that enters the application.
+func (c *Config) normalizeWebURLs() error {
+	var err error
+	if c.HTTP.PublicBaseURL, err = urlx.CanonicalOrigin(c.HTTP.PublicBaseURL); err != nil {
+		return fmt.Errorf("public base URL must be a canonical HTTPS or loopback HTTP origin: %w", err)
+	}
+	if c.Tokens.JWTIssuer, err = urlx.CanonicalOrigin(c.Tokens.JWTIssuer); err != nil {
+		return fmt.Errorf("JWT issuer must be a canonical HTTPS or loopback HTTP origin: %w", err)
+	}
+	for i, origin := range c.WebAuthn.RPOrigins {
+		if c.WebAuthn.RPOrigins[i], err = urlx.CanonicalOrigin(origin); err != nil {
+			return fmt.Errorf("passkey rp origin %q must be a canonical HTTPS or loopback HTTP origin: %w", origin, err)
+		}
+	}
+	return nil
 }
 
 func ignoreUnselectedDatabaseFields(v *viper.Viper) {
@@ -331,9 +355,8 @@ func (c Config) Validate() error {
 		return errors.New("address must not be empty")
 	}
 	for name, value := range map[string]string{"public base URL": c.HTTP.PublicBaseURL, "JWT issuer": c.Tokens.JWTIssuer} {
-		u, err := url.Parse(value)
-		if err != nil || u.Scheme == "" || u.Host == "" || u.Path != "" || u.RawQuery != "" || u.Fragment != "" {
-			return fmt.Errorf("%s must be an absolute URL without path, query, or fragment", name)
+		if _, err := urlx.CanonicalOrigin(value); err != nil {
+			return fmt.Errorf("%s must be a canonical HTTPS or loopback HTTP origin", name)
 		}
 	}
 	if len(c.Tokens.JWTKey) < 32 {
@@ -413,9 +436,8 @@ func (c Config) Validate() error {
 		return errors.New("passkey rp origins must not be empty")
 	}
 	for _, origin := range c.WebAuthn.RPOrigins {
-		u, err := url.Parse(origin)
-		if err != nil || u.Scheme == "" || u.Hostname() == "" || u.Path != "" || u.RawQuery != "" || u.Fragment != "" {
-			return fmt.Errorf("passkey rp origin %q must be an absolute URL without path, query, or fragment", origin)
+		if _, err := urlx.CanonicalOrigin(origin); err != nil {
+			return fmt.Errorf("passkey rp origin %q must be a canonical HTTPS or loopback HTTP origin", origin)
 		}
 	}
 	if strings.TrimSpace(c.SMTP.Host) != "" {

@@ -5,8 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"net/url"
-	"strings"
+
+	"furtalk/internal/platform/urlx"
 )
 
 // bark 载荷的字节预算常量。
@@ -20,11 +20,11 @@ const (
 // sendBark 向 Bark V2 push 端点投递。
 // 端点按 {server_url}/push 拼接；成功判定为 HTTP 2xx 且 code==200。
 func (d *Dispatcher) sendBark(ctx context.Context, cfg Config, msg Message) error {
-	base := strings.TrimSuffix(cfg.ServerURL, "/")
-	endpoint := base + "/push"
-	if _, err := url.Parse(endpoint); err != nil {
+	base, err := urlx.ParseHTTPBase(cfg.ServerURL)
+	if err != nil {
 		return &DeliveryError{Class: "network", Detail: "request_failed"}
 	}
+	endpoint := urlx.JoinPathSegments(base, "push").String()
 	title, _ := TruncateRunes(msg.Title, barkTitleMaxRunes)
 	body := breakMentions(msg.Text)
 	urlBlock := ""

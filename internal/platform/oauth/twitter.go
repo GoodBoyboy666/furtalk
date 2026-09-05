@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
+	"net/url"
 
 	"golang.org/x/oauth2"
+
+	"furtalk/internal/platform/urlx"
 )
 
 // Twitter/X 授权请求所需的固定 scopes。
@@ -57,13 +59,21 @@ func newTwitterProvider(cfg Config, client *http.Client) *twitterProvider {
 	if apiURL == "" {
 		apiURL = twitterAPIURL
 	}
+	userInfoURL := ""
+	if base, err := urlx.ParseHTTPBase(apiURL); err == nil {
+		u := urlx.JoinPathSegments(base, "users", "me")
+		query := url.Values{}
+		query.Set("user.fields", twitterUserFields)
+		u.RawQuery = query.Encode()
+		userInfoURL = u.String()
+	}
 	return &twitterProvider{
 		key:          cfg.ProviderKey,
 		clientID:     cfg.ClientID,
 		clientSecret: cfg.ClientSecret,
 		authURL:      authURL,
 		tokenURL:     tokenURL,
-		userInfoURL:  strings.TrimRight(apiURL, "/") + "/users/me?user.fields=" + twitterUserFields,
+		userInfoURL:  userInfoURL,
 		httpClient:   client,
 	}
 }

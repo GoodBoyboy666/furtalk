@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+
+	"furtalk/internal/platform/urlx"
 )
 
 // dingtalkMaxRunes 是钉钉自定义机器人文本的保守字符上限，
@@ -32,7 +34,7 @@ func dingtalkSign(secret string, timestamp int64) string {
 // 配置签名密钥时把 timestamp（Unix 毫秒）与 sign 作为查询参数追加；
 // 强制空 mention 列表与 isAtAll=false；成功判定为 HTTP 2xx 且 errcode==0。
 func (d *Dispatcher) sendDingTalk(ctx context.Context, cfg Config, msg Message) error {
-	endpoint, err := url.Parse(cfg.WebhookURL)
+	endpoint, err := urlx.ParseHTTPS(cfg.WebhookURL)
 	if err != nil {
 		return &DeliveryError{Class: "network", Detail: "request_failed"}
 	}

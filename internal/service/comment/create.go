@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"net/url"
 	"strings"
 	"time"
 
@@ -13,6 +12,7 @@ import (
 	"furtalk/internal/platform/clientip"
 	"furtalk/internal/platform/gravatar"
 	"furtalk/internal/platform/markdown"
+	"furtalk/internal/platform/urlx"
 	"furtalk/internal/platform/value"
 )
 
@@ -496,11 +496,7 @@ func validatePageURL(pageURL *string) error {
 	if len(raw) > maxPageURLLength {
 		return fmt.Errorf("%w: page_url is too long", domain.ErrValidation)
 	}
-	u, err := url.Parse(raw)
-	if err != nil || u.Host == "" {
-		return fmt.Errorf("%w: page_url must be an absolute http(s) url", domain.ErrValidation)
-	}
-	if u.Scheme != "http" && u.Scheme != "https" {
+	if _, err := urlx.ParseHTTP(raw); err != nil {
 		return fmt.Errorf("%w: page_url must be an absolute http(s) url", domain.ErrValidation)
 	}
 	return nil

@@ -5,12 +5,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
-	"net/url"
-	"strconv"
 	"strings"
 
 	"furtalk/internal/domain"
+	"furtalk/internal/platform/urlx"
 	"furtalk/internal/repository"
 )
 
@@ -95,7 +93,7 @@ func (s *Service) Update(ctx context.Context, id int64, patch SiteUpdate) (*doma
 		}
 	}
 	if patch.CanonicalURL != nil {
-		canonical, err := normalizeURL(*patch.CanonicalURL)
+		canonical, err := urlx.CanonicalOrigin(*patch.CanonicalURL)
 		if err != nil {
 			return nil, fmt.Errorf("%w: invalid canonical url", domain.ErrValidation)
 		}
@@ -124,7 +122,7 @@ func (s *Service) AddOrigin(ctx context.Context, siteID int64, origin string) (*
 	if _, err := s.sites.Get(ctx, siteID); err != nil {
 		return nil, err
 	}
-	normalized, err := normalizeURL(origin)
+	normalized, err := urlx.CanonicalOrigin(origin)
 	if err != nil {
 		return nil, fmt.Errorf("%w: invalid origin", domain.ErrValidation)
 	}
@@ -141,7 +139,7 @@ func (s *Service) AddOrigin(ctx context.Context, siteID int64, origin string) (*
 // UpdateOrigin 按 site 与 origin ID 更新 origin 值并返回更新后的记录；
 // 记录不存在返回 domain.ErrNotFound，重复值返回 domain.ErrConflict。
 func (s *Service) UpdateOrigin(ctx context.Context, siteID, originID int64, origin string) (*domain.Origin, error) {
-	normalized, err := normalizeURL(origin)
+	normalized, err := urlx.CanonicalOrigin(origin)
 	if err != nil {
 		return nil, fmt.Errorf("%w: invalid origin", domain.ErrValidation)
 	}
@@ -171,83 +169,9 @@ func normalizeSiteInput(name, canonicalURL string) (string, string, error) {
 	if name == "" {
 		return "", "", fmt.Errorf("%w: site name is required", domain.ErrValidation)
 	}
-	canonical, err := normalizeURL(canonicalURL)
+	canonical, err := urlx.CanonicalOrigin(canonicalURL)
 	if err != nil {
 		return "", "", fmt.Errorf("%w: invalid canonical url", domain.ErrValidation)
 	}
 	return name, canonical, nil
-}
-
-// normalizeURL 规范化精确 origin 或 canonical URL。
-func normalizeURL(input string) (string, error) {
-	trimmed := strings.TrimSpace(input)
-	if trimmed == "" || trimmed == "null" {
-		return "", domain.ErrValidation
-	}
-	if strings.ContainsAny(trimmed, " \t\r\n,") {
-		return "", domain.ErrValidation
-	}
-	if strings.Contains(trimmed, "*") {
-		return "", domain.ErrValidation
-	}
-	u, err := url.Parse(trimmed)
-	if err != nil {
-		return "", domain.ErrValidation
-	}
-	if u.Scheme != "https" && u.Scheme != "http" {
-		return "", domain.ErrValidation
-	}
-	if u.Host == "" {
-		return "", domain.ErrValidation
-	}
-	if u.User != nil {
-		return "", domain.ErrValidation
-	}
-	if u.Path != "" {
-		return "", domain.ErrValidation
-	}
-	if u.RawQuery != "" || u.Fragment != "" {
-		return "", domain.ErrValidation
-	}
-	if strings.Contains(u.Host, "*") {
-		return "", domain.ErrValidation
-	}
-	host, port, splitErr := net.SplitHostPort(u.Host)
-	if splitErr != nil {
-		host = u.Host
-		port = ""
-	}
-	host = strings.ToLower(host)
-	if host == "" {
-		return "", domain.ErrValidation
-	}
-	if u.Scheme == "http" && !isLocalhost(host) {
-		return "", domain.ErrValidation
-	}
-	switch port {
-	case "":
-	case "443":
-		if u.Scheme != "https" {
-			return "", domain.ErrValidation
-		}
-		port = ""
-	case "80":
-		if u.Scheme != "http" {
-			return "", domain.ErrValidation
-		}
-		port = ""
-	default:
-		portNum, err := strconv.Atoi(port)
-		if err != nil || portNum < 1 || portNum > 65535 {
-			return "", domain.ErrValidation
-		}
-	}
-	if port == "" {
-		return u.Scheme + "://" + host, nil
-	}
-	return u.Scheme + "://" + net.JoinHostPort(host, port), nil
-}
-
-func isLocalhost(host string) bool {
-	return host == "localhost" || host == "127.0.0.1" || host == "::1"
 }

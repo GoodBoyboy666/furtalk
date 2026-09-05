@@ -5,11 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 	"sync"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
+
+	"furtalk/internal/platform/urlx"
 )
 
 // Mastodon 授权请求所需的固定 scopes：
@@ -46,14 +47,20 @@ type mastodonProvider struct {
 }
 
 func newMastodonProvider(cfg Config, client *http.Client) (*mastodonProvider, error) {
-	if strings.TrimSpace(cfg.InstanceURL) == "" {
+	if cfg.InstanceURL == "" {
 		return nil, fmt.Errorf("%w: mastodon instance url is required", ErrUnsupported)
+	}
+	// ProviderService enforces HTTPS for persisted instances; retain HTTP here
+	// for injected httptest/local transports used by the adapter tests.
+	instance, err := urlx.ParseHTTPBase(cfg.InstanceURL)
+	if err != nil {
+		return nil, fmt.Errorf("%w: mastodon instance url is invalid", ErrUnsupported)
 	}
 	return &mastodonProvider{
 		key:          cfg.ProviderKey,
 		clientID:     cfg.ClientID,
 		clientSecret: cfg.ClientSecret,
-		instanceURL:  strings.TrimRight(cfg.InstanceURL, "/"),
+		instanceURL:  instance.String(),
 		httpClient:   client,
 	}, nil
 }
@@ -81,7 +88,11 @@ func (p *mastodonProvider) discovery(ctx context.Context) (*mastodonDiscovery, e
 	if p.disco != nil {
 		return p.disco, nil
 	}
-	endpoint := p.instanceURL + "/.well-known/oauth-authorization-server"
+	instance, err := urlx.ParseHTTPBase(p.instanceURL)
+	if err != nil {
+		return nil, err
+	}
+	endpoint := urlx.JoinPathSegments(instance, ".well-known", "oauth-authorization-server").String()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return nil, err
@@ -219,7 +230,11 @@ func (p *mastodonProvider) fetchUserInfoSubject(ctx context.Context, userInfoURL
 // fetchVerifyCredentialsSubject 用 Bearer token 请求 4.3 verify_credentials 端点，
 // 返回 (issuer, Account ID) 的作用域化编码 subject。
 func (p *mastodonProvider) fetchVerifyCredentialsSubject(ctx context.Context, issuer string, token *oauth2.Token) (string, error) {
-	endpoint := p.instanceURL + "/api/v1/accounts/verify_credentials"
+	instance, err := urlx.ParseHTTPBase(p.instanceURL)
+	if err != nil {
+		return "", err
+	}
+	endpoint := urlx.JoinPathSegments(instance, "api", "v1", "accounts", "verify_credentials").String()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return "", err

@@ -6,8 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"net/mail"
-	"net/url"
 	"strings"
+
+	"furtalk/internal/platform/urlx"
 )
 
 // ErrInvalid 输入值不符合规范。
@@ -25,8 +26,8 @@ func NormalizeEmail(raw string) (string, string, error) {
 
 // NormalizeWebsite 校验并格式化个人网站 URL，只允许 http 与 https。
 func NormalizeWebsite(raw string) (string, error) {
-	u, err := url.Parse(strings.TrimSpace(raw))
-	if err != nil || u.Host == "" {
+	u, err := urlx.ParseHTTP(raw)
+	if err != nil {
 		return "", fmt.Errorf("%w: invalid website url", ErrInvalid)
 	}
 	if u.Scheme != "https" && u.Scheme != "http" {
