@@ -9,7 +9,6 @@ import (
 	"furtalk/internal/platform/database"
 	"furtalk/internal/platform/eventbus"
 	"furtalk/internal/platform/mailer"
-	"furtalk/internal/platform/onetime"
 	"furtalk/internal/platform/passkey"
 	"furtalk/internal/platform/ratelimit"
 	"furtalk/internal/service/identity"
@@ -24,7 +23,6 @@ func platformModule() fx.Option {
 	return fx.Provide(
 		newDatabase,
 		newCacheStore,
-		newOneTimeStore,
 		newRateLimiter,
 		newFlowAdmission,
 		newEventBus,
@@ -43,12 +41,6 @@ func newDatabase(cfg database.Config) (*gorm.DB, error) {
 // newCacheStore 根据配置构建内存或 Redis 缓存；Redis 启动 PING 失败即中止。
 func newCacheStore(cfg cache.Config, logger *slog.Logger) (cache.Store, error) {
 	return cache.NewStore(cfg, logger)
-}
-
-// newOneTimeStore adapts the shared cache backend to the atomic temporary
-// secret capability. It does not create or own another backend connection.
-func newOneTimeStore(store cache.Store) (*onetime.Store, error) {
-	return onetime.New(store)
 }
 
 // newRateLimiter 从限流配置构建令牌桶限流器。

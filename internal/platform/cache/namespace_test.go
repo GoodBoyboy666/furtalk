@@ -1,12 +1,68 @@
 package cache
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"sync"
 	"testing"
 	"time"
 )
+
+func TestNamespaceMemoryExactJSONCapabilities(t *testing.T) {
+	ctx := context.Background()
+	store := NewMemory(10)
+	ns := NewNamespace(store, "email", "email:", 1)
+	if err := ns.Set(ctx, "one", "old", time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	expires := store.items["email:one"].expires
+	raw, err := ns.GetRawJSON(ctx, "one")
+	if err != nil || !bytes.Equal(raw, json.RawMessage(`"old"`)) {
+		t.Fatalf("raw = %s, %v; want exact JSON", raw, err)
+	}
+	raw[0] = 'x'
+	unchanged, err := ns.GetRawJSON(ctx, "one")
+	if err != nil || !bytes.Equal(unchanged, json.RawMessage(`"old"`)) {
+		t.Fatalf("stored raw changed after caller mutation = %s, %v", unchanged, err)
+	}
+
+	if ok, err := ns.CompareAndSwapJSON(ctx, "one", json.RawMessage(`"wrong"`), json.RawMessage(`"new"`)); err != nil || ok {
+		t.Fatalf("stale swap = %v, %v; want false, nil", ok, err)
+	}
+	if ok, err := ns.CompareAndSwapJSON(ctx, "one", json.RawMessage(`"old"`), json.RawMessage(`"new"`)); err != nil || !ok {
+		t.Fatalf("matching swap = %v, %v; want true, nil", ok, err)
+	}
+	if got := store.items["email:one"].expires; !got.Equal(expires) {
+		t.Fatalf("swap expiry = %v, want unchanged %v", got, expires)
+	}
+	if ok, err := ns.CompareAndDeleteJSON(ctx, "one", json.RawMessage(`"old"`)); err != nil || ok {
+		t.Fatalf("stale delete = %v, %v; want false, nil", ok, err)
+	}
+	if ok, err := ns.CompareAndDeleteJSON(ctx, "one", json.RawMessage(`"new"`)); err != nil || !ok {
+		t.Fatalf("matching delete = %v, %v; want true, nil", ok, err)
+	}
+	if err := ns.Set(ctx, "two", "available", time.Minute); err != nil {
+		t.Fatalf("slot after compare-delete = %v", err)
+	}
+}
+
+func TestNamespaceMemoryRawReadCleansMissingMembership(t *testing.T) {
+	ctx := context.Background()
+	store := NewMemory(10)
+	ns := NewNamespace(store, "email", "email:", 1)
+	if err := ns.Set(ctx, "one", "old", time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	delete(store.items, "email:one")
+	if _, err := ns.GetRawJSON(ctx, "one"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("missing raw = %v, want ErrNotFound", err)
+	}
+	if err := ns.Set(ctx, "two", "available", time.Minute); err != nil {
+		t.Fatalf("slot after missing raw cleanup = %v", err)
+	}
+}
 
 func TestNamespaceMemoryHardLimitAndIsolation(t *testing.T) {
 	ctx := context.Background()
@@ -155,12 +211,24 @@ func (s *namespaceTestStore) Get(ctx context.Context, key string, out any) error
 	return s.memory.Get(ctx, key, out)
 }
 
+func (s *namespaceTestStore) GetRawJSON(ctx context.Context, key string) (json.RawMessage, error) {
+	return s.memory.GetRawJSON(ctx, key)
+}
+
 func (s *namespaceTestStore) Set(ctx context.Context, key string, value any, ttl time.Duration) error {
 	return s.memory.Set(ctx, key, value, ttl)
 }
 
 func (s *namespaceTestStore) Delete(ctx context.Context, key string) error {
 	return s.memory.Delete(ctx, key)
+}
+
+func (s *namespaceTestStore) CompareAndSwapJSON(ctx context.Context, key string, expected, replacement json.RawMessage) (bool, error) {
+	return s.memory.CompareAndSwapJSON(ctx, key, expected, replacement)
+}
+
+func (s *namespaceTestStore) CompareAndDeleteJSON(ctx context.Context, key string, expected json.RawMessage) (bool, error) {
+	return s.memory.CompareAndDeleteJSON(ctx, key, expected)
 }
 
 func (s *namespaceTestStore) AtomicConsume(ctx context.Context, key string) (string, error) {

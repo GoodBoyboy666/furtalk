@@ -10,7 +10,6 @@ import (
 	"furtalk/internal/platform/eventbus"
 	"furtalk/internal/platform/mailer"
 	"furtalk/internal/platform/notifier"
-	"furtalk/internal/platform/onetime"
 	"furtalk/internal/platform/passkey"
 	"furtalk/internal/platform/ratelimit"
 	"furtalk/internal/service/bootstrap"
@@ -71,7 +70,6 @@ func newServices(
 	smtpConfig mailer.SMTPConfig,
 	repos *repositories,
 	store cache.Store,
-	oneTime *onetime.Store,
 	bus *eventbus.Bus[domain.CommentEvent],
 	logger *slog.Logger,
 	fatal *fatalCoordinator,
@@ -99,6 +97,10 @@ func newServices(
 	smtpService := setting.NewSMTPProbe(smtpConfig)
 
 	captchaGateway := servicecaptcha.NewGateway(captchaProviderReader{svc: providerService})
+	emailCodes, err := identity.NewEmailCodeStore(store)
+	if err != nil {
+		return nil, err
+	}
 
 	identityService := identity.NewService(identity.Dependencies{
 		TxRunner:       repos.txRunner,
@@ -107,7 +109,7 @@ func newServices(
 		Identities:     repos.identities,
 		Prefs:          repos.prefs,
 		Cache:          store,
-		OneTime:        oneTime,
+		EmailCodes:     emailCodes,
 		Policy:         policyReader{svc: settingsService},
 		CaptchaPolicy:  captchaPolicyReader{svc: settingsService},
 		Captcha:        captchaGateway,

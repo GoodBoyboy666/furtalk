@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -20,9 +21,12 @@ var ErrInvalidNamespaceTTL = errors.New("cache: namespace ttl must be positive")
 
 type namespaceBackend interface {
 	namespaceGet(context.Context, string, string, string, any) error
+	namespaceGetRawJSON(context.Context, string, string, string) (json.RawMessage, error)
 	namespaceSet(context.Context, string, string, string, any, time.Duration, int) error
 	namespaceDelete(context.Context, string, string, string) error
 	namespaceConsume(context.Context, string, string, string) (string, error)
+	namespaceCompareAndSwapJSON(context.Context, string, string, string, json.RawMessage, json.RawMessage) (bool, error)
+	namespaceCompareAndDeleteJSON(context.Context, string, string, string, json.RawMessage) (bool, error)
 }
 
 // Namespace 一个有容量有限的键Namespace。
@@ -121,6 +125,31 @@ func (n *Namespace) Get(ctx context.Context, suffix string, out any) error {
 	return err
 }
 
+// GetRawJSON returns an owned copy of the exact JSON payload under suffix.
+// Unlike Get, it does not decode or validate the payload.
+func (n *Namespace) GetRawJSON(ctx context.Context, suffix string) (json.RawMessage, error) {
+	if err := n.valid(); err != nil {
+		return nil, err
+	}
+	if n.backend != nil {
+		return n.backend.namespaceGetRawJSON(ctx, n.name, n.prefix, suffix)
+	}
+	reader, ok := n.store.(RawJSONReader)
+	if !ok {
+		return nil, errors.New("cache: namespace backend lacks raw JSON capability")
+	}
+	raw, err := reader.GetRawJSON(ctx, n.key(suffix))
+	if errors.Is(err, ErrNotFound) {
+		n.mu.Lock()
+		delete(n.members, n.key(suffix))
+		n.mu.Unlock()
+	}
+	if err != nil {
+		return nil, err
+	}
+	return bytes.Clone(raw), nil
+}
+
 // Set 在Namespace中写入一个值，Namespace已满时返回 ErrCapacity。
 // 覆盖仍然存活的已有键时沿用原来的名额，不会额外占位。
 func (n *Namespace) Set(ctx context.Context, suffix string, value any, ttl time.Duration) error {
@@ -152,6 +181,44 @@ func (n *Namespace) Delete(ctx context.Context, suffix string) error {
 		n.mu.Unlock()
 	}
 	return err
+}
+
+// CompareAndSwapJSON atomically replaces a namespace value when its exact JSON
+// payload matches expected. The existing expiry and quota slot are retained.
+func (n *Namespace) CompareAndSwapJSON(ctx context.Context, suffix string, expected, replacement json.RawMessage) (bool, error) {
+	if err := n.valid(); err != nil {
+		return false, err
+	}
+	if n.backend != nil {
+		return n.backend.namespaceCompareAndSwapJSON(ctx, n.name, n.prefix, suffix, expected, replacement)
+	}
+	comparer, ok := n.store.(AtomicJSONComparer)
+	if !ok {
+		return false, errors.New("cache: namespace backend lacks atomic JSON capability")
+	}
+	return comparer.CompareAndSwapJSON(ctx, n.key(suffix), expected, replacement)
+}
+
+// CompareAndDeleteJSON atomically deletes a namespace value when its exact JSON
+// payload matches expected and releases its quota slot.
+func (n *Namespace) CompareAndDeleteJSON(ctx context.Context, suffix string, expected json.RawMessage) (bool, error) {
+	if err := n.valid(); err != nil {
+		return false, err
+	}
+	if n.backend != nil {
+		return n.backend.namespaceCompareAndDeleteJSON(ctx, n.name, n.prefix, suffix, expected)
+	}
+	comparer, ok := n.store.(AtomicJSONComparer)
+	if !ok {
+		return false, errors.New("cache: namespace backend lacks atomic JSON capability")
+	}
+	ok, err := comparer.CompareAndDeleteJSON(ctx, n.key(suffix), expected)
+	if ok {
+		n.mu.Lock()
+		delete(n.members, n.key(suffix))
+		n.mu.Unlock()
+	}
+	return ok, err
 }
 
 // AtomicConsume 原子读取并删除Namespace内的值。
@@ -219,6 +286,27 @@ func (s *Memory) namespaceGet(_ context.Context, name, prefix, suffix string, ou
 		return ErrNotFound
 	}
 	return json.Unmarshal(item.data, out)
+}
+
+func (s *Memory) namespaceGetRawJSON(ctx context.Context, name, prefix, suffix string) (json.RawMessage, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	key := prefix + suffix
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	item, ok := s.items[key]
+	if !ok || !s.now().Before(item.expires) {
+		if ok {
+			delete(s.items, key)
+			s.removeNamespaceMembershipLocked(key)
+		}
+		return nil, ErrNotFound
+	}
+	return bytes.Clone(item.data), nil
 }
 
 // namespaceSet 实现 memory 后端的原子准入与写入。
@@ -325,6 +413,65 @@ func (s *Memory) namespaceConsume(_ context.Context, name, prefix, suffix string
 	return value, nil
 }
 
+func (s *Memory) namespaceCompareAndSwapJSON(ctx context.Context, name, prefix, suffix string, expected, replacement json.RawMessage) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	if !json.Valid(replacement) {
+		return false, errors.New("cache: replacement is not valid JSON")
+	}
+	key := prefix + suffix
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	item, ok := s.items[key]
+	if !ok || !s.now().Before(item.expires) {
+		if ok {
+			delete(s.items, key)
+			s.removeNamespaceMembershipLocked(key)
+		}
+		return false, nil
+	}
+	if !bytes.Equal(item.data, expected) {
+		return false, nil
+	}
+	s.items[key] = memoryItem{data: bytes.Clone(replacement), expires: item.expires}
+	return true, nil
+}
+
+func (s *Memory) namespaceCompareAndDeleteJSON(ctx context.Context, name, prefix, suffix string, expected json.RawMessage) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	key := prefix + suffix
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	item, ok := s.items[key]
+	if !ok || !s.now().Before(item.expires) {
+		if ok {
+			delete(s.items, key)
+			s.removeNamespaceMembershipLocked(key)
+		}
+		return false, nil
+	}
+	if !bytes.Equal(item.data, expected) {
+		return false, nil
+	}
+	delete(s.items, key)
+	if members := s.namespaces[name]; members != nil {
+		delete(members, key)
+		if len(members) == 0 {
+			delete(s.namespaces, name)
+		}
+	}
+	return true, nil
+}
+
 func (s *Memory) removeNamespaceMembershipLocked(key string) {
 	for name, members := range s.namespaces {
 		delete(members, key)
@@ -351,6 +498,17 @@ func (s *Redis) namespaceGet(ctx context.Context, name, prefix, suffix string, o
 		return err
 	}
 	return nil
+}
+
+func (s *Redis) namespaceGetRawJSON(ctx context.Context, name, prefix, suffix string) (json.RawMessage, error) {
+	value, err := namespaceGetScript.Run(ctx, s.client, []string{prefix + suffix, namespaceQuotaKey(name)}).Text()
+	if errors.Is(err, redis.Nil) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("cache: redis namespace get raw: %w", err)
+	}
+	return bytes.Clone([]byte(value)), nil
 }
 
 func (s *Redis) namespaceSet(ctx context.Context, name, prefix, suffix string, value any, ttl time.Duration, limit int) error {
@@ -394,6 +552,27 @@ func (s *Redis) namespaceConsume(ctx context.Context, name, prefix, suffix strin
 	return decoded, nil
 }
 
+func (s *Redis) namespaceCompareAndSwapJSON(ctx context.Context, name, prefix, suffix string, expected, replacement json.RawMessage) (bool, error) {
+	if !json.Valid(replacement) {
+		return false, errors.New("cache: replacement is not valid JSON")
+	}
+	result, err := namespaceCompareAndSwapJSONScript.Run(ctx, s.client,
+		[]string{prefix + suffix, namespaceQuotaKey(name)}, []byte(expected), []byte(replacement)).Int()
+	if err != nil {
+		return false, fmt.Errorf("cache: redis namespace compare-and-swap json: %w", err)
+	}
+	return result == 1, nil
+}
+
+func (s *Redis) namespaceCompareAndDeleteJSON(ctx context.Context, name, prefix, suffix string, expected json.RawMessage) (bool, error) {
+	result, err := namespaceCompareAndDeleteJSONScript.Run(ctx, s.client,
+		[]string{prefix + suffix, namespaceQuotaKey(name)}, []byte(expected)).Int()
+	if err != nil {
+		return false, fmt.Errorf("cache: redis namespace compare-and-delete json: %w", err)
+	}
+	return result == 1, nil
+}
+
 // Redis 脚本把配额成员维护与记录变更放在同一个原子操作中完成。过期成员按 score 清理，请求路径上不会使用 KEYS/SCAN。
 var namespaceSetScript = redis.NewScript(`
 local nowParts = redis.call("TIME")
@@ -435,4 +614,37 @@ if value then
   redis.call("ZREM", KEYS[2], KEYS[1])
 end
 return value
+`)
+
+var namespaceCompareAndSwapJSONScript = redis.NewScript(`
+local value = redis.call("GET", KEYS[1])
+if not value then
+  redis.call("ZREM", KEYS[2], KEYS[1])
+  return 0
+end
+if value ~= ARGV[1] then
+  return 0
+end
+local pttl = redis.call("PTTL", KEYS[1])
+if pttl <= 0 then
+  redis.call("DEL", KEYS[1])
+  redis.call("ZREM", KEYS[2], KEYS[1])
+  return 0
+end
+redis.call("SET", KEYS[1], ARGV[2], "PX", pttl)
+return 1
+`)
+
+var namespaceCompareAndDeleteJSONScript = redis.NewScript(`
+local value = redis.call("GET", KEYS[1])
+if not value then
+  redis.call("ZREM", KEYS[2], KEYS[1])
+  return 0
+end
+if value ~= ARGV[1] then
+  return 0
+end
+redis.call("DEL", KEYS[1])
+redis.call("ZREM", KEYS[2], KEYS[1])
+return 1
 `)

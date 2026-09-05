@@ -14,10 +14,21 @@ import (
 )
 
 var (
-	// ErrAtomicUnsupported indicates that the supplied backend cannot provide
-	// the linearizable compare-and-swap operations required by this store.
+	// ErrAtomicUnsupported indicates that one-time storage was constructed
+	// without the required narrow atomic backend.
 	ErrAtomicUnsupported = errors.New("onetime: backend lacks atomic JSON comparison")
 )
+
+// Backend is the narrow storage contract required by Store. It intentionally
+// excludes unrelated cache operations so a namespaced backend cannot be
+// accidentally bypassed through a broad shared-store interface.
+type Backend interface {
+	Set(context.Context, string, any, time.Duration) error
+	Delete(context.Context, string) error
+	GetRawJSON(context.Context, string) (json.RawMessage, error)
+	CompareAndSwapJSON(context.Context, string, json.RawMessage, json.RawMessage) (bool, error)
+	CompareAndDeleteJSON(context.Context, string, json.RawMessage) (bool, error)
+}
 
 // VerifyResult describes the result of a verification attempt.
 type VerifyResult uint8
@@ -42,23 +53,17 @@ type record struct {
 // Store manages expiring, limited-attempt secrets on top of one cache backend.
 // It does not own the backend's lifecycle or create another client/pool.
 type Store struct {
-	backend cache.Store
-	atomic  cache.AtomicJSONComparer
+	backend Backend
 	now     func() time.Time
 }
 
-// New constructs a Store over an existing cache backend. The backend must
-// expose the optional atomic JSON capability; there is intentionally no
-// read-modify-write fallback.
-func New(backend cache.Store) (*Store, error) {
+// New constructs a Store over an existing narrow backend. There is
+// intentionally no read-modify-write fallback.
+func New(backend Backend) (*Store, error) {
 	if backend == nil {
 		return nil, ErrAtomicUnsupported
 	}
-	atomic, ok := backend.(cache.AtomicJSONComparer)
-	if !ok {
-		return nil, ErrAtomicUnsupported
-	}
-	return &Store{backend: backend, atomic: atomic, now: time.Now}, nil
+	return &Store{backend: backend, now: time.Now}, nil
 }
 
 // Issue stores or replaces a secret. The digest is opaque to this package;
@@ -99,7 +104,7 @@ func (s *Store) VerifyAndConsume(ctx context.Context, key, submittedDigest strin
 
 		var current record
 		if err := json.Unmarshal(raw, &current); err != nil || !validRecord(current) {
-			ok, casErr := s.atomic.CompareAndDeleteJSON(ctx, key, raw)
+			ok, casErr := s.backend.CompareAndDeleteJSON(ctx, key, raw)
 			if casErr != nil {
 				return Invalid, casErr
 			}
@@ -110,7 +115,7 @@ func (s *Store) VerifyAndConsume(ctx context.Context, key, submittedDigest strin
 		}
 
 		if !s.now().Before(current.ExpiresAt) || current.Attempts >= maxAttempts {
-			ok, casErr := s.atomic.CompareAndDeleteJSON(ctx, key, raw)
+			ok, casErr := s.backend.CompareAndDeleteJSON(ctx, key, raw)
 			if casErr != nil {
 				return Invalid, casErr
 			}
@@ -121,7 +126,7 @@ func (s *Store) VerifyAndConsume(ctx context.Context, key, submittedDigest strin
 		}
 
 		if subtle.ConstantTimeCompare([]byte(current.Hash), []byte(submittedDigest)) == 1 {
-			ok, casErr := s.atomic.CompareAndDeleteJSON(ctx, key, raw)
+			ok, casErr := s.backend.CompareAndDeleteJSON(ctx, key, raw)
 			if casErr != nil {
 				return Invalid, casErr
 			}
@@ -133,7 +138,7 @@ func (s *Store) VerifyAndConsume(ctx context.Context, key, submittedDigest strin
 
 		current.Attempts++
 		if current.Attempts >= maxAttempts {
-			ok, casErr := s.atomic.CompareAndDeleteJSON(ctx, key, raw)
+			ok, casErr := s.backend.CompareAndDeleteJSON(ctx, key, raw)
 			if casErr != nil {
 				return Invalid, casErr
 			}
@@ -146,7 +151,7 @@ func (s *Store) VerifyAndConsume(ctx context.Context, key, submittedDigest strin
 		if marshalErr != nil {
 			return Invalid, fmt.Errorf("onetime: encode record: %w", marshalErr)
 		}
-		ok, casErr := s.atomic.CompareAndSwapJSON(ctx, key, raw, replacement)
+		ok, casErr := s.backend.CompareAndSwapJSON(ctx, key, raw, replacement)
 		if casErr != nil {
 			return Invalid, casErr
 		}
@@ -157,14 +162,7 @@ func (s *Store) VerifyAndConsume(ctx context.Context, key, submittedDigest strin
 }
 
 func (s *Store) getRaw(ctx context.Context, key string) (json.RawMessage, error) {
-	if reader, ok := s.backend.(cache.RawJSONReader); ok {
-		return reader.GetRawJSON(ctx, key)
-	}
-	var raw json.RawMessage
-	if err := s.backend.Get(ctx, key, &raw); err != nil {
-		return nil, err
-	}
-	return raw, nil
+	return s.backend.GetRawJSON(ctx, key)
 }
 
 func validRecord(value record) bool {

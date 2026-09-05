@@ -70,7 +70,7 @@ func seedResetUser(t *testing.T, svc *Service, email string, verifiedAt *time.Ti
 }
 
 // seedResetCode 直接向缓存写入一条密码重置验证码记录。
-func seedResetCode(t *testing.T, ctx context.Context, store cache.Store, email, code string) {
+func seedResetCode(t *testing.T, ctx context.Context, store onetime.Backend, email, code string) {
 	t.Helper()
 	oneTime, err := onetime.New(store)
 	if err != nil {

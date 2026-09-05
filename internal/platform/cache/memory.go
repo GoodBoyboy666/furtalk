@@ -20,7 +20,6 @@ type memoryItem struct {
 }
 
 // Memory 进程内的有限 TTL 存储，可安全并发使用，并惰性淘汰过期条目。
-// 存活条目数达到上限时先淘汰过期条目；没有可淘汰的过期条目时， 用 ErrCapacity 拒绝新写入。
 type Memory struct {
 	mu         sync.Mutex
 	items      map[string]memoryItem
@@ -30,7 +29,7 @@ type Memory struct {
 	namespaces map[string]map[string]time.Time
 }
 
-// NewMemory 构建一个有限内存存储。limit <= 0 时使用默认值。
+// NewMemory 构建一个有限内存存储。
 func NewMemory(limit int) *Memory {
 	if limit <= 0 {
 		limit = DefaultMemoryLimit
@@ -79,7 +78,7 @@ func (s *Memory) GetRawJSON(ctx context.Context, key string) (json.RawMessage, e
 		}
 		return nil, ErrNotFound
 	}
-	return append(json.RawMessage(nil), item.data...), nil
+	return bytes.Clone(item.data), nil
 }
 
 // Set 将 value 序列化后以 ttl 存储到 key 下。
@@ -93,10 +92,13 @@ func (s *Memory) Set(ctx context.Context, key string, value any, ttl time.Durati
 	defer s.mu.Unlock()
 	now := s.now()
 	if _, exists := s.items[key]; !exists && len(s.items) >= s.limit {
+		// 新增条目但容量已满时先尝试清理过期条目
 		s.evictExpired(now)
-	}
-	if _, exists := s.items[key]; !exists && len(s.items) >= s.limit {
-		return ErrCapacity
+
+		// 清理后仍满则返回 ErrCapacity
+		if len(s.items) >= s.limit {
+			return ErrCapacity
+		}
 	}
 	s.items[key] = memoryItem{data: data, expires: now.Add(ttl)}
 	return nil
@@ -206,7 +208,7 @@ func (s *Memory) CompareAndDeleteJSON(ctx context.Context, key string, expected 
 var _ AtomicJSONComparer = (*Memory)(nil)
 var _ RawJSONReader = (*Memory)(nil)
 
-// GetOrLoad 从存储中获取 key，未命中时执行 load() 并存储结果。
+// GetOrLoad 从存储中获取 key，未命中时执行 load()获得数据并存储结果。
 func (s *Memory) GetOrLoad(ctx context.Context, key string, out any, ttl time.Duration, load func() (any, error)) error {
 	err := s.Get(ctx, key, out)
 	if err == nil {

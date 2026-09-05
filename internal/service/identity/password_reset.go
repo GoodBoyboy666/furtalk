@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"furtalk/internal/domain"
+	"furtalk/internal/platform/cache"
 	"furtalk/internal/platform/crypto"
 	"furtalk/internal/platform/logging"
 	"furtalk/internal/platform/mailer"
@@ -40,6 +41,10 @@ func (s *Service) RequestPasswordReset(ctx context.Context, rawEmail, captchaTok
 		return err
 	}
 	if err := s.emailCodes.SetEmailCode(ctx, passwordResetPurpose, normalized, cryptox.SHA256Hex([]byte(code)), passwordResetCodeTTL); err != nil {
+		if errors.Is(err, cache.ErrCapacity) {
+			s.logEphemeralCapacity(ctx, passwordResetNamespace)
+			return nil
+		}
 		return err
 	}
 	msg, err := renderPasswordResetMessage(s.templates, normalized, code, passwordResetCodeTTL)

@@ -21,21 +21,31 @@ import (
 // logs only the fixed namespace name. Cache records and keys are never logged.
 func (s *Service) mapEphemeralError(ctx context.Context, namespace string, err error) error {
 	if errors.Is(err, cache.ErrCapacity) {
-		logging.FromContext(ctx, s.log).WarnContext(ctx, "ephemeral namespace capacity exhausted", "namespace", namespace)
+		s.logEphemeralCapacity(ctx, namespace)
 		return domain.ErrUnavailable
 	}
 	return err
 }
 
+func (s *Service) logEphemeralCapacity(ctx context.Context, namespace string) {
+	logging.FromContext(ctx, s.log).WarnContext(ctx, "ephemeral namespace capacity exhausted", "namespace", namespace)
+}
+
 // 邮箱验证码与密码策略的进程常量。
 const (
-	emailCodeTTL         = 5 * time.Minute
-	emailCodeMaxAttempts = 3
-	emailCodeLength      = 6
-	minPasswordLength    = 8
-	emailCodePurpose     = "login"
+	emailCodeTTL            = 5 * time.Minute
+	emailCodeMaxAttempts    = 3
+	emailCodeLength         = 6
+	minPasswordLength       = 8
+	emailCodePurpose        = "login"
+	emailCodeLoginNamespace = "email_code_login"
+	emailCodeLoginPrefix    = "email-code:login:"
+	emailCodeLoginLimit     = 2000
 	// passwordResetPurpose 密码重置验证码的用途键，与登录验证码隔离。
-	passwordResetPurpose = "password_reset"
+	passwordResetPurpose   = "password_reset"
+	passwordResetNamespace = "password_reset_code"
+	passwordResetPrefix    = "email-code:password_reset:"
+	passwordResetLimit     = 500
 	// passwordResetCodeTTL 密码重置验证码的有效期。
 	passwordResetCodeTTL = 10 * time.Minute
 	// passwordResetMaxAttempts 密码重置验证码允许的最大失败次数。
@@ -94,7 +104,7 @@ type Dependencies struct {
 	Identities     *repository.ExternalIdentityRepo
 	Prefs          *repository.PreferenceRepo
 	Cache          cache.Store
-	OneTime        *onetime.Store
+	EmailCodes     EmailCodeStore
 	Policy         PolicyReader
 	CaptchaPolicy  CaptchaPolicyReader
 	Captcha        CaptchaVerifier
@@ -123,11 +133,15 @@ func NewService(deps Dependencies) *Service {
 	if deps.FailFast == nil {
 		deps.FailFast = func(error) {}
 	}
-	oneTime := deps.OneTime
-	if oneTime == nil && deps.Cache != nil {
-		// Directly constructed services in focused tests may only provide the
-		// existing cache backend; production wiring supplies the shared wrapper.
-		oneTime, _ = onetime.New(deps.Cache)
+	emailCodes := deps.EmailCodes
+	if emailCodes == nil {
+		// Focused tests may intentionally provide only a narrow cache fake.
+		// Production wiring supplies the bounded adapter from the composition root.
+		if _, ok := deps.Cache.(onetime.Backend); ok {
+			emailCodes, _ = NewEmailCodeStore(deps.Cache)
+		} else {
+			emailCodes = cacheEmailCodeStore{store: deps.Cache}
+		}
 	}
 	return &Service{
 		txRunner:       deps.TxRunner,
@@ -135,7 +149,7 @@ func NewService(deps Dependencies) *Service {
 		passkeys:       deps.Passkeys,
 		identities:     deps.Identities,
 		prefs:          deps.Prefs,
-		emailCodes:     cacheEmailCodeStore{store: deps.Cache, onetime: oneTime},
+		emailCodes:     emailCodes,
 		passkeyStore:   cache.NewNamespace(deps.Cache, "passkey", passkeyKeyPrefix, 2000),
 		oauthState:     cache.NewNamespace(deps.Cache, "oauth_state", oauthStatePrefix, 2000),
 		oauthHandoff:   cache.NewNamespace(deps.Cache, "oauth_handoff", oauthHandoffPrefix, 500),

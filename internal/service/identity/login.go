@@ -34,8 +34,58 @@ type EmailCodeStore interface {
 
 // cacheEmailCodeStore 基于缓存存储实现带用途前缀的邮箱验证码存取。
 type cacheEmailCodeStore struct {
-	store   cache.Store
-	onetime *onetime.Store
+	store         cache.Store
+	login         *onetime.Store
+	passwordReset *onetime.Store
+}
+
+// NewEmailCodeStore constructs the two bounded email-code stores over the
+// existing shared cache backend. It does not create or own another backend.
+func NewEmailCodeStore(store cache.Store) (EmailCodeStore, error) {
+	if _, ok := store.(onetime.Backend); !ok {
+		return nil, onetime.ErrAtomicUnsupported
+	}
+	loginNamespace, err := cache.NewNamespaceChecked(store, emailCodeLoginNamespace, emailCodeLoginPrefix, emailCodeLoginLimit)
+	if err != nil {
+		return nil, err
+	}
+	login, err := onetime.New(loginNamespace)
+	if err != nil {
+		return nil, err
+	}
+	resetNamespace, err := cache.NewNamespaceChecked(store, passwordResetNamespace, passwordResetPrefix, passwordResetLimit)
+	if err != nil {
+		return nil, err
+	}
+	passwordReset, err := onetime.New(resetNamespace)
+	if err != nil {
+		return nil, err
+	}
+	return cacheEmailCodeStore{store: store, login: login, passwordReset: passwordReset}, nil
+}
+
+func (a cacheEmailCodeStore) bounded() bool {
+	return a.login != nil || a.passwordReset != nil
+}
+
+func (a cacheEmailCodeStore) oneTimeFor(purpose string) (*onetime.Store, error) {
+	switch purpose {
+	case emailCodePurpose:
+		if a.login == nil && a.bounded() {
+			return nil, errors.New("identity: login email code store is not configured")
+		}
+		return a.login, nil
+	case passwordResetPurpose:
+		if a.passwordReset == nil && a.bounded() {
+			return nil, errors.New("identity: password reset code store is not configured")
+		}
+		return a.passwordReset, nil
+	default:
+		if a.bounded() {
+			return nil, fmt.Errorf("identity: unknown email code purpose %q", purpose)
+		}
+		return nil, nil
+	}
 }
 
 func emailCodeKey(purpose, normalizedEmail string) string {
@@ -44,35 +94,52 @@ func emailCodeKey(purpose, normalizedEmail string) string {
 
 // SetEmailCode issues or replaces an expiring one-time digest.
 func (a cacheEmailCodeStore) SetEmailCode(ctx context.Context, purpose, normalizedEmail, digest string, ttl time.Duration) error {
-	key := emailCodeKey(purpose, normalizedEmail)
-	if a.onetime != nil {
-		return a.onetime.Issue(ctx, key, digest, ttl)
+	oneTime, err := a.oneTimeFor(purpose)
+	if err != nil {
+		return err
 	}
+	if oneTime != nil {
+		return oneTime.Issue(ctx, normalizedEmail, digest, ttl)
+	}
+	key := emailCodeKey(purpose, normalizedEmail)
 	// Narrow test doubles may intentionally provide only the generic cache
 	// contract. They can exercise gates and mail rendering, but cannot verify.
+	if a.store == nil {
+		return errors.New("identity: email code store is not configured")
+	}
 	return a.store.Set(ctx, key, digest, ttl)
 }
 
 // DeleteEmailCode 从缓存删除邮箱验证码记录。
 func (a cacheEmailCodeStore) DeleteEmailCode(ctx context.Context, purpose, normalizedEmail string) error {
-	if a.onetime != nil {
-		return a.onetime.Delete(ctx, emailCodeKey(purpose, normalizedEmail))
+	oneTime, err := a.oneTimeFor(purpose)
+	if err != nil {
+		return err
+	}
+	if oneTime != nil {
+		return oneTime.Delete(ctx, normalizedEmail)
+	}
+	if a.store == nil {
+		return errors.New("identity: email code store is not configured")
 	}
 	return a.store.Delete(ctx, emailCodeKey(purpose, normalizedEmail))
 }
 
 // AtomicVerifyEmailCode 原子验证并消费邮箱验证码记录。
 func (a cacheEmailCodeStore) AtomicVerifyEmailCode(ctx context.Context, purpose, normalizedEmail, submittedHash string, maxAttempts int) (bool, error) {
-	if a.onetime == nil {
-		// A narrow business fake may support issuance/gates but not verification.
-		// Production composition rejects such a backend when constructing onetime.
-		return false, nil
-	}
-	result, err := a.onetime.VerifyAndConsume(ctx, emailCodeKey(purpose, normalizedEmail), submittedHash, maxAttempts)
+	oneTime, err := a.oneTimeFor(purpose)
 	if err != nil {
 		return false, err
 	}
-	return result == onetime.Consumed, nil
+	if oneTime != nil {
+		result, err := oneTime.VerifyAndConsume(ctx, normalizedEmail, submittedHash, maxAttempts)
+		if err != nil {
+			return false, err
+		}
+		return result == onetime.Consumed, nil
+	}
+	// A narrow test double may support issuance/gates but not verification.
+	return false, nil
 }
 
 // SendEmailCode 校验邮箱、执行 CAPTCHA 策略、保存验证码哈希并投递验证码邮件。
@@ -102,7 +169,7 @@ func (s *Service) SendEmailCode(ctx context.Context, rawEmail, captchaToken stri
 		return err
 	}
 	if err := s.emailCodes.SetEmailCode(ctx, emailCodePurpose, normalized, cryptox.SHA256Hex([]byte(code)), s.codeTTL); err != nil {
-		return err
+		return s.mapEphemeralError(ctx, emailCodeLoginNamespace, err)
 	}
 	msg, err := renderEmailCodeMessage(s.templates, normalized, code, s.codeTTL)
 	if err != nil {

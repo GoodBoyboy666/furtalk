@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -58,7 +59,7 @@ func (s *Redis) GetRawJSON(ctx context.Context, key string) (json.RawMessage, er
 	if err != nil {
 		return nil, fmt.Errorf("cache: redis get %q: %w", key, err)
 	}
-	return append(json.RawMessage(nil), data...), nil
+	return bytes.Clone(data), nil
 }
 
 // Set 将 value 序列化后以 ttl 存储到 key 下。
@@ -97,7 +98,7 @@ func (s *Redis) AtomicConsume(ctx context.Context, key string) (string, error) {
 	return decoded, nil
 }
 
-// GetOrLoad 在进程级 singleflight 下回填缺失的键。
+// GetOrLoad 在 singleflight 下回填缺失的键。
 func (s *Redis) GetOrLoad(ctx context.Context, key string, out any, ttl time.Duration, load func() (any, error)) error {
 	err := s.Get(ctx, key, out)
 	if err == nil {
