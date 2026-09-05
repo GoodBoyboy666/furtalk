@@ -42,6 +42,19 @@ func (s *Redis) Get(ctx context.Context, key string, out any) error {
 	return json.Unmarshal(data, out)
 }
 
+// GetRawJSON returns the exact JSON payload stored under key without decoding
+// it, allowing a higher-level protocol to handle malformed records safely.
+func (s *Redis) GetRawJSON(ctx context.Context, key string) (json.RawMessage, error) {
+	data, err := s.client.Get(ctx, key).Bytes()
+	if errors.Is(err, redis.Nil) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("cache: redis get %q: %w", key, err)
+	}
+	return append(json.RawMessage(nil), data...), nil
+}
+
 // Set 将 value 序列化后以 ttl 存储到 key 下。
 func (s *Redis) Set(ctx context.Context, key string, value any, ttl time.Duration) error {
 	data, err := json.Marshal(value)
@@ -121,52 +134,60 @@ end
 return value
 `)
 
-// emailCodeVerifyScript 在单个原子操作内验证邮箱验证码记录。
-// 过期由键自身 TTL 保证：键在脚本启动时存在即未过期。
-var emailCodeVerifyScript = redis.NewScript(`
+// compareAndSwapJSONScript compares the exact stored payload and replaces it
+// while preserving the key's remaining TTL. The script deliberately does not
+// decode JSON; payload semantics belong to the focused capability using it.
+var compareAndSwapJSONScript = redis.NewScript(`
 local value = redis.call("GET", KEYS[1])
-if not value then
-  return -1
-end
-local ok, record = pcall(cjson.decode, value)
-if not ok then
-  redis.call("DEL", KEYS[1])
-  return -2
-end
-if record.attempts >= tonumber(ARGV[2]) then
-  redis.call("DEL", KEYS[1])
-  return -2
-end
-if record.hash == ARGV[1] then
-  redis.call("DEL", KEYS[1])
+if not value or value ~= ARGV[1] then
   return 0
-end
-record.attempts = record.attempts + 1
-if record.attempts >= tonumber(ARGV[2]) then
-  redis.call("DEL", KEYS[1])
-  return -2
 end
 local pttl = redis.call("PTTL", KEYS[1])
 if pttl > 0 then
-  redis.call("SET", KEYS[1], cjson.encode(record), "PX", pttl)
+  redis.call("SET", KEYS[1], ARGV[2], "PX", pttl)
+  return 1
+end
+if pttl == -1 then
+  redis.call("SET", KEYS[1], ARGV[2])
   return 1
 end
 redis.call("DEL", KEYS[1])
-return -2
+return 0
 `)
 
-// AtomicEmailCodeVerify 使用单个 Lua 脚本原子验证邮箱验证码记录，
-func (s *Redis) AtomicEmailCodeVerify(ctx context.Context, key, submittedHash string, maxAttempts int) (EmailCodeVerifyResult, error) {
-	result, err := emailCodeVerifyScript.Run(ctx, s.client, []string{key}, submittedHash, maxAttempts).Int()
+// compareAndDeleteJSONScript compares the exact stored payload and deletes it
+// in the same Redis operation.
+var compareAndDeleteJSONScript = redis.NewScript(`
+local value = redis.call("GET", KEYS[1])
+if not value or value ~= ARGV[1] then
+  return 0
+end
+redis.call("DEL", KEYS[1])
+return 1
+`)
+
+// CompareAndSwapJSON atomically replaces key when its exact JSON value matches
+// expected, preserving the current TTL.
+func (s *Redis) CompareAndSwapJSON(ctx context.Context, key string, expected, replacement json.RawMessage) (bool, error) {
+	if !json.Valid(replacement) {
+		return false, errors.New("cache: replacement is not valid JSON")
+	}
+	result, err := compareAndSwapJSONScript.Run(ctx, s.client, []string{key}, []byte(expected), []byte(replacement)).Int()
 	if err != nil {
-		return EmailCodeInvalid, fmt.Errorf("cache: redis atomic email code verify %q: %w", key, err)
+		return false, fmt.Errorf("cache: redis compare-and-swap json %q: %w", key, err)
 	}
-	switch result {
-	case 0:
-		return EmailCodeConsumed, nil
-	case 1:
-		return EmailCodeAttempted, nil
-	default:
-		return EmailCodeInvalid, nil
-	}
+	return result == 1, nil
 }
+
+// CompareAndDeleteJSON atomically deletes key when its exact JSON value
+// matches expected.
+func (s *Redis) CompareAndDeleteJSON(ctx context.Context, key string, expected json.RawMessage) (bool, error) {
+	result, err := compareAndDeleteJSONScript.Run(ctx, s.client, []string{key}, []byte(expected)).Int()
+	if err != nil {
+		return false, fmt.Errorf("cache: redis compare-and-delete json %q: %w", key, err)
+	}
+	return result == 1, nil
+}
+
+var _ AtomicJSONComparer = (*Redis)(nil)
+var _ RawJSONReader = (*Redis)(nil)

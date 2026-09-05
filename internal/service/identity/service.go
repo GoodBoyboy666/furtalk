@@ -13,6 +13,7 @@ import (
 	"furtalk/internal/platform/cache"
 	"furtalk/internal/platform/logging"
 	"furtalk/internal/platform/mailer"
+	"furtalk/internal/platform/onetime"
 	"furtalk/internal/repository"
 )
 
@@ -93,6 +94,7 @@ type Dependencies struct {
 	Identities     *repository.ExternalIdentityRepo
 	Prefs          *repository.PreferenceRepo
 	Cache          cache.Store
+	OneTime        *onetime.Store
 	Policy         PolicyReader
 	CaptchaPolicy  CaptchaPolicyReader
 	Captcha        CaptchaVerifier
@@ -121,13 +123,19 @@ func NewService(deps Dependencies) *Service {
 	if deps.FailFast == nil {
 		deps.FailFast = func(error) {}
 	}
+	oneTime := deps.OneTime
+	if oneTime == nil && deps.Cache != nil {
+		// Directly constructed services in focused tests may only provide the
+		// existing cache backend; production wiring supplies the shared wrapper.
+		oneTime, _ = onetime.New(deps.Cache)
+	}
 	return &Service{
 		txRunner:       deps.TxRunner,
 		users:          deps.Users,
 		passkeys:       deps.Passkeys,
 		identities:     deps.Identities,
 		prefs:          deps.Prefs,
-		emailCodes:     cacheEmailCodeStore{store: deps.Cache},
+		emailCodes:     cacheEmailCodeStore{store: deps.Cache, onetime: oneTime},
 		passkeyStore:   cache.NewNamespace(deps.Cache, "passkey", passkeyKeyPrefix, 2000),
 		oauthState:     cache.NewNamespace(deps.Cache, "oauth_state", oauthStatePrefix, 2000),
 		oauthHandoff:   cache.NewNamespace(deps.Cache, "oauth_handoff", oauthHandoffPrefix, 500),

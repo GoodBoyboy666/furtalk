@@ -39,12 +39,7 @@ func (s *Service) RequestPasswordReset(ctx context.Context, rawEmail, captchaTok
 	if err != nil {
 		return err
 	}
-	record := EmailCodeRecord{
-		Hash:      cryptox.SHA256Hex([]byte(code)),
-		Attempts:  0,
-		ExpiresAt: s.now().UTC().Add(passwordResetCodeTTL),
-	}
-	if err := s.emailCodes.SetEmailCode(ctx, passwordResetPurpose, normalized, record, passwordResetCodeTTL); err != nil {
+	if err := s.emailCodes.SetEmailCode(ctx, passwordResetPurpose, normalized, cryptox.SHA256Hex([]byte(code)), passwordResetCodeTTL); err != nil {
 		return err
 	}
 	msg, err := renderPasswordResetMessage(s.templates, normalized, code, passwordResetCodeTTL)

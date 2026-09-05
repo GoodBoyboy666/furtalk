@@ -1,9 +1,10 @@
 package cache
 
 import (
+	"bytes"
 	"context"
-	"crypto/subtle"
 	"encoding/json"
+	"errors"
 	"sync"
 	"time"
 
@@ -46,6 +47,9 @@ func NewMemory(limit int) *Memory {
 func (s *Memory) Get(ctx context.Context, key string, out any) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	item, ok := s.items[key]
 	if !ok || !s.now().Before(item.expires) {
 		delete(s.items, key)
@@ -53,6 +57,29 @@ func (s *Memory) Get(ctx context.Context, key string, out any) error {
 		return ErrNotFound
 	}
 	return json.Unmarshal(item.data, out)
+}
+
+// GetRawJSON returns the exact JSON payload stored under key. Unlike Get, it
+// does not attempt to validate or decode the payload, allowing higher-level
+// protocols to classify malformed records and remove them atomically.
+func (s *Memory) GetRawJSON(ctx context.Context, key string) (json.RawMessage, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	item, ok := s.items[key]
+	if !ok || !s.now().Before(item.expires) {
+		if ok {
+			delete(s.items, key)
+			s.removeNamespaceMembershipLocked(key)
+		}
+		return nil, ErrNotFound
+	}
+	return append(json.RawMessage(nil), item.data...), nil
 }
 
 // Set 将 value 序列化后以 ttl 存储到 key 下。
@@ -88,6 +115,9 @@ func (s *Memory) Delete(ctx context.Context, key string) error {
 func (s *Memory) AtomicConsume(ctx context.Context, key string) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
 	item, ok := s.items[key]
 	if !ok || !s.now().Before(item.expires) {
 		delete(s.items, key)
@@ -112,44 +142,69 @@ func (s *Memory) evictExpired(now time.Time) {
 	}
 }
 
-// AtomicEmailCodeVerify 原子验证并消费邮箱验证码记录。
-// 达到 maxAttempts 或已过期的记录会被删除。
-func (s *Memory) AtomicEmailCodeVerify(ctx context.Context, key, submittedHash string, maxAttempts int) (EmailCodeVerifyResult, error) {
+// CompareAndSwapJSON atomically replaces key when its exact JSON value matches
+// expected. The existing expiry is retained and stale or missing keys return
+// false without an error.
+func (s *Memory) CompareAndSwapJSON(ctx context.Context, key string, expected, replacement json.RawMessage) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
 	item, ok := s.items[key]
-	if !ok {
-		return EmailCodeInvalid, nil
+	if !ok || !s.now().Before(item.expires) {
+		if ok {
+			delete(s.items, key)
+			s.removeNamespaceMembershipLocked(key)
+		}
+		return false, nil
 	}
-	var record EmailCodeRecord
-	if err := json.Unmarshal(item.data, &record); err != nil {
-		delete(s.items, key)
-		s.removeNamespaceMembershipLocked(key)
-		return EmailCodeInvalid, nil
+	if !bytes.Equal(item.data, expected) {
+		return false, nil
 	}
-	if !s.now().Before(record.ExpiresAt) || record.Attempts >= maxAttempts {
-		delete(s.items, key)
-		s.removeNamespaceMembershipLocked(key)
-		return EmailCodeInvalid, nil
+	if !json.Valid(replacement) {
+		return false, errors.New("cache: replacement is not valid JSON")
 	}
-	if subtle.ConstantTimeCompare([]byte(record.Hash), []byte(submittedHash)) == 1 {
-		delete(s.items, key)
-		s.removeNamespaceMembershipLocked(key)
-		return EmailCodeConsumed, nil
-	}
-	record.Attempts++
-	if record.Attempts >= maxAttempts {
-		delete(s.items, key)
-		s.removeNamespaceMembershipLocked(key)
-		return EmailCodeInvalid, nil
-	}
-	updated, err := json.Marshal(record)
-	if err != nil {
-		return EmailCodeInvalid, nil
-	}
-	s.items[key] = memoryItem{data: updated, expires: item.expires}
-	return EmailCodeAttempted, nil
+	s.items[key] = memoryItem{data: append([]byte(nil), replacement...), expires: item.expires}
+	return true, nil
 }
+
+// CompareAndDeleteJSON atomically deletes key when its exact JSON value
+// matches expected. Stale, missing, and expired keys return false without an
+// error.
+func (s *Memory) CompareAndDeleteJSON(ctx context.Context, key string, expected json.RawMessage) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	item, ok := s.items[key]
+	if !ok || !s.now().Before(item.expires) {
+		if ok {
+			delete(s.items, key)
+			s.removeNamespaceMembershipLocked(key)
+		}
+		return false, nil
+	}
+	if !bytes.Equal(item.data, expected) {
+		return false, nil
+	}
+	delete(s.items, key)
+	s.removeNamespaceMembershipLocked(key)
+	return true, nil
+}
+
+// ensure JSON validation errors are returned before modifying a live entry.
+// This is intentionally separate from the cache Store interface so unrelated
+// cache implementations do not need to expose a CAS capability.
+var _ AtomicJSONComparer = (*Memory)(nil)
+var _ RawJSONReader = (*Memory)(nil)
 
 // GetOrLoad 从存储中获取 key，未命中时执行 load() 并存储结果。
 func (s *Memory) GetOrLoad(ctx context.Context, key string, out any, ttl time.Duration, load func() (any, error)) error {

@@ -2,6 +2,7 @@ package identity
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"sync"
 	"testing"
@@ -12,6 +13,7 @@ import (
 	"furtalk/internal/platform/crypto"
 	"furtalk/internal/platform/gormtx"
 	"furtalk/internal/platform/mailer"
+	"furtalk/internal/platform/onetime"
 	"furtalk/internal/platform/value"
 	"furtalk/internal/repository"
 )
@@ -70,14 +72,18 @@ func seedResetUser(t *testing.T, svc *Service, email string, verifiedAt *time.Ti
 // seedResetCode 直接向缓存写入一条密码重置验证码记录。
 func seedResetCode(t *testing.T, ctx context.Context, store cache.Store, email, code string) {
 	t.Helper()
-	record := cache.EmailCodeRecord{
-		Hash:      cryptox.SHA256Hex([]byte(code)),
-		Attempts:  0,
-		ExpiresAt: time.Now().UTC().Add(10 * time.Minute),
-	}
-	if err := store.Set(ctx, "email-code:"+passwordResetPurpose+":"+email, record, 10*time.Minute); err != nil {
+	oneTime, err := onetime.New(store)
+	if err != nil {
 		t.Fatal(err)
 	}
+	if err := oneTime.Issue(ctx, "email-code:"+passwordResetPurpose+":"+email, cryptox.SHA256Hex([]byte(code)), 10*time.Minute); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func resetKeyPresent(store cache.Store, key string) bool {
+	var raw json.RawMessage
+	return store.Get(context.Background(), key, &raw) == nil
 }
 
 func TestRequestPasswordResetUnknownEmailIsGeneric(t *testing.T) {
@@ -92,9 +98,8 @@ func TestRequestPasswordResetUnknownEmailIsGeneric(t *testing.T) {
 	if len(mailer.messages) != 0 {
 		t.Fatalf("unknown email sent %d mails, want 0", len(mailer.messages))
 	}
-	var record cache.EmailCodeRecord
-	if cerr := store.Get(context.Background(), "email-code:"+passwordResetPurpose+":nobody@example.com", &record); !errors.Is(cerr, cache.ErrNotFound) {
-		t.Fatalf("unknown email left a reset record: %v", cerr)
+	if resetKeyPresent(store, "email-code:"+passwordResetPurpose+":nobody@example.com") {
+		t.Fatal("unknown email left a reset record")
 	}
 	if _, err := svc.users.FindByEmailNormalized(context.Background(), "nobody@example.com"); !errors.Is(err, domain.ErrNotFound) {
 		t.Fatalf("unknown email created a user or errored unexpectedly: %v", err)
@@ -113,15 +118,8 @@ func TestRequestPasswordResetKnownEmailSendsCode(t *testing.T) {
 	if len(mailer.messages) != 1 || mailer.messages[0].To != email {
 		t.Fatalf("mail to = %v, want [%s]", mailer.messages, email)
 	}
-	var record cache.EmailCodeRecord
-	if err := store.Get(context.Background(), "email-code:"+passwordResetPurpose+":"+email, &record); err != nil {
-		t.Fatalf("reset record missing: %v", err)
-	}
-	if record.Attempts != 0 {
-		t.Fatalf("fresh record attempts = %d, want 0", record.Attempts)
-	}
-	if record.Hash == "" {
-		t.Fatal("record hash must be stored")
+	if !resetKeyPresent(store, "email-code:"+passwordResetPurpose+":"+email) {
+		t.Fatal("reset record missing")
 	}
 }
 
@@ -175,9 +173,8 @@ func TestRequestPasswordResetCaptchaBeforeLookup(t *testing.T) {
 			if len(mailer.messages) != 0 {
 				t.Fatalf("CAPTCHA failure sent %d mails", len(mailer.messages))
 			}
-			var record cache.EmailCodeRecord
-			if cerr := store.Get(context.Background(), "email-code:"+passwordResetPurpose+":user@example.com", &record); !errors.Is(cerr, cache.ErrNotFound) {
-				t.Fatalf("CAPTCHA failure wrote a reset record: %v", cerr)
+			if resetKeyPresent(store, "email-code:"+passwordResetPurpose+":user@example.com") {
+				t.Fatal("CAPTCHA failure wrote a reset record")
 			}
 		})
 	}
@@ -205,9 +202,8 @@ func TestRequestPasswordResetMailFailuresStayGeneric(t *testing.T) {
 		if err := svc.RequestPasswordReset(context.Background(), email, ""); err != nil {
 			t.Fatalf("nil mailer must stay generic, got %v", err)
 		}
-		var record cache.EmailCodeRecord
-		if cerr := store.Get(context.Background(), "email-code:"+passwordResetPurpose+":"+email, &record); !errors.Is(cerr, cache.ErrNotFound) {
-			t.Fatalf("nil mailer left a reset record: %v", cerr)
+		if resetKeyPresent(store, "email-code:"+passwordResetPurpose+":"+email) {
+			t.Fatal("nil mailer left a reset record")
 		}
 	})
 	t.Run("delivery failure", func(t *testing.T) {
@@ -218,9 +214,8 @@ func TestRequestPasswordResetMailFailuresStayGeneric(t *testing.T) {
 		if err := svc.RequestPasswordReset(context.Background(), email, ""); err != nil {
 			t.Fatalf("delivery failure must stay generic, got %v", err)
 		}
-		var record cache.EmailCodeRecord
-		if cerr := store.Get(context.Background(), "email-code:"+passwordResetPurpose+":"+email, &record); !errors.Is(cerr, cache.ErrNotFound) {
-			t.Fatalf("failed delivery left a reset record: %v", cerr)
+		if resetKeyPresent(store, "email-code:"+passwordResetPurpose+":"+email) {
+			t.Fatal("failed delivery left a reset record")
 		}
 	})
 	t.Run("render failure", func(t *testing.T) {
@@ -231,9 +226,8 @@ func TestRequestPasswordResetMailFailuresStayGeneric(t *testing.T) {
 		if err := svc.RequestPasswordReset(context.Background(), email, ""); err != nil {
 			t.Fatalf("render failure must stay generic, got %v", err)
 		}
-		var record cache.EmailCodeRecord
-		if cerr := store.Get(context.Background(), "email-code:"+passwordResetPurpose+":"+email, &record); !errors.Is(cerr, cache.ErrNotFound) {
-			t.Fatalf("render failure left a reset record: %v", cerr)
+		if resetKeyPresent(store, "email-code:"+passwordResetPurpose+":"+email) {
+			t.Fatal("render failure left a reset record")
 		}
 	})
 }
@@ -265,9 +259,8 @@ func TestResetPasswordWithCodeUpdatesPasswordAndVerifies(t *testing.T) {
 	if user.SessionVersion <= 1 {
 		t.Fatalf("session version after reset = %d, want > 1 (bumped)", user.SessionVersion)
 	}
-	var record cache.EmailCodeRecord
-	if cerr := store.Get(ctx, "email-code:"+passwordResetPurpose+":"+email, &record); !errors.Is(cerr, cache.ErrNotFound) {
-		t.Fatalf("code not consumed after reset: %v", cerr)
+	if resetKeyPresent(store, "email-code:"+passwordResetPurpose+":"+email) {
+		t.Fatal("code not consumed after reset")
 	}
 }
 
@@ -324,12 +317,8 @@ func TestResetPasswordWithCodeShortPasswordDoesNotConsumeCode(t *testing.T) {
 	if err := svc.ResetPasswordWithCode(ctx, email, "123456", "short"); !errors.Is(err, domain.ErrValidation) {
 		t.Fatalf("short password err = %v, want ErrValidation", err)
 	}
-	var record cache.EmailCodeRecord
-	if err := store.Get(ctx, "email-code:"+passwordResetPurpose+":"+email, &record); err != nil {
-		t.Fatalf("code consumed on invalid password: %v", err)
-	}
-	if record.Attempts != 0 {
-		t.Fatalf("attempts = %d, want 0 after password rejection", record.Attempts)
+	if !resetKeyPresent(store, "email-code:"+passwordResetPurpose+":"+email) {
+		t.Fatal("code consumed on invalid password")
 	}
 }
 
@@ -392,7 +381,7 @@ func TestResetPasswordWithCodeInvalidatesAuthzCache(t *testing.T) {
 	if err := svc.ResetPasswordWithCode(ctx, email, "123456", "brand-new-password"); err != nil {
 		t.Fatalf("reset: %v", err)
 	}
-	var info cache.EmailCodeRecord
+	var info json.RawMessage
 	err = store.Get(ctx, authzKey(user.ID), &info)
 	if !errors.Is(err, cache.ErrNotFound) {
 		t.Fatalf("authz cache after reset err = %v, want ErrNotFound (invalidated)", err)

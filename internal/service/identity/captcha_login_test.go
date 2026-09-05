@@ -2,6 +2,7 @@ package identity
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"path/filepath"
 	"testing"
@@ -77,12 +78,7 @@ func insertVerifiedUser(t *testing.T, db *gorm.DB, email string) *domain.User {
 func seedEmailCode(t *testing.T, svc *Service, email, code string) {
 	t.Helper()
 	hash := cryptox.SHA256Hex([]byte(code))
-	record := EmailCodeRecord{
-		Hash:      hash,
-		Attempts:  0,
-		ExpiresAt: svc.now().UTC().Add(svc.codeTTL),
-	}
-	if err := svc.emailCodes.SetEmailCode(context.Background(), emailCodePurpose, email, record, svc.codeTTL); err != nil {
+	if err := svc.emailCodes.SetEmailCode(context.Background(), emailCodePurpose, email, hash, svc.codeTTL); err != nil {
 		t.Fatalf("seed email code: %v", err)
 	}
 }
@@ -102,7 +98,8 @@ func seedPassword(t *testing.T, db *gorm.DB, userID int64, password string) {
 // emailCodeStillValid 报告验证码是否仍存在于缓存。
 func emailCodeStillValid(t *testing.T, svc *Service, email string) bool {
 	t.Helper()
-	_, err := svc.emailCodes.GetEmailCode(context.Background(), emailCodePurpose, email)
+	var raw json.RawMessage
+	err := svc.cache.Get(context.Background(), emailCodeKey(emailCodePurpose, email), &raw)
 	return err == nil
 }
 

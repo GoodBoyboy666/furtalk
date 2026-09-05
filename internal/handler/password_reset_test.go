@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -17,6 +18,7 @@ import (
 	"furtalk/internal/platform/gormtx"
 	"furtalk/internal/platform/httpx"
 	"furtalk/internal/platform/mailer"
+	"furtalk/internal/platform/onetime"
 	"furtalk/internal/platform/value"
 	"furtalk/internal/repository"
 	"furtalk/internal/repository/model"
@@ -109,8 +111,8 @@ func TestPasswordResetCodeKnownAndUnknownAreIdentical(t *testing.T) {
 	if len(mailer.messages) != 1 {
 		t.Fatalf("mail count = %d, want 1 (unknown email must not send)", len(mailer.messages))
 	}
-	var record cache.EmailCodeRecord
-	if err := store.Get(ctx, "email-code:password_reset:nobody@example.com", &record); err == nil {
+	var raw json.RawMessage
+	if err := store.Get(ctx, "email-code:password_reset:nobody@example.com", &raw); err == nil {
 		t.Fatal("unknown email must not leave a reset record")
 	}
 }
@@ -155,12 +157,14 @@ func TestPasswordResetConfirmSuccessWithoutSessionCookie(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.Set(ctx, "email-code:password_reset:"+normalized, cache.EmailCodeRecord{
-		Hash: cryptox.SHA256Hex([]byte("123456")), Attempts: 0,
-		ExpiresAt: time.Now().UTC().Add(10 * time.Minute),
-	}, 10*time.Minute); err != nil {
+	oneTime, err := onetime.New(store)
+	if err != nil {
 		t.Fatal(err)
 	}
+	if err := oneTime.Issue(ctx, "email-code:password_reset:"+normalized, cryptox.SHA256Hex([]byte("123456")), 10*time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	var raw json.RawMessage
 
 	rec := postResetJSON(t, router, "/api/v1/auth/password/reset",
 		`{"email":"user@example.com","code":"123456","new_password":"brand-new-password"}`)
@@ -172,8 +176,7 @@ func TestPasswordResetConfirmSuccessWithoutSessionCookie(t *testing.T) {
 			t.Fatalf("reset must not write a session cookie, found %s", cookie.Name)
 		}
 	}
-	var record cache.EmailCodeRecord
-	if err := store.Get(ctx, "email-code:password_reset:"+normalized, &record); err == nil {
+	if err := store.Get(ctx, "email-code:password_reset:"+normalized, &raw); err == nil {
 		t.Fatal("code must be consumed after successful reset")
 	}
 	user, err := users.FindByEmailNormalized(ctx, normalized)
@@ -199,10 +202,11 @@ func TestPasswordResetConfirmWrongCodeIs401(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.Set(ctx, "email-code:password_reset:"+normalized, cache.EmailCodeRecord{
-		Hash: cryptox.SHA256Hex([]byte("123456")), Attempts: 0,
-		ExpiresAt: time.Now().UTC().Add(10 * time.Minute),
-	}, 10*time.Minute); err != nil {
+	oneTime, err := onetime.New(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := oneTime.Issue(ctx, "email-code:password_reset:"+normalized, cryptox.SHA256Hex([]byte("123456")), 10*time.Minute); err != nil {
 		t.Fatal(err)
 	}
 

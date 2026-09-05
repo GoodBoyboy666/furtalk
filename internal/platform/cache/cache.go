@@ -1,4 +1,4 @@
-// Package cache 提供邮箱验证码、OAuth 状态与授权查询的临时缓存。
+// Package cache 提供 OAuth 状态、授权查询与其他临时数据的缓存。
 // 支持两种可互换的实现：进程内的有限 TTL 存储与基于 Redis 的存储。
 // 配置 Redis 后依赖 Redis，
 // 运行时错误按致命错误处理。
@@ -6,6 +6,7 @@ package cache
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -23,35 +24,28 @@ var (
 	ErrCapacity = errors.New("cache: capacity exceeded")
 )
 
-const (
-	// EmailCodeConsumed 提交的摘要匹配且记录已被原子删除。
-	EmailCodeConsumed EmailCodeVerifyResult = iota
-	// EmailCodeAttempted 摘要不匹配，失败次数已原子递增。
-	EmailCodeAttempted
-	// EmailCodeInvalid 记录缺失、已过期或达到失败上限，记录已删除。
-	EmailCodeInvalid
-)
-
 // pingTimeout 单次 Redis PING 超时时间。
 const pingTimeout = 5 * time.Second
 
 // healthInterval Redis 运行时健康探测的运行间隔。
 const healthInterval = 30 * time.Second
 
-// EmailCodeRecord 邮箱验证码记录。
-type EmailCodeRecord struct {
-	Hash      string    `json:"hash"`
-	Attempts  int       `json:"attempts"`
-	ExpiresAt time.Time `json:"expires_at"`
+// AtomicJSONComparer is an optional capability for linearizable compare-and-
+// swap and compare-and-delete operations on JSON values.
+//
+// The expected value must match the exact bytes currently stored under key.
+// A stale or missing expectation returns false without an error. Implementations
+// preserve the current entry TTL when replacing a value.
+type AtomicJSONComparer interface {
+	CompareAndSwapJSON(ctx context.Context, key string, expected, replacement json.RawMessage) (bool, error)
+	CompareAndDeleteJSON(ctx context.Context, key string, expected json.RawMessage) (bool, error)
 }
 
-// EmailCodeVerifyResult 原子验证的三种结果。
-type EmailCodeVerifyResult int
-
-// AtomicEmailCodeVerifier 原子验证邮箱验证码。
-type AtomicEmailCodeVerifier interface {
-	// AtomicEmailCodeVerify 原子验证 email-code 记录：
-	AtomicEmailCodeVerify(ctx context.Context, key, submittedHash string, maxAttempts int) (EmailCodeVerifyResult, error)
+// RawJSONReader is an optional capability for retrieving the exact JSON bytes
+// stored under a key. It is useful to protocols that need to pair a read with
+// a subsequent compare-and-swap operation, and does not change Store.
+type RawJSONReader interface {
+	GetRawJSON(ctx context.Context, key string) (json.RawMessage, error)
 }
 
 // Store 内存与 Redis 共享的临时存储接口。

@@ -3,7 +3,6 @@ package identity
 import (
 	"context"
 	"crypto/rand"
-	"crypto/subtle"
 	"errors"
 	"fmt"
 	"time"
@@ -13,6 +12,7 @@ import (
 	"furtalk/internal/platform/crypto"
 	"furtalk/internal/platform/logging"
 	"furtalk/internal/platform/mailer"
+	"furtalk/internal/platform/onetime"
 	"furtalk/internal/platform/value"
 )
 
@@ -23,92 +23,56 @@ type Session struct {
 	ExpiresAt time.Time
 }
 
-// EmailCodeRecord 临时的邮箱验证码记录，JSON 形态与缓存层的记录一致。
-type EmailCodeRecord = cache.EmailCodeRecord
-
 // EmailCodeStore 带用途前缀的临时邮箱验证码存取边界。
 type EmailCodeStore interface {
-	SetEmailCode(ctx context.Context, purpose, normalizedEmail string, record EmailCodeRecord, ttl time.Duration) error
-	GetEmailCode(ctx context.Context, purpose, normalizedEmail string) (*EmailCodeRecord, error)
+	SetEmailCode(ctx context.Context, purpose, normalizedEmail, digest string, ttl time.Duration) error
 	DeleteEmailCode(ctx context.Context, purpose, normalizedEmail string) error
-	// AtomicVerifyEmailCode 原子验证并消费验证码记录：摘要匹配返回 true 且记录
-	// 已删除；不匹配、缺失、过期或达到失败上限返回 false。错误提交的失败次数
-	// 由后端在单个原子操作内递增，不依赖调用方的读-改-写。
+	// AtomicVerifyEmailCode 原子验证并消费验证码：摘要匹配返回 true；不匹配、
+	// 缺失、过期或达到失败上限返回 false。错误提交的失败次数由后端原子递增。
 	AtomicVerifyEmailCode(ctx context.Context, purpose, normalizedEmail, submittedHash string, maxAttempts int) (bool, error)
 }
 
 // cacheEmailCodeStore 基于缓存存储实现带用途前缀的邮箱验证码存取。
 type cacheEmailCodeStore struct {
-	store cache.Store
+	store   cache.Store
+	onetime *onetime.Store
 }
 
 func emailCodeKey(purpose, normalizedEmail string) string {
 	return "email-code:" + purpose + ":" + normalizedEmail
 }
 
-// SetEmailCode 在缓存中写入邮箱验证码记录。
-func (a cacheEmailCodeStore) SetEmailCode(ctx context.Context, purpose, normalizedEmail string, record EmailCodeRecord, ttl time.Duration) error {
-	return a.store.Set(ctx, emailCodeKey(purpose, normalizedEmail), record, ttl)
-}
-
-// GetEmailCode 从缓存读取邮箱验证码记录。
-func (a cacheEmailCodeStore) GetEmailCode(ctx context.Context, purpose, normalizedEmail string) (*EmailCodeRecord, error) {
-	var record EmailCodeRecord
-	err := a.store.Get(ctx, emailCodeKey(purpose, normalizedEmail), &record)
-	if err != nil {
-		return nil, err
+// SetEmailCode issues or replaces an expiring one-time digest.
+func (a cacheEmailCodeStore) SetEmailCode(ctx context.Context, purpose, normalizedEmail, digest string, ttl time.Duration) error {
+	key := emailCodeKey(purpose, normalizedEmail)
+	if a.onetime != nil {
+		return a.onetime.Issue(ctx, key, digest, ttl)
 	}
-	return &record, nil
+	// Narrow test doubles may intentionally provide only the generic cache
+	// contract. They can exercise gates and mail rendering, but cannot verify.
+	return a.store.Set(ctx, key, digest, ttl)
 }
 
 // DeleteEmailCode 从缓存删除邮箱验证码记录。
 func (a cacheEmailCodeStore) DeleteEmailCode(ctx context.Context, purpose, normalizedEmail string) error {
+	if a.onetime != nil {
+		return a.onetime.Delete(ctx, emailCodeKey(purpose, normalizedEmail))
+	}
 	return a.store.Delete(ctx, emailCodeKey(purpose, normalizedEmail))
 }
 
 // AtomicVerifyEmailCode 原子验证并消费邮箱验证码记录。
-// 后端实现 AtomicEmailCodeVerifier 时使用其原子边界；否则回退到
-// 读-改-写路径（仅供不具备原子性的测试替身使用）。
 func (a cacheEmailCodeStore) AtomicVerifyEmailCode(ctx context.Context, purpose, normalizedEmail, submittedHash string, maxAttempts int) (bool, error) {
-	key := emailCodeKey(purpose, normalizedEmail)
-	if verifier, ok := a.store.(cache.AtomicEmailCodeVerifier); ok {
-		result, err := verifier.AtomicEmailCodeVerify(ctx, key, submittedHash, maxAttempts)
-		if err != nil {
-			return false, err
-		}
-		return result == cache.EmailCodeConsumed, nil
-	}
-	return a.verifyEmailCodeRMW(ctx, key, submittedHash, maxAttempts)
-}
-
-// verifyEmailCodeRMW 以非原子的读-改-写实现验证码校验，保持与原子路径一致的语义。
-// 仅被不支持原子边界的测试替身走到；生产后端（内存/Redis）都实现原子边界。
-func (a cacheEmailCodeStore) verifyEmailCodeRMW(ctx context.Context, key, submittedHash string, maxAttempts int) (bool, error) {
-	var record EmailCodeRecord
-	if err := a.store.Get(ctx, key, &record); err != nil {
+	if a.onetime == nil {
+		// A narrow business fake may support issuance/gates but not verification.
+		// Production composition rejects such a backend when constructing onetime.
 		return false, nil
 	}
-	now := time.Now()
-	if now.After(record.ExpiresAt) || record.Attempts >= maxAttempts {
-		_ = a.store.Delete(ctx, key)
-		return false, nil
+	result, err := a.onetime.VerifyAndConsume(ctx, emailCodeKey(purpose, normalizedEmail), submittedHash, maxAttempts)
+	if err != nil {
+		return false, err
 	}
-	if subtle.ConstantTimeCompare([]byte(record.Hash), []byte(submittedHash)) == 1 {
-		_ = a.store.Delete(ctx, key)
-		return true, nil
-	}
-	record.Attempts++
-	if record.Attempts >= maxAttempts {
-		_ = a.store.Delete(ctx, key)
-		return false, nil
-	}
-	remaining := time.Until(record.ExpiresAt)
-	if remaining <= 0 {
-		_ = a.store.Delete(ctx, key)
-		return false, nil
-	}
-	_ = a.store.Set(ctx, key, record, remaining)
-	return false, nil
+	return result == onetime.Consumed, nil
 }
 
 // SendEmailCode 校验邮箱、执行 CAPTCHA 策略、保存验证码哈希并投递验证码邮件。
@@ -137,12 +101,7 @@ func (s *Service) SendEmailCode(ctx context.Context, rawEmail, captchaToken stri
 	if err != nil {
 		return err
 	}
-	record := EmailCodeRecord{
-		Hash:      cryptox.SHA256Hex([]byte(code)),
-		Attempts:  0,
-		ExpiresAt: s.now().UTC().Add(s.codeTTL),
-	}
-	if err := s.emailCodes.SetEmailCode(ctx, emailCodePurpose, normalized, record, s.codeTTL); err != nil {
+	if err := s.emailCodes.SetEmailCode(ctx, emailCodePurpose, normalized, cryptox.SHA256Hex([]byte(code)), s.codeTTL); err != nil {
 		return err
 	}
 	msg, err := renderEmailCodeMessage(s.templates, normalized, code, s.codeTTL)
