@@ -1,6 +1,5 @@
 // Package mailer 实现轻量的 SMTP/MIME 投递客户端，对外暴露 Mailer 接口。
-// 封装 github.com/wneessen/go-mail，支持隐式 TLS、显式 STARTTLS 与明文连接、
-// MIME text/HTML 正文，以及每次发送的 context 与超时。
+// 支持隐式 TLS、显式 STARTTLS 与明文连接、 MIME text/HTML 正文，以及每次发送的 context 与超时。
 package mailer
 
 import (

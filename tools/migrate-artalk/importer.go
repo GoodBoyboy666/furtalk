@@ -655,9 +655,9 @@ func originFromPageURL(raw string) (string, error) {
 	return migrationOrigin(raw)
 }
 
-// migrationOrigin accepts legacy site/page URLs that may include a deployment
-// path, then derives the exact origin through urlx. This preserves Artalk's
-// historical import behavior while applying the shared host/scheme checks.
+// migrationOrigin 接受可能包含部署子路径的旧站点/页面 URL，
+// 再通过 urlx 提取精确 Origin；这样既保留 Artalk 的历史导入行为，
+// 又能应用共享的主机和 scheme 校验。
 func migrationOrigin(raw string) (string, error) {
 	u, err := urlx.ParseHTTP(raw)
 	if err != nil {

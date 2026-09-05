@@ -37,9 +37,9 @@ func newDiscoveryProvider(cfg Config, client *http.Client) (*discoveryProvider, 
 	if cfg.InstanceURL == "" {
 		return nil, fmt.Errorf("%w: %s instance url is required", ErrUnsupported, cfg.ProviderKey)
 	}
-	// ProviderService enforces HTTPS for persisted instances. The platform
-	// adapter accepts HTTP here as well so injected test/local transports can use
-	// httptest endpoints without weakening the service boundary.
+	// ProviderService 会对持久化实例强制要求 HTTPS。
+	// 平台适配器在此仍接受 HTTP，便于注入的测试/本地传输使用 httptest 端点，
+	// 不会削弱服务层边界。
 	instance, err := urlx.ParseHTTPBase(cfg.InstanceURL)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s instance url is invalid", ErrUnsupported, cfg.ProviderKey)

@@ -179,6 +179,7 @@ func (c *verifier) Verify(ctx context.Context, action, token string) error {
 	if c.cfg.Hostname != "" && out.Hostname != "" && out.Hostname != c.cfg.Hostname {
 		return fmt.Errorf("%w: hostname mismatch", ErrFailed)
 	}
+	// 目前就Turnstile提供action验证
 	if action != "" && out.Action != "" && out.Action != action {
 		return fmt.Errorf("%w: action mismatch", ErrFailed)
 	}

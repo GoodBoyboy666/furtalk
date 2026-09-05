@@ -1,5 +1,4 @@
-// Package urlx contains the shared URL syntax and construction primitives used
-// by the backend. It deliberately does not contain product or provider policy.
+// Package urlx 提供后端共享的 URL 语法校验。
 package urlx
 
 import (
@@ -12,14 +11,13 @@ import (
 	"unicode"
 )
 
-// ErrInvalid wraps every rejected URL so callers can retain a stable error
-// category while still inspecting the technical reason during debugging.
+// ErrInvalid 包装所有被拒绝的 URL，调用方可以据此保留稳定的错误类别，
+// 同时在调试时查看具体的技术原因。
 var ErrInvalid = errors.New("urlx: invalid URL")
 
-// ParseHTTP parses an absolute URL using the HTTP or HTTPS scheme. It trims
-// outer whitespace, rejects controls, credentials, wildcard hosts, malformed
-// ports, and missing hostnames, while retaining path/query/fragment components
-// for callers whose protocol permits them.
+// ParseHTTP 解析使用 HTTP 或 HTTPS scheme 的绝对 URL。
+// 去除首尾空白，拒绝控制字符、凭据、通配符主机、非法端口和缺失主机名，
+// 同时保留调用方协议允许使用的路径、查询参数和片段。
 func ParseHTTP(raw string) (*url.URL, error) {
 	u, err := parseAbsolute(raw)
 	if err != nil {
@@ -37,7 +35,7 @@ func ParseHTTP(raw string) (*url.URL, error) {
 	return u, nil
 }
 
-// ParseHTTPS is ParseHTTP with an HTTPS-only scheme requirement.
+// ParseHTTPS 在 ParseHTTP 基础上要求 URL 必须使用 HTTPS scheme。
 func ParseHTTPS(raw string) (*url.URL, error) {
 	u, err := ParseHTTP(raw)
 	if err != nil {
@@ -49,10 +47,9 @@ func ParseHTTPS(raw string) (*url.URL, error) {
 	return u, nil
 }
 
-// ParseHTTPBase parses an absolute HTTP(S) base URL. Query and fragment are
-// rejected rather than silently discarded. The hostname and default port are
-// canonicalized, and trailing literal path separators are removed while
-// preserving escaped path semantics.
+// ParseHTTPBase 解析绝对 HTTP(S) Base URL。
+// 查询参数和片段会被拒绝；主机名和默认端口会被格式化，
+// 末尾的字面路径分隔符会被移除，同时保留转义路径语义。
 func ParseHTTPBase(raw string) (*url.URL, error) {
 	trimmed, err := cleanRaw(raw)
 	if err != nil {
@@ -70,7 +67,7 @@ func ParseHTTPBase(raw string) (*url.URL, error) {
 	return u, nil
 }
 
-// ParseHTTPSBase is ParseHTTPBase with an HTTPS-only scheme requirement.
+// ParseHTTPSBase 在 ParseHTTPBase 基础上要求 URL 必须使用 HTTPS scheme。
 func ParseHTTPSBase(raw string) (*url.URL, error) {
 	u, err := ParseHTTPBase(raw)
 	if err != nil {
@@ -82,10 +79,9 @@ func ParseHTTPSBase(raw string) (*url.URL, error) {
 	return u, nil
 }
 
-// CanonicalOrigin returns a stable web origin. HTTPS is accepted generally;
-// HTTP is accepted only for localhost and loopback development hosts. All
-// path, query, fragment, userinfo, wildcard, and malformed-port components
-// are rejected, and hostname casing/default ports are normalized.
+// CanonicalOrigin 返回稳定的 Web Origin。
+// 允许 HTTPS；HTTP 仅允许 localhost 和回环地址。路径、查询参数、片段、
+// 用户信息、通配符及非法端口都会被拒绝，主机名大小写和默认端口会被格式化。
 func CanonicalOrigin(raw string) (string, error) {
 	trimmed, err := cleanRaw(raw)
 	if err != nil {
@@ -106,9 +102,8 @@ func CanonicalOrigin(raw string) (string, error) {
 	return u.Scheme + "://" + u.Host, nil
 }
 
-// ParseLocalReference accepts a same-origin relative URL reference. It rejects
-// controls, backslashes, absolute URLs, and network-path references, preventing
-// an ostensibly local redirect from changing its origin.
+// ParseLocalReference 接受同源相对 URL 引用。
+// 拒绝控制字符、反斜杠、绝对 URL 和网络路径引用。
 func ParseLocalReference(raw string) (*url.URL, error) {
 	trimmed := strings.TrimSpace(raw)
 	for _, r := range trimmed {
@@ -129,9 +124,7 @@ func ParseLocalReference(raw string) (*url.URL, error) {
 	return u, nil
 }
 
-// JoinPathSegments appends opaque, unescaped path segments to a cloned base.
-// A segment cannot introduce a slash or traversal component. The base URL is
-// never modified. The resulting path has no forced trailing slash.
+// JoinPathSegments 将未预先转义的不透明路径段追加到Base副本。
 func JoinPathSegments(base *url.URL, segments ...string) *url.URL {
 	if base == nil {
 		return nil
@@ -143,7 +136,7 @@ func JoinPathSegments(base *url.URL, segments ...string) *url.URL {
 	return base.JoinPath(encoded...)
 }
 
-// JoinPathDirectory is JoinPathSegments with one trailing slash in the result.
+// JoinPathDirectory 与 JoinPathSegments 相同，但结果会带一个末尾斜杠。
 func JoinPathDirectory(base *url.URL, segments ...string) *url.URL {
 	u := JoinPathSegments(base, segments...)
 	if u == nil {
@@ -282,9 +275,8 @@ func trimTrailingPathSeparators(u *url.URL) {
 
 func escapeSegment(segment string) string {
 	escaped := url.PathEscape(segment)
-	// URL.JoinPath cleans literal . and .. elements. Percent-encoding their
-	// dots keeps these user-provided values opaque while preserving ordinary
-	// dots in names such as "v1.2".
+	// URL.JoinPath 会清理字面量 . 和 .. 路径段。
+	// 将其中的点进行百分号编码，可以保持用户输入值的不透明性，同时保留 "v1.2" 这类普通名称中的点。
 	if escaped == "." || escaped == ".." {
 		escaped = strings.ReplaceAll(escaped, ".", "%2E")
 	}

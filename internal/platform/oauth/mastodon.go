@@ -50,8 +50,8 @@ func newMastodonProvider(cfg Config, client *http.Client) (*mastodonProvider, er
 	if cfg.InstanceURL == "" {
 		return nil, fmt.Errorf("%w: mastodon instance url is required", ErrUnsupported)
 	}
-	// ProviderService enforces HTTPS for persisted instances; retain HTTP here
-	// for injected httptest/local transports used by the adapter tests.
+	// ProviderService 会对持久化实例强制要求 HTTPS；此处保留 HTTP，
+	// 供适配器测试使用注入的 httptest/本地传输。
 	instance, err := urlx.ParseHTTPBase(cfg.InstanceURL)
 	if err != nil {
 		return nil, fmt.Errorf("%w: mastodon instance url is invalid", ErrUnsupported)

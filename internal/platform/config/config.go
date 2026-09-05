@@ -132,10 +132,8 @@ func Load() (Config, error) {
 	return c, nil
 }
 
-// normalizeWebURLs stores the same canonical origin representation that CORS,
-// site storage, and WebAuthn use at runtime. Validate is intentionally a value
-// receiver for compatibility, so Load performs the post-validation mutation
-// on the configuration snapshot that enters the application.
+// normalizeWebURLs 将 CORS、站点存储和 WebAuthn 运行时使用的 Origin 统一为同一规范形式。
+// Validate 为兼容性保留值接收者，因此由 Load 在进入应用的配置快照上执行校验后的规范化。
 func (c *Config) normalizeWebURLs() error {
 	var err error
 	if c.HTTP.PublicBaseURL, err = urlx.CanonicalOrigin(c.HTTP.PublicBaseURL); err != nil {

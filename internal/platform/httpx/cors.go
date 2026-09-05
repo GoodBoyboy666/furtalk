@@ -25,7 +25,7 @@ func CORSForSiteParam(param string, origins OriginsProvider) gin.HandlerFunc {
 		}
 		c.Header("Vary", "Origin")
 
-		origin, ok := validateOriginHeader(c.Request)
+		origin, ok := parseOriginHeader(c.Request)
 		if !ok {
 			rejectPreflight(c)
 			c.Next()
@@ -48,7 +48,7 @@ func CORSForCredentialContext() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Header("Vary", "Origin")
 
-		origin, ok := validateOriginHeader(c.Request)
+		origin, ok := parseOriginHeader(c.Request)
 		if !ok {
 			rejectPreflight(c)
 			c.Next()
@@ -68,7 +68,7 @@ func RequireAllowedOrigin(origins OriginsProvider, siteID func(*gin.Context) (in
 			Abort(c, http.StatusForbidden, "forbidden", "origin is not allowed")
 			return
 		}
-		origin := ValidRequestOrigin(c)
+		origin := RequestOrigin(c)
 		if origin == "" {
 			Abort(c, http.StatusForbidden, "forbidden", "origin is not allowed")
 			return
@@ -145,8 +145,8 @@ func CanonicalOrigin(raw string) (string, bool) {
 	return origin, true
 }
 
-// validateOriginHeader 使用 CanonicalOrigin 验证单个精确 Origin 值。
-func validateOriginHeader(r *http.Request) (string, bool) {
+// parseOriginHeader 使用 CanonicalOrigin 验证单个精确 Origin 值。
+func parseOriginHeader(r *http.Request) (string, bool) {
 	values := r.Header.Values("Origin")
 	if len(values) != 1 {
 		return "", false
@@ -154,9 +154,9 @@ func validateOriginHeader(r *http.Request) (string, bool) {
 	return CanonicalOrigin(values[0])
 }
 
-// ValidRequestOrigin 返回请求中结构合法的精确 Origin，缺失或无效时返回空字符串。
-func ValidRequestOrigin(c *gin.Context) string {
-	origin, ok := validateOriginHeader(c.Request)
+// RequestOrigin 返回请求中结构合法的精确 Origin，缺失或无效时返回空字符串。
+func RequestOrigin(c *gin.Context) string {
+	origin, ok := parseOriginHeader(c.Request)
 	if !ok {
 		return ""
 	}

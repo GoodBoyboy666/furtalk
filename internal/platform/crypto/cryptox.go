@@ -16,7 +16,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"io"
 )
 
 // 信封格式的固定长度与 AES-256 的最小密钥长度。
@@ -96,13 +95,14 @@ func Encrypt(key []byte, keyVersion byte, plaintext []byte) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("cryptox: new gcm: %w", err)
 	}
-	nonce := make([]byte, gcmNonceLength)
-	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+	nonce, err := RandomBytes(gcmNonceLength)
+	if err != nil {
 		return nil, fmt.Errorf("cryptox: generate nonce: %w", err)
 	}
 	envelope := make([]byte, envelopeKeyVersionLength+gcmNonceLength)
 	envelope[0] = keyVersion
 	copy(envelope[envelopeKeyVersionLength:], nonce)
+	// 加密并追加
 	return aead.Seal(envelope, nonce, plaintext, nil), nil
 }
 

@@ -11,6 +11,7 @@ import (
 	"furtalk/internal/middleware"
 	"furtalk/internal/platform/httpx"
 	"furtalk/internal/service/comment"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -396,7 +397,7 @@ func widgetCreateComment(service *comment.Service) gin.HandlerFunc {
 			IP:           clientIPFromContext(c),
 			UA:           c.GetHeader("User-Agent"),
 			CaptchaToken: req.CaptchaToken,
-			Origin:       httpx.ValidRequestOrigin(c),
+			Origin:       httpx.RequestOrigin(c),
 			Email:        req.Email,
 			Nickname:     req.Nickname,
 			WebsiteURL: comment.WebsiteOperation{
@@ -466,7 +467,7 @@ func widgetExchange(service *comment.Service) gin.HandlerFunc {
 			writeError(c, err)
 			return
 		}
-		requestOrigin := httpx.ValidRequestOrigin(c)
+		requestOrigin := httpx.RequestOrigin(c)
 		result, err := service.ExchangeAuthorization(c.Request.Context(), req.Code, requestOrigin)
 		if err != nil {
 			writeError(c, err)
@@ -486,7 +487,7 @@ func widgetSession(service *comment.Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Header("Cache-Control", "no-store")
 		raw, _ := c.Cookie(middleware.WidgetCookieName)
-		requestOrigin := httpx.ValidRequestOrigin(c)
+		requestOrigin := httpx.RequestOrigin(c)
 		result := service.Probe(c.Request.Context(), raw, requestOrigin)
 		c.JSON(http.StatusOK, toWidgetSessionResponse(*result))
 	}
