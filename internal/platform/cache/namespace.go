@@ -275,38 +275,12 @@ func (n *Namespace) cleanupFallbackLocked(now time.Time) {
 }
 
 // namespaceGet 实现 memory 后端的Namespace读取。
-func (s *Memory) namespaceGet(_ context.Context, name, prefix, suffix string, out any) error {
-	key := prefix + suffix
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	item, ok := s.items[key]
-	if !ok || !s.now().Before(item.expires) {
-		delete(s.items, key)
-		s.removeNamespaceMembershipLocked(key)
-		return ErrNotFound
-	}
-	return json.Unmarshal(item.data, out)
+func (s *Memory) namespaceGet(ctx context.Context, _, prefix, suffix string, out any) error {
+	return s.Get(ctx, prefix+suffix, out)
 }
 
-func (s *Memory) namespaceGetRawJSON(ctx context.Context, name, prefix, suffix string) (json.RawMessage, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	key := prefix + suffix
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	item, ok := s.items[key]
-	if !ok || !s.now().Before(item.expires) {
-		if ok {
-			delete(s.items, key)
-			s.removeNamespaceMembershipLocked(key)
-		}
-		return nil, ErrNotFound
-	}
-	return bytes.Clone(item.data), nil
+func (s *Memory) namespaceGetRawJSON(ctx context.Context, _, prefix, suffix string) (json.RawMessage, error) {
+	return s.GetRawJSON(ctx, prefix+suffix)
 }
 
 // namespaceSet 实现 memory 后端的原子准入与写入。
@@ -487,28 +461,39 @@ func namespaceQuotaKey(name string) string {
 }
 
 func (s *Redis) namespaceGet(ctx context.Context, name, prefix, suffix string, out any) error {
-	value, err := namespaceGetScript.Run(ctx, s.client, []string{prefix + suffix, namespaceQuotaKey(name)}).Text()
-	if errors.Is(err, redis.Nil) {
+	data, err := s.namespaceRead(ctx, name, prefix, suffix)
+	if errors.Is(err, ErrNotFound) {
 		return ErrNotFound
 	}
 	if err != nil {
 		return fmt.Errorf("cache: redis namespace get: %w", err)
 	}
-	if err := json.Unmarshal([]byte(value), out); err != nil {
+	if err := json.Unmarshal(data, out); err != nil {
 		return err
 	}
 	return nil
 }
 
 func (s *Redis) namespaceGetRawJSON(ctx context.Context, name, prefix, suffix string) (json.RawMessage, error) {
-	value, err := namespaceGetScript.Run(ctx, s.client, []string{prefix + suffix, namespaceQuotaKey(name)}).Text()
-	if errors.Is(err, redis.Nil) {
+	data, err := s.namespaceRead(ctx, name, prefix, suffix)
+	if errors.Is(err, ErrNotFound) {
 		return nil, ErrNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("cache: redis namespace get raw: %w", err)
 	}
-	return bytes.Clone([]byte(value)), nil
+	return bytes.Clone(data), nil
+}
+
+func (s *Redis) namespaceRead(ctx context.Context, name, prefix, suffix string) ([]byte, error) {
+	value, err := namespaceGetScript.Run(ctx, s.client, []string{prefix + suffix, namespaceQuotaKey(name)}).Text()
+	if errors.Is(err, redis.Nil) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return []byte(value), nil
 }
 
 func (s *Redis) namespaceSet(ctx context.Context, name, prefix, suffix string, value any, ttl time.Duration, limit int) error {
