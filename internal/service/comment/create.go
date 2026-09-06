@@ -5,19 +5,18 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"net/url"
 	"strings"
 	"time"
 
 	"furtalk/internal/domain"
 	"furtalk/internal/platform/clientip"
+	"furtalk/internal/platform/gravatar"
 	"furtalk/internal/platform/markdown"
+	"furtalk/internal/platform/urlx"
 	"furtalk/internal/platform/value"
 )
 
-// Create 在单个事务内解析或创建作者与线程，并创建根评论或回复。
-// 普通匿名邮箱走公开提交路径；管理员邮箱与认证模式必须携带有效凭据，
-// 请求邮箱只用于一致性校验，绝不选择或替换凭据主体。
+// Create 创建评论并发布评论创建事件。
 func (s *Service) Create(ctx context.Context, input CreateInput) (*CommentView, error) {
 	if err := s.validateSiteAndOrigin(ctx, input.SiteID, input.Origin); err != nil {
 		return nil, err
@@ -158,15 +157,12 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (*CommentView, 
 		return nil, err
 	}
 
-	// direct 策略下评论创建后即 published，只发布创建事件；
-	// 发布确认与回复通知由通知消费者按状态与审核策略分发。
+	// 评论创建事件携带持久化后的实际状态，通知消费者按状态与审核策略分发后续通知。
 	s.publishCommentCreated(ctx, created, pol.Mode)
 	return s.viewFor(ctx, created)
 }
 
-// resolveAndSyncActor 在事务内解析作者用户并同步资料：
-// 凭据路径使用凭据主体并只校验一致性；匿名路径按规范化邮箱查找或创建
-// 普通用户，处理 normalized-email 唯一竞争。资料与评论同事务提交。
+// resolveAndSyncActor 解析评论作者并同步共享资料。
 func (s *Service) resolveAndSyncActor(ctx context.Context, pol domain.CommentPolicy, normalized, original, nickname string, websiteOp WebsiteOperation, credentialActor *int64) (int64, error) {
 	var (
 		user *domain.User
@@ -186,13 +182,6 @@ func (s *Service) resolveAndSyncActor(ctx context.Context, pol domain.CommentPol
 	} else {
 		user, err = s.users.FindByEmailNormalized(ctx, normalized)
 		if errors.Is(err, domain.ErrNotFound) {
-			emailDomain, derr := value.EmailDomain(normalized)
-			if derr != nil {
-				return 0, fmt.Errorf("%w: %v", domain.ErrValidation, derr)
-			}
-			if !value.EmailDomainAllowed(emailDomain, pol.EmailDomainWhitelist, pol.EmailDomainBlacklist) {
-				return 0, domain.ErrEmailDomainNotAllowed
-			}
 			created := &domain.User{
 				Email:           original,
 				EmailNormalized: normalized,
@@ -231,8 +220,7 @@ func (s *Service) resolveAndSyncActor(ctx context.Context, pol domain.CommentPol
 	return user.ID, nil
 }
 
-// applyWebsiteOperation 应用网址三态操作：缺省保持当前值，null/空串清空，
-// 合法非空 URL 覆盖。
+// applyWebsiteOperation 应用网址三态操作：缺省保持当前值，null/空串清空，合法非空 URL 覆盖。
 func applyWebsiteOperation(current *string, op WebsiteOperation) (*string, error) {
 	if !op.Set {
 		return current, nil
@@ -333,15 +321,13 @@ func (s *Service) CreateReplyFirstParty(ctx context.Context, actorID int64, acto
 	return s.viewFor(ctx, created)
 }
 
-// createComment 在打开的事务内插入评论。
-// initialStatus 是调用方在事务外按“垃圾检测覆盖 → 全局审核策略”计算好的显式初始状态；
-// published_at 只在状态为 published 时写入。
+// createComment 在事务中创建评论。
 func (s *Service) createComment(ctx context.Context, cfg domain.CommentPolicy, siteID, threadID, actorID int64, parentID *int64, body string, ip net.IP, rawUA string, initialStatus domain.CommentStatus) (*domain.Comment, error) {
 	var parentRef, rootID *int64
 	var replyToUserID *int64
 	depth := 0
 	if parentID != nil {
-		parent, err := s.comments.FindBySiteAndID(ctx, siteID, *parentID)
+		parent, err := s.comments.FindBySiteAndIDLocked(ctx, siteID, *parentID)
 		if err != nil {
 			if errors.Is(err, domain.ErrNotFound) {
 				return nil, domain.ErrParentNotFound
@@ -353,6 +339,9 @@ func (s *Service) createComment(ctx context.Context, cfg domain.CommentPolicy, s
 		}
 		if parent.Status == domain.CommentStatusDeleted {
 			return nil, domain.ErrParentDeleted
+		}
+		if parent.Status != domain.CommentStatusPublished {
+			return nil, domain.ErrConflict
 		}
 		if parent.Depth >= cfg.MaxReplyDepth {
 			return nil, domain.ErrDepthExceeded
@@ -447,7 +436,7 @@ func (s *Service) viewFor(ctx context.Context, comment *domain.Comment) (*Commen
 	if err != nil {
 		return nil, err
 	}
-	view := toCommentView(comment, user.Nickname, user.WebsiteURL, user.Role, value.GravatarURL(user.EmailNormalized, gravatarBase))
+	view := toCommentView(comment, user.Nickname, user.WebsiteURL, user.Role, gravatar.URL(user.EmailNormalized, gravatarBase))
 	nickname, err := s.replyToNickname(ctx, comment)
 	if err != nil {
 		return nil, err
@@ -471,6 +460,7 @@ func (s *Service) replyToNickname(ctx context.Context, comment *domain.Comment) 
 	return &replyUser.Nickname, nil
 }
 
+// validateBody 校验评论正文。
 func validateBody(body string) error {
 	if strings.TrimSpace(body) == "" {
 		return fmt.Errorf("%w: body is required", domain.ErrValidation)
@@ -484,6 +474,7 @@ func validateBody(body string) error {
 	return nil
 }
 
+// validatePageKey 校验评论页标识。
 func validatePageKey(pageKey string) error {
 	if strings.TrimSpace(pageKey) == "" {
 		return fmt.Errorf("%w: page_key is required", domain.ErrValidation)
@@ -494,6 +485,7 @@ func validatePageKey(pageKey string) error {
 	return nil
 }
 
+// validatePageURL 校验评论页 URL。
 func validatePageURL(pageURL *string) error {
 	if pageURL == nil || strings.TrimSpace(*pageURL) == "" {
 		return nil
@@ -502,16 +494,13 @@ func validatePageURL(pageURL *string) error {
 	if len(raw) > maxPageURLLength {
 		return fmt.Errorf("%w: page_url is too long", domain.ErrValidation)
 	}
-	u, err := url.Parse(raw)
-	if err != nil || u.Host == "" {
-		return fmt.Errorf("%w: page_url must be an absolute http(s) url", domain.ErrValidation)
-	}
-	if u.Scheme != "http" && u.Scheme != "https" {
+	if _, err := urlx.ParseHTTP(raw); err != nil {
 		return fmt.Errorf("%w: page_url must be an absolute http(s) url", domain.ErrValidation)
 	}
 	return nil
 }
 
+// validatePageTitle 校验评论页标题。
 func validatePageTitle(pageTitle *string) error {
 	if pageTitle != nil && len(*pageTitle) > maxPageTitleLength {
 		return fmt.Errorf("%w: page_title is too long", domain.ErrValidation)

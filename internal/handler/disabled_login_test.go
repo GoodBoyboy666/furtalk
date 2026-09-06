@@ -92,7 +92,7 @@ func newDisabledLoginEnv(t *testing.T) *disabledLoginEnv {
 	router := gin.New()
 	router.Use(httpx.ErrorWriter(translator))
 	router.Use(middleware.JWTVerification(signer))
-	RegisterAuth(router.Group("/api/v1"), svc)
+	RegisterAuthWithAdmission(router.Group("/api/v1"), svc, nil)
 	return &disabledLoginEnv{router: router, svc: svc, db: db}
 }
 

@@ -36,6 +36,7 @@ type lineProvider struct {
 	httpClient   *http.Client
 }
 
+// newLINEProvider 创建 LINE 固定端点适配器。
 func newLINEProvider(cfg Config, client *http.Client) *lineProvider {
 	authURL := cfg.AuthURL
 	if authURL == "" {
@@ -65,8 +66,7 @@ func (p *lineProvider) Name() string {
 	return "LINE"
 }
 
-// clientContext 返回注入共享 HTTP client 的上下文，
-// 使 token/verify 的全部网络请求走同一 client（含超时）。
+// clientContext 返回注入共享 HTTP client 的上下文。
 func (p *lineProvider) clientContext(ctx context.Context) context.Context {
 	if p.httpClient == nil {
 		return ctx
@@ -74,6 +74,7 @@ func (p *lineProvider) clientContext(ctx context.Context) context.Context {
 	return context.WithValue(ctx, oauth2.HTTPClient, p.httpClient)
 }
 
+// oauthConfig 构建 LINE OAuth 配置。
 func (p *lineProvider) oauthConfig(redirectURI string) *oauth2.Config {
 	return &oauth2.Config{
 		ClientID:     p.clientID,
@@ -89,7 +90,6 @@ func (p *lineProvider) oauthConfig(redirectURI string) *oauth2.Config {
 }
 
 // BuildAuthURL 为新的 state、可选 PKCE verifier 与可选 nonce 生成 LINE 授权 URL。
-// 仅在 verifier 非空时附加 code_challenge（S256），仅在 nonce 非空时附加 nonce 参数。
 func (p *lineProvider) BuildAuthURL(ctx context.Context, req AuthorizationRequest) (string, error) {
 	opts := make([]oauth2.AuthCodeOption, 0, 2)
 	if req.Verifier != "" {
@@ -102,8 +102,6 @@ func (p *lineProvider) BuildAuthURL(ctx context.Context, req AuthorizationReques
 }
 
 // Exchange 用 code 换取 token，并把 ID token 交给 LINE 官方 verify 端点校验。
-// LINE 要求 nonce：请求 nonce 缺失时直接失败，不发起任何网络请求。
-// 任何失败统一映射为 ErrIdentity；错误文本不包含 code/token/secret/nonce。
 func (p *lineProvider) Exchange(ctx context.Context, req ExchangeRequest) (*Identity, error) {
 	if req.Nonce == "" {
 		return nil, ErrIdentity
@@ -114,7 +112,7 @@ func (p *lineProvider) Exchange(ctx context.Context, req ExchangeRequest) (*Iden
 	}
 	token, err := p.oauthConfig(req.RedirectURI).Exchange(p.clientContext(ctx), req.Code, opts...)
 	if err != nil {
-		return nil, ErrIdentity
+		return nil, preserveProviderError(err)
 	}
 	rawIDToken, ok := token.Extra("id_token").(string)
 	if !ok || rawIDToken == "" {
@@ -122,7 +120,7 @@ func (p *lineProvider) Exchange(ctx context.Context, req ExchangeRequest) (*Iden
 	}
 	claims, err := p.verifyIDToken(ctx, rawIDToken, req.Nonce)
 	if err != nil {
-		return nil, ErrIdentity
+		return nil, preserveProviderError(err)
 	}
 	return &Identity{Subject: ScopedSubject(lineIssuer, claims.Subject), VerifiedEmail: ""}, nil
 }
@@ -136,9 +134,6 @@ type lineClaims struct {
 }
 
 // verifyIDToken 调用 LINE 官方 verify 端点校验 ID token。
-// LINE 在服务端校验签名、audience、有效期与 nonce；本包只解析返回的 claims，
-// 要求 sub 非空且 iss（若出现）必须精确等于 https://access.line.me。
-// email 即使返回也被忽略。
 func (p *lineProvider) verifyIDToken(ctx context.Context, rawIDToken string, nonce string) (*lineClaims, error) {
 	form := url.Values{}
 	form.Set("id_token", rawIDToken)

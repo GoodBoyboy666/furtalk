@@ -13,13 +13,30 @@ import (
 	"furtalk/internal/domain"
 	"furtalk/internal/platform/logging"
 	"furtalk/internal/platform/notifier"
-	"furtalk/internal/service/setting"
 )
+
+// ChannelConfig 保存通知渠道投递所需的配置。
+type ChannelConfig struct {
+	BotToken           string
+	ChatID             string
+	WebhookURL         string
+	ServerURL          string
+	DeviceKey          string
+	ChannelAccessToken string
+	TargetID           string
+	SigningSecret      *string
+}
+
+// ChannelProvider 保存已启用通知渠道及其配置。
+type ChannelProvider struct {
+	ProviderKey string
+	Config      ChannelConfig
+}
 
 // ChannelProviderReader 读取已启用通知通道的解密配置。
 // 由 setting.ProviderService 实现，通知服务通过窄接口消费，便于测试替换。
 type ChannelProviderReader interface {
-	EnabledNotificationProviders(ctx context.Context) ([]setting.NotificationProvider, error)
+	EnabledNotificationProviders(ctx context.Context) ([]ChannelProvider, error)
 }
 
 // ChannelDispatcher 向单个平台通道执行一次有界的投递。
@@ -28,11 +45,11 @@ type ChannelDispatcher interface {
 	Send(ctx context.Context, cfg notifier.Config, msg notifier.Message) error
 }
 
-// webhookBodyMaxRunes 是 WebHook v1 信封中评论正文的截断字符上限，
+// webhookBodyMaxRunes  WebHook v1 信封中评论正文的截断字符上限，
 // 使整体 JSON 请求体保持在有界范围（远低于 64KiB）。
 const webhookBodyMaxRunes = 1000
 
-// webhookEnvelope 是通用 WebHook v1 请求体。
+// webhookEnvelope 通用 WebHook v1 请求体。
 // 业务 ID 全部编码为十进制字符串；缺失的父评论/标题/URL 使用 JSON null。
 type webhookEnvelope struct {
 	Version          string         `json:"version"`
@@ -45,21 +62,21 @@ type webhookEnvelope struct {
 	Comment          webhookComment `json:"comment"`
 }
 
-// webhookSite 是 WebHook v1 信封中的站点对象。
+// webhookSite  WebHook v1 信封中的站点对象。
 type webhookSite struct {
 	ID           string `json:"id"`
 	Name         string `json:"name"`
 	CanonicalURL string `json:"canonical_url"`
 }
 
-// webhookPage 是 WebHook v1 信封中的页面对象；标题/URL 缺失时为 JSON null。
+// webhookPage  WebHook v1 信封中的页面对象；标题/URL 缺失时为 JSON null。
 type webhookPage struct {
 	ThreadID string  `json:"thread_id"`
 	Title    *string `json:"title"`
 	URL      *string `json:"url"`
 }
 
-// webhookComment 是 WebHook v1 信封中的评论对象；父评论缺失时为 JSON null。
+// webhookComment  WebHook v1 信封中的评论对象；父评论缺失时为 JSON null。
 type webhookComment struct {
 	ID             string  `json:"id"`
 	ParentID       *string `json:"parent_id"`
@@ -71,8 +88,6 @@ type webhookComment struct {
 }
 
 // sendChannels 向全部已启用通知通道扇出投递一条规范化消息。
-// 只处理 comment.created 且持久化状态为 published/pending 的评论；
-// 各通道并发执行、使用共享上下文，一个通道失败只记录日志，不取消兄弟通道。
 func (s *Service) sendChannels(ctx context.Context, comment *domain.Comment, author *domain.User, ev domain.CommentEvent) {
 	if s.channels == nil || s.dispatcher == nil || s.sites == nil {
 		return
@@ -98,7 +113,7 @@ func (s *Service) sendChannels(ctx context.Context, comment *domain.Comment, aut
 	var wg sync.WaitGroup
 	for _, provider := range providers {
 		wg.Add(1)
-		go func(p setting.NotificationProvider) {
+		go func(p ChannelProvider) {
 			defer wg.Done()
 			s.dispatchChannel(ctx, p, *msg, comment)
 		}(provider)
@@ -107,7 +122,7 @@ func (s *Service) sendChannels(ctx context.Context, comment *domain.Comment, aut
 }
 
 // dispatchChannel 对单个通道执行一次有界投递并记录脱敏结果。
-func (s *Service) dispatchChannel(ctx context.Context, provider setting.NotificationProvider, msg notifier.Message, comment *domain.Comment) {
+func (s *Service) dispatchChannel(ctx context.Context, provider ChannelProvider, msg notifier.Message, comment *domain.Comment) {
 	cfg, err := s.channelConfig(provider)
 	if err != nil {
 		s.log.Warn("notifications: channel config", slog.String("provider_key", provider.ProviderKey), logging.Error(err))
@@ -123,8 +138,6 @@ func (s *Service) dispatchChannel(ctx context.Context, provider setting.Notifica
 }
 
 // buildChannelMessage 从限定作用域的评论/作者/站点/线程读取构造
-// 一条规范化管理员通道消息，同时构造通用 WebHook v1 信封的原始字节。
-// 消息绝不包含邮箱、IP、UA、收件人列表或退订 token。
 func (s *Service) buildChannelMessage(ctx context.Context, comment *domain.Comment, author *domain.User, site *domain.Site, ev domain.CommentEvent) (*notifier.Message, error) {
 	label, _ := channelLabels(comment.Status)
 	var pageTitle, pageURL string
@@ -178,8 +191,6 @@ func (s *Service) buildChannelMessage(ctx context.Context, comment *domain.Comme
 }
 
 // webHookEnvelope 构造通用 WebHook v1 信封并序列化为原始字节。
-// 事件为固定 "comment.created"；notification_type 区分新评论/待审核；
-// event_id 对单次创建事件确定，接收方可据此去重。
 func (s *Service) webHookEnvelope(ev domain.CommentEvent, comment *domain.Comment, author *domain.User, site *domain.Site, pageTitle, pageURL string) ([]byte, error) {
 	_, notifType := channelLabels(comment.Status)
 	body, truncated := notifier.TruncateRunes(comment.BodyMarkdown, webhookBodyMaxRunes)
@@ -219,7 +230,6 @@ func (s *Service) webHookEnvelope(ev domain.CommentEvent, comment *domain.Commen
 }
 
 // channelLabels 返回评论状态对应的通知标签与 WebHook notification_type。
-// 仅 published / pending 会进入通道分支；其他状态不会调用本函数。
 func channelLabels(status domain.CommentStatus) (label, notifType string) {
 	if status == domain.CommentStatusPending {
 		return "评论待审核", "pending_comment"
@@ -228,7 +238,7 @@ func channelLabels(status domain.CommentStatus) (label, notifType string) {
 }
 
 // channelConfig 把解密后的通知配置映射为 notifier 类型化配置。
-func (s *Service) channelConfig(provider setting.NotificationProvider) (notifier.Config, error) {
+func (s *Service) channelConfig(provider ChannelProvider) (notifier.Config, error) {
 	platform, err := notifier.ParsePlatform(provider.ProviderKey)
 	if err != nil {
 		return notifier.Config{}, err
@@ -246,14 +256,12 @@ func (s *Service) channelConfig(provider setting.NotificationProvider) (notifier
 	}, nil
 }
 
-// TestChannel 向指定通知通道发送一条显式标记的测试消息，供管理员测试端点使用。
-// 测试允许在通道停用时执行，但要求配置完整：配置无效返回 domain.ErrValidation，
-// 远程投递失败返回 domain.ErrUnavailable，错误不含目标或远程正文。
-func (s *Service) TestChannel(ctx context.Context, providerKey string, cfg setting.NotificationConfig) error {
+// TestChannel 发送通知渠道测试消息。
+func (s *Service) TestChannel(ctx context.Context, providerKey string, cfg ChannelConfig) error {
 	if s.dispatcher == nil {
 		return domain.ErrUnavailable
 	}
-	notifCfg, err := s.channelConfig(setting.NotificationProvider{ProviderKey: providerKey, Config: cfg})
+	notifCfg, err := s.channelConfig(ChannelProvider{ProviderKey: providerKey, Config: cfg})
 	if err != nil {
 		return domain.ErrValidation
 	}
@@ -276,7 +284,6 @@ func (s *Service) TestChannel(ctx context.Context, providerKey string, cfg setti
 }
 
 // webHookTestEnvelope 构造通用 WebHook 测试消息的 v1 信封。
-// 复用与生产相同的传输与签名路径，仅事件内容不同。
 func (s *Service) webHookTestEnvelope() ([]byte, error) {
 	env := map[string]any{
 		"version":           "1",

@@ -10,13 +10,12 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// ErrorResponse 是错误响应的 JSON 信封，包含单个 error 对象。
+// ErrorResponse 错误响应的 JSON 信封，包含单个 error 对象。
 type ErrorResponse struct {
 	Error ErrorBody `json:"error"`
 }
 
-// ErrorBody 描述一个语义错误：机器可读的 code、人类可读的 message、
-// 关联的 request_id 以及可选的 details。
+// ErrorBody 机器可读的 code、人类可读的 message、关联的 request_id 以及可选的 details。
 type ErrorBody struct {
 	Code      string         `json:"code"`
 	Message   string         `json:"message"`
@@ -24,8 +23,7 @@ type ErrorBody struct {
 	Details   map[string]any `json:"details"`
 }
 
-// Mapping 描述一个语义错误在 HTTP 边界上的映射：
-// 目标错误、响应状态码、错误码与展示消息。
+// Mapping 目标错误、响应状态码、错误码与展示消息。
 type Mapping struct {
 	Target  error
 	Status  int
@@ -33,14 +31,12 @@ type Mapping struct {
 	Message string
 }
 
-// Translator 是不可变、确定性的语义错误翻译表。
+// Translator 不可变、确定性的语义错误翻译表。
 type Translator struct {
 	mappings []Mapping
 }
 
 // NewTranslator 合并若干错误映射组并校验合法性：
-// 目标错误必须非空且可比较，状态码必须落在 4xx/5xx，
-// code 与 message 非空，且目标错误不能重复。
 func NewTranslator(groups ...[]Mapping) (*Translator, error) {
 	total := 0
 	for _, group := range groups {
@@ -73,7 +69,6 @@ func NewTranslator(groups ...[]Mapping) (*Translator, error) {
 }
 
 // Translate 在映射表中查找能匹配 err 的错误。
-// 入参为 nil 或未找到匹配时返回空映射与 false。
 func (t *Translator) Translate(err error) (Mapping, bool) {
 	if t == nil || err == nil {
 		return Mapping{}, false
@@ -89,13 +84,11 @@ func (t *Translator) Translate(err error) (Mapping, bool) {
 const translatorContextKey = "httpx.error_translator"
 
 // WriteError 使用上下文中的翻译器把 err 转为响应。
-// 未匹配到映射或未挂载翻译器时，回退为 500 内部错误。
 func WriteError(c *gin.Context, err error) {
 	WriteErrorWithDetails(c, err, nil)
 }
 
-// WriteErrorWithDetails 使用上下文中的翻译器把 err 转为携带脱敏 details 的响应。
-// 未匹配到映射或未挂载翻译器时，回退为 500 内部错误。
+// WriteErrorWithDetails 使用上下文中的翻译器组装携带 details 的错误响应。
 func WriteErrorWithDetails(c *gin.Context, err error, details map[string]any) {
 	translator, _ := c.Get(translatorContextKey)
 	if typed, ok := translator.(*Translator); ok {
@@ -108,7 +101,7 @@ func WriteErrorWithDetails(c *gin.Context, err error, details map[string]any) {
 	c.JSON(http.StatusInternalServerError, ResponseWithDetails(c, "internal_error", "服务器内部错误", details))
 }
 
-// Abort 以给定状态码与错误信息中止请求并写入响应。
+// Abort 中止请求并将给定状态码与错误信息写入响应。
 func Abort(c *gin.Context, status int, code, message string) {
 	c.AbortWithStatusJSON(status, Response(c, code, message))
 }
@@ -118,7 +111,7 @@ func Response(c *gin.Context, code, message string) ErrorResponse {
 	return ResponseWithDetails(c, code, message, nil)
 }
 
-// ResponseWithDetails 构造携带当前请求 ID 与脱敏 details 的错误响应体。
+// ResponseWithDetails 构造携带当前请求 ID 与使用方提供 details 的错误响应体。
 func ResponseWithDetails(c *gin.Context, code, message string, details map[string]any) ErrorResponse {
 	if details == nil {
 		details = map[string]any{}

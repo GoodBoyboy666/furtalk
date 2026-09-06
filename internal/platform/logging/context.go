@@ -5,11 +5,9 @@ import (
 	"log/slog"
 )
 
-// contextKey 是 context 中日志属性的内部键。
 type contextKey struct{}
 
 // WithAttrs 以不可变副本把属性加入 context.Context。
-// 追加基于当前 context 的副本，父 context 不受影响，请求间不串字段。
 func WithAttrs(ctx context.Context, attrs ...slog.Attr) context.Context {
 	if len(attrs) == 0 {
 		return ctx
@@ -28,7 +26,6 @@ func AttrsFrom(ctx context.Context) []slog.Attr {
 }
 
 // FromContext 从 context 派生 logger：以 base 为基底，附加上下文属性。
-// 上下文无属性时返回 base；base 为空时返回 discard logger。
 func FromContext(ctx context.Context, base *slog.Logger) *slog.Logger {
 	if base == nil {
 		base = Discard()

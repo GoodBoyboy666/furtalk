@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net"
 	"net/mail"
-	"net/url"
 	"os"
 	"reflect"
 	"strings"
@@ -15,13 +14,13 @@ import (
 
 	"github.com/go-viper/mapstructure/v2"
 	"github.com/spf13/viper"
+
+	"furtalk/internal/platform/urlx"
 )
 
 const envPrefix = "FURTALK"
 
-// Config 是静态配置的不可变快照，按功能拆分为嵌套 section。
-// 每个 platform 构造器只接收自己需要的 section，不接触整份配置。
-// warnings 由 Load 收集，程序化构造的配置不含告警记录。
+// Config 静态配置的不可变快照，按功能拆分为嵌套 section。
 type Config struct {
 	HTTP     HTTPConfig     `mapstructure:"http"`
 	Database DatabaseConfig `mapstructure:"database"`
@@ -51,7 +50,7 @@ type HTTPConfig struct {
 	RateLimitBurst    int           `mapstructure:"rate_limit_burst"`
 }
 
-// DatabaseConfig 承载按方言拆分的数据库连接字段。
+// DatabaseConfig 承载拆分的数据库连接字段。
 type DatabaseConfig struct {
 	Dialect  string `mapstructure:"dialect"`
 	Path     string `mapstructure:"path"`
@@ -63,13 +62,12 @@ type DatabaseConfig struct {
 	SSLMode  string `mapstructure:"ssl_mode"`
 }
 
-// CacheConfig 承载临时存储后端连接（Redis）。空 URL 表示进程内内存存储。
+// CacheConfig 承载Redis连接信息
 type CacheConfig struct {
 	RedisURL string `mapstructure:"redis_url"`
 }
 
 // TokensConfig 承载 JWT 签发/验签参数与 provider 机密加密主密钥。
-// JWTKey 与 SecretKey 都只接受配置提供的原始文本，按原始 UTF-8 字节参与校验。
 type TokensConfig struct {
 	JWTIssuer         string        `mapstructure:"jwt_issuer"`
 	JWTAlgorithm      string        `mapstructure:"jwt_algorithm"`
@@ -79,7 +77,7 @@ type TokensConfig struct {
 	SecretKey         string        `mapstructure:"secret_key"`
 }
 
-// WebAuthnConfig 承载 WebAuthn Relying Party 边界。
+// WebAuthnConfig 承载 WebAuthn Relying Party 参数。
 type WebAuthnConfig struct {
 	RPID      string   `mapstructure:"rp_id"`
 	RPOrigins []string `mapstructure:"rp_origins"`
@@ -91,7 +89,7 @@ type OAuthConfig struct {
 	ClientTimeout time.Duration `mapstructure:"client_timeout"`
 }
 
-// SMTPConfig 承载静态 SMTP 投递配置。
+// SMTPConfig 承载 SMTP 投递配置。
 type SMTPConfig struct {
 	Host     string        `mapstructure:"host"`
 	Port     int           `mapstructure:"port"`
@@ -103,23 +101,21 @@ type SMTPConfig struct {
 }
 
 // LoggingConfig 承载后端日志输出格式选择。
-// Format 只接受小写 "json" 或 "text"；缺省 text，机器采集需显式选择 json。
+// 默认为 text。
 type LoggingConfig struct {
 	Format string `mapstructure:"format"`
 }
 
-// Load 从嵌套环境变量、可选配置文件与内置默认值加载静态配置，
-// 并调用 Validate 校验。任一来源的值非法时返回错误。
-// 缺失必需字段时校验失败；建议字段缺失时收集告警随配置返回。
+// Load 从嵌套环境变量、可选配置文件与内置默认值加载静态配置
 func Load() (Config, error) {
 	v, err := newViper()
 	if err != nil {
 		return Config{}, err
 	}
 
-	// 先按方言屏蔽未选中的连接字段，避免例如 SQLite 部署因遗留的
-	// PostgreSQL 端口环境变量类型错误而无法解码。未选中字段仍由
-	// UnmarshalExact 识别未知键；这里只清除已知但不适用的字段值。
+	// 按方言屏蔽未选中的连接字段，使 SQLite 部署忽略遗留的
+	// PostgreSQL 端口环境变量类型错误。未选中字段仍由
+	// UnmarshalExact 识别未知键；此操作只清除已知但不适用的字段值。
 	ignoreUnselectedDatabaseFields(v)
 
 	var c Config
@@ -129,10 +125,31 @@ func Load() (Config, error) {
 	if err := c.Validate(); err != nil {
 		return Config{}, err
 	}
+	if err := c.normalizeWebURLs(); err != nil {
+		return Config{}, err
+	}
 	c.warnings = c.collectRecommendedWarnings(configFileKeys(v.ConfigFileUsed()))
 	return c, nil
 }
 
+// normalizeWebURLs 将 CORS、站点存储和 WebAuthn 运行时使用的 Origin 统一为同一规范形式。
+func (c *Config) normalizeWebURLs() error {
+	var err error
+	if c.HTTP.PublicBaseURL, err = urlx.CanonicalOrigin(c.HTTP.PublicBaseURL); err != nil {
+		return fmt.Errorf("public base URL must be a canonical HTTPS or loopback HTTP origin: %w", err)
+	}
+	if c.Tokens.JWTIssuer, err = urlx.CanonicalOrigin(c.Tokens.JWTIssuer); err != nil {
+		return fmt.Errorf("JWT issuer must be a canonical HTTPS or loopback HTTP origin: %w", err)
+	}
+	for i, origin := range c.WebAuthn.RPOrigins {
+		if c.WebAuthn.RPOrigins[i], err = urlx.CanonicalOrigin(origin); err != nil {
+			return fmt.Errorf("passkey rp origin %q must be a canonical HTTPS or loopback HTTP origin: %w", origin, err)
+		}
+	}
+	return nil
+}
+
+// ignoreUnselectedDatabaseFields 清除未选数据库方言的字段值。
 func ignoreUnselectedDatabaseFields(v *viper.Viper) {
 	ignored := map[string]any{}
 	switch strings.TrimSpace(v.GetString("database.dialect")) {
@@ -177,14 +194,14 @@ const (
 	defaultJWTLifetime       = 7 * 24 * time.Hour
 	defaultWidgetLifetime    = 24 * time.Hour
 	defaultOAuthTimeout      = 10 * time.Second
+	maxOAuthClientTimeout    = 60 * time.Second
 	defaultSMTPPort          = 587
 	defaultSMTPTimeout       = 30 * time.Second
 	defaultLoggingFormat     = "text"
 )
 
-// recommendedDefault 描述一个建议配置项的 Viper 键与其安全默认值。
-// onlyWithSMTPHost 为 true 时仅当 SMTP 启用才参与缺失告警。
-// silent 为 true 时只注入默认值，不产生缺失告警（如 logging.format 的 text 缺省）。
+// recommendedDefault 建议配置项的 Viper 键与其安全默认值。
+// silent 为 true 时只注入默认值，不产生缺失告警。
 type recommendedDefault struct {
 	key              string
 	def              any
@@ -192,8 +209,7 @@ type recommendedDefault struct {
 	silent           bool
 }
 
-// recommendedDefaults 是建议配置的唯一默认值来源表：configureDefaults 用它
-// 注入默认值，Load 用它收集缺失告警，默认值只在表内声明一次而保持一致。
+// recommendedDefaults 建议配置的唯一默认值来源表
 var recommendedDefaults = []recommendedDefault{
 	{key: "http.address", def: ":8080"},
 	{key: "http.trusted_proxies", def: []string{}},
@@ -217,7 +233,7 @@ var recommendedDefaults = []recommendedDefault{
 	{key: "logging.format", def: defaultLoggingFormat, silent: true},
 }
 
-// requiredConfigFields 是启动必须显式提供的字段；缺失或空值时阻止应用启动。
+// requiredConfigFields 启动必须显式提供的字段，缺失或空值时阻止应用启动。
 var requiredConfigFields = []struct {
 	key   string
 	value func(c Config) string
@@ -230,7 +246,7 @@ var requiredConfigFields = []struct {
 	{key: "webauthn.rp_id", value: func(c Config) string { return c.WebAuthn.RPID }},
 }
 
-// Warning 描述一个因缺失而采用内置默认值的建议配置项。
+// Warning 一个因缺失而采用内置默认值的建议配置项。
 type Warning struct {
 	Key     string
 	Default any
@@ -241,8 +257,7 @@ func (c Config) Warnings() []Warning {
 	return append([]Warning(nil), c.warnings...)
 }
 
-// collectRecommendedWarnings 依据环境变量与配置文件的存在性收集缺失告警。
-// 非空环境变量或文件声明即为显式提供；显式值等于默认值不告警。
+// collectRecommendedWarnings 收集缺失告警。
 func (c Config) collectRecommendedWarnings(fileKeys map[string]bool) []Warning {
 	smtpEnabled := strings.TrimSpace(c.SMTP.Host) != ""
 	var warnings []Warning
@@ -275,7 +290,6 @@ func envNameForKey(key string) string {
 }
 
 // configFileKeys 返回配置文件实际声明的扁平键集合，不包含默认值与环境变量。
-// 文件缺失或读取失败时返回 nil，与纯环境变量部署一致。
 func configFileKeys(path string) map[string]bool {
 	if path == "" {
 		return nil
@@ -329,8 +343,7 @@ func (c Config) checkRequired() error {
 	return nil
 }
 
-// Validate 校验各 section 的静态配置并返回首个错误。
-// 必需字段在格式/范围校验之前检查，缺失时直接返回字段错误。
+// Validate 校验各 section 的静态配置。
 func (c Config) Validate() error {
 	if err := c.checkRequired(); err != nil {
 		return err
@@ -339,9 +352,8 @@ func (c Config) Validate() error {
 		return errors.New("address must not be empty")
 	}
 	for name, value := range map[string]string{"public base URL": c.HTTP.PublicBaseURL, "JWT issuer": c.Tokens.JWTIssuer} {
-		u, err := url.Parse(value)
-		if err != nil || u.Scheme == "" || u.Host == "" || u.Path != "" || u.RawQuery != "" || u.Fragment != "" {
-			return fmt.Errorf("%s must be an absolute URL without path, query, or fragment", name)
+		if _, err := urlx.CanonicalOrigin(value); err != nil {
+			return fmt.Errorf("%s must be a canonical HTTPS or loopback HTTP origin", name)
 		}
 	}
 	if len(c.Tokens.JWTKey) < 32 {
@@ -393,6 +405,12 @@ func (c Config) Validate() error {
 	if c.Tokens.WidgetJWTLifetime <= 0 {
 		return errors.New("widget JWT lifetime must be positive")
 	}
+	if c.OAuth.ClientTimeout <= 0 {
+		return errors.New("oauth client timeout must be positive")
+	}
+	if c.OAuth.ClientTimeout > maxOAuthClientTimeout {
+		return errors.New("oauth client timeout must not exceed 60s")
+	}
 	if c.HTTP.BodyLimit <= 0 {
 		return errors.New("body limit must be positive")
 	}
@@ -415,9 +433,8 @@ func (c Config) Validate() error {
 		return errors.New("passkey rp origins must not be empty")
 	}
 	for _, origin := range c.WebAuthn.RPOrigins {
-		u, err := url.Parse(origin)
-		if err != nil || u.Scheme == "" || u.Hostname() == "" || u.Path != "" || u.RawQuery != "" || u.Fragment != "" {
-			return fmt.Errorf("passkey rp origin %q must be an absolute URL without path, query, or fragment", origin)
+		if _, err := urlx.CanonicalOrigin(origin); err != nil {
+			return fmt.Errorf("passkey rp origin %q must be a canonical HTTPS or loopback HTTP origin", origin)
 		}
 	}
 	if strings.TrimSpace(c.SMTP.Host) != "" {
@@ -440,7 +457,6 @@ func (c Config) Validate() error {
 }
 
 // validateRPID 接受 DNS 主机名或 IP 字面量，不含 scheme、方括号、路径或端口。
-// IPv6 冒号属于地址语法，net.ParseIP 识别完整值后即为合法。
 func validateRPID(value string) error {
 	rpid := strings.TrimSpace(value)
 	if rpid == "" {
@@ -458,6 +474,7 @@ func validateRPID(value string) error {
 	return nil
 }
 
+// validHostname 判断字符串是否为合法 DNS 主机名。
 func validHostname(host string) bool {
 	if len(host) > 253 || strings.HasSuffix(host, ".") {
 		return false
@@ -476,9 +493,6 @@ func validHostname(host string) bool {
 }
 
 // newViper 构建独立 viper 实例。
-// 配置文件可选：从 configs/ 自动发现 config.yaml / config.toml / config.json，
-// 也可用 FURTALK_CONFIG 显式指定路径；文件缺失时静默跳过（兼容纯 env 部署）。
-// 优先级：env（FURTALK_ 前缀）> 配置文件 > 默认值。
 func newViper() (*viper.Viper, error) {
 	v := viper.NewWithOptions(viper.ExperimentalBindStruct())
 	v.SetEnvPrefix(envPrefix)
@@ -501,12 +515,14 @@ func newViper() (*viper.Viper, error) {
 	return v, nil
 }
 
+// configureDefaults 向 Viper 注入建议默认值。
 func configureDefaults(v *viper.Viper) {
 	for _, d := range recommendedDefaults {
 		v.SetDefault(d.key, d.def)
 	}
 }
 
+// configDecodeHook 构建配置解码转换器。
 func configDecodeHook() mapstructure.DecodeHookFunc {
 	return mapstructure.ComposeDecodeHookFunc(
 		mapstructure.StringToTimeDurationHookFunc(),
@@ -514,6 +530,7 @@ func configDecodeHook() mapstructure.DecodeHookFunc {
 	)
 }
 
+// stringToTrimmedSliceHook 构建逗号分隔字符串到字符串切片的转换器。
 func stringToTrimmedSliceHook() mapstructure.DecodeHookFunc {
 	return func(from, to reflect.Type, data any) (any, error) {
 		if from.Kind() != reflect.String || to.Kind() != reflect.Slice || to.Elem().Kind() != reflect.String {

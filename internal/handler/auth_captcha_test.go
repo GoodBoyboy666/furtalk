@@ -57,7 +57,7 @@ func newAuthCaptchaRouter(t *testing.T, policy map[string]bool, verifier identit
 	router.Use(httpx.ErrorWriter(translator))
 	router.Use(middleware.JWTVerification(signer))
 	router.Use(middleware.PrincipalResolution(authPrincipalStore{}))
-	RegisterAuth(router.Group("/api/v1"), svc)
+	RegisterAuthWithAdmission(router.Group("/api/v1"), svc, nil)
 	return router
 }
 

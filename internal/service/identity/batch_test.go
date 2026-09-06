@@ -3,10 +3,38 @@ package identity
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 
 	"furtalk/internal/domain"
 )
+
+type recordingBatchCommentDeleter struct {
+	soft [][]int64
+	hard [][]int64
+}
+
+// SoftDeleteUserComments satisfies the single-user cleanup port for tests.
+func (d *recordingBatchCommentDeleter) SoftDeleteUserComments(context.Context, int64) error {
+	return nil
+}
+
+// SoftDeleteUsersComments records one plural cleanup call for tests.
+func (d *recordingBatchCommentDeleter) SoftDeleteUsersComments(_ context.Context, ids []int64) error {
+	d.soft = append(d.soft, append([]int64(nil), ids...))
+	return nil
+}
+
+// PrepareUserHardDelete satisfies the single-user cleanup port for tests.
+func (d *recordingBatchCommentDeleter) PrepareUserHardDelete(context.Context, int64) error {
+	return nil
+}
+
+// PrepareUsersHardDelete records one plural reference cleanup call for tests.
+func (d *recordingBatchCommentDeleter) PrepareUsersHardDelete(_ context.Context, ids []int64) error {
+	d.hard = append(d.hard, append([]int64(nil), ids...))
+	return nil
+}
 
 func TestAdminBatchUsersCountsNoopsAndInvalidatesOnlyChangedAuthz(t *testing.T) {
 	svc, store := newAdminTestService(t)
@@ -155,5 +183,35 @@ func TestAdminBatchUsersCacheFailureHappensAfterCommit(t *testing.T) {
 	}
 	if user.Status != domain.UserStatusDisabled {
 		t.Fatalf("status = %q, want committed disabled after cache failure", user.Status)
+	}
+}
+
+// TestAdminBatchUsersUsesPluralCommentCleanup verifies one plural cleanup call per action.
+func TestAdminBatchUsersUsesPluralCommentCleanup(t *testing.T) {
+	svc, _ := newAdminTestService(t)
+	first := mustCreateUser(t, svc, AdminCreateUserInput{Email: "plural-first@example.com", Nickname: "first", Role: domain.RoleUser})
+	second := mustCreateUser(t, svc, AdminCreateUserInput{Email: "plural-second@example.com", Nickname: "second", Role: domain.RoleUser})
+	deleter := &recordingBatchCommentDeleter{}
+	svc.SetCommentDeleter(deleter)
+	ctx := context.Background()
+
+	result, err := svc.AdminBatchUsers(ctx, AdminUserBatchInput{
+		ActingID: 999, IDs: []int64{second.ID, first.ID}, Action: AdminUserBatchSoftDelete, Confirm: true,
+	})
+	if err != nil || result.ChangedCount != 2 {
+		t.Fatalf("plural soft-delete result = %+v, err=%v", result, err)
+	}
+	if !reflect.DeepEqual(deleter.soft, [][]int64{{first.ID, second.ID}}) {
+		t.Fatalf("soft comment cleanup calls = %v, want one sorted call", deleter.soft)
+	}
+
+	result, err = svc.AdminBatchUsers(ctx, AdminUserBatchInput{
+		ActingID: 999, IDs: []int64{second.ID, first.ID}, Action: AdminUserBatchHardDelete, Confirm: true,
+	})
+	if err != nil || result.ChangedCount != 2 {
+		t.Fatalf("plural hard-delete result = %+v, err=%v", result, err)
+	}
+	if !reflect.DeepEqual(deleter.hard, [][]int64{{first.ID, second.ID}}) {
+		t.Fatalf("hard comment cleanup calls = %v, want one sorted call", deleter.hard)
 	}
 }

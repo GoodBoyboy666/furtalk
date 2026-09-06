@@ -7,12 +7,12 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// RegisterCaptchaConfig 挂载公共 CAPTCHA 配置端点。
-// 该端点公开、只读、无鉴权，供登录/评论等流程按 action 查询是否要求验证码。
+// RegisterCaptchaConfig 注册 HTTP 路由。
 func RegisterCaptchaConfig(api *gin.RouterGroup, service *setting.CaptchaConfigService) {
 	api.GET("/captcha/config", captchaConfig(service))
 }
 
+// captchaConfig 返回按 action 划分的公共 CAPTCHA 配置。
 // @Summary 获取按 action 划分的公共 CAPTCHA 配置
 // @Tags captcha
 // @Produce json

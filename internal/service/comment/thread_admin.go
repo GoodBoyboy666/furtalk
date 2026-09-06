@@ -48,7 +48,6 @@ type AdminThreadUpdateInput struct {
 }
 
 // AdminUpdateThread 按站点作用域更新线程元数据并返回更新后的完整管理视图。
-// 至少一个字段必须提供；跨站点的 thread_id 视为不存在。
 func (s *Service) AdminUpdateThread(ctx context.Context, siteID, threadID int64, input AdminThreadUpdateInput) (*AdminThreadView, error) {
 	if input.PageKey == nil && !input.PageTitle.Set && !input.PageURL.Set && input.CommentsEnabled == nil {
 		return nil, fmt.Errorf("%w: at least one thread field is required", domain.ErrValidation)
@@ -100,7 +99,6 @@ func (s *Service) AdminUpdateThread(ctx context.Context, siteID, threadID int64,
 }
 
 // AdminDeleteThread 按站点作用域硬删除一条 thread 及其下全部评论。
-// 破坏性操作必须显式确认；跨站点的 thread_id 视为不存在。
 func (s *Service) AdminDeleteThread(ctx context.Context, siteID, threadID int64, confirm bool) error {
 	if !confirm {
 		return domain.ErrConfirmationRequired

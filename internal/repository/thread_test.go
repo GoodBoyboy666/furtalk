@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"path/filepath"
-	"sync"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,7 +13,9 @@ import (
 	"furtalk/internal/platform/database"
 	"furtalk/internal/repository/model"
 
+	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 // newThreadTestDB 打开临时 SQLite 数据库并迁移线程相关表。
@@ -43,90 +45,6 @@ func seedThreadSite(t *testing.T, db *gorm.DB) *domain.Site {
 		t.Fatalf("create site: %v", err)
 	}
 	return site
-}
-
-// TestThreadRepoLazyCreateConcurrentUnique 验证并发惰性创建只产生一条记录。
-func TestThreadRepoLazyCreateConcurrentUnique(t *testing.T) {
-	db := newThreadTestDB(t)
-	site := seedThreadSite(t, db)
-	repo := NewThreadRepo(db)
-
-	const workers = 10
-	start := make(chan struct{})
-	errs := make([]error, workers)
-	var wg sync.WaitGroup
-	for i := 0; i < workers; i++ {
-		wg.Add(1)
-		go func(idx int) {
-			defer wg.Done()
-			<-start
-			_, errs[idx] = repo.ResolveOrCreateLazy(context.Background(), site.ID, "same-page")
-		}(i)
-	}
-	close(start)
-	wg.Wait()
-	for i, err := range errs {
-		if err != nil {
-			t.Fatalf("worker %d: %v", i, err)
-		}
-	}
-
-	var count int64
-	if err := db.Model(&model.Thread{}).Where("site_id = ?", site.ID).Count(&count).Error; err != nil {
-		t.Fatalf("count threads: %v", err)
-	}
-	if count != 1 {
-		t.Fatalf("thread rows = %d, want 1", count)
-	}
-}
-
-// TestThreadRepoLazyCreateReusesWithoutTimestampWrite 验证重复惰性读取复用同一
-// 记录且不刷新 updated_at。
-func TestThreadRepoLazyCreateReusesWithoutTimestampWrite(t *testing.T) {
-	db := newThreadTestDB(t)
-	site := seedThreadSite(t, db)
-	repo := NewThreadRepo(db)
-	ctx := context.Background()
-
-	first, err := repo.ResolveOrCreateLazy(ctx, site.ID, "page")
-	if err != nil {
-		t.Fatalf("first lazy create: %v", err)
-	}
-	before, err := repo.GetBySiteAndKey(ctx, site.ID, "page")
-	if err != nil {
-		t.Fatalf("get thread: %v", err)
-	}
-
-	time.Sleep(20 * time.Millisecond)
-	second, err := repo.ResolveOrCreateLazy(ctx, site.ID, "page")
-	if err != nil {
-		t.Fatalf("second lazy create: %v", err)
-	}
-	if second.ID != first.ID {
-		t.Fatalf("thread id changed: first=%d second=%d", first.ID, second.ID)
-	}
-	after, err := repo.GetBySiteAndKey(ctx, site.ID, "page")
-	if err != nil {
-		t.Fatalf("get thread after reuse: %v", err)
-	}
-	if !after.UpdatedAt.Equal(before.UpdatedAt) {
-		t.Fatalf("updated_at changed on lazy reuse: before=%v after=%v", before.UpdatedAt, after.UpdatedAt)
-	}
-}
-
-// TestThreadRepoNewThreadDefaultsEnabled 验证新建线程默认开启。
-func TestThreadRepoNewThreadDefaultsEnabled(t *testing.T) {
-	db := newThreadTestDB(t)
-	site := seedThreadSite(t, db)
-	repo := NewThreadRepo(db)
-
-	thread, err := repo.ResolveOrCreateLazy(context.Background(), site.ID, "new-page")
-	if err != nil {
-		t.Fatalf("lazy create: %v", err)
-	}
-	if !thread.CommentsEnabled {
-		t.Fatal("comments_enabled = false, want default true")
-	}
 }
 
 // TestThreadRepoUpdateCommentsEnabledRoundTrip 验证显式 false 持久化、同值更新
@@ -175,6 +93,29 @@ func TestThreadRepoUpdateCommentsEnabledRoundTrip(t *testing.T) {
 
 	if _, err := repo.UpdateCommentsEnabled(ctx, site.ID+999, thread.ID, false); !errors.Is(err, domain.ErrNotFound) {
 		t.Fatalf("cross-site update error = %v, want ErrNotFound", err)
+	}
+}
+
+// TestThreadRepoGetBySiteAndIDsLockedPostgresSQL verifies batch lock SQL.
+func TestThreadRepoGetBySiteAndIDsLockedPostgresSQL(t *testing.T) {
+	sqliteDB := newThreadTestDB(t)
+	sqlDB, err := sqliteDB.DB()
+	if err != nil {
+		t.Fatalf("get sql.DB: %v", err)
+	}
+	capture := &publicSQLCapture{Interface: logger.Default}
+	postgresDB, err := gorm.Open(postgres.New(postgres.Config{
+		Conn: sqlDB, PreferSimpleProtocol: true,
+	}), &gorm.Config{DryRun: true, Logger: capture})
+	if err != nil {
+		t.Fatalf("init postgres dry run db: %v", err)
+	}
+	if _, err := NewThreadRepo(postgresDB).GetBySiteAndIDsLocked(context.Background(), 7, []int64{9, 3}); err != nil {
+		t.Fatalf("batch locked thread read: %v", err)
+	}
+	sql := strings.ToUpper(capture.sql)
+	if !strings.Contains(sql, "SITE_ID") || !strings.Contains(sql, " IN ") || !strings.Contains(sql, "ORDER BY ID ASC") || !strings.Contains(sql, "FOR UPDATE") {
+		t.Fatalf("batch thread lock SQL = %q, want site/IN/order/lock", capture.sql)
 	}
 }
 

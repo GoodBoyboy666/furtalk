@@ -16,14 +16,13 @@ import (
 	"go.uber.org/fx"
 )
 
-// httpModule 供应错误 translator、认证中间件、路由注册函数、
-// Gin engine 与 http.Server。
+// httpModule 注册 HTTP translator、中间件、路由和服务器。
 func httpModule() fx.Option {
 	return fx.Provide(
 		handler.NewTranslator,
 		provideAuthMiddleware,
 		provideRegisters,
-		provideRouter,
+		provideRouterWithAdmission,
 		provideHTTPServer,
 	)
 }
@@ -49,11 +48,11 @@ func provideRegisters(s *services) ([]router.Register, error) {
 			handler.RegisterPublicConfig(api, s.settings)
 		},
 		func(api *gin.RouterGroup) {
-			handler.RegisterAuth(api, s.identity, csrfMiddleware)
-			handler.RegisterMe(api, s.identity, s.identity, csrfMiddleware)
+			handler.RegisterAuthWithAdmission(api, s.identity, s.admission, csrfMiddleware)
+			handler.RegisterMeWithAdmission(api, s.identity, s.identity, s.admission, csrfMiddleware)
 		},
 		func(api *gin.RouterGroup) {
-			handler.RegisterFirstPartyCommentAuthorization(api, s.comment, s.identity, csrfMiddleware)
+			handler.RegisterFirstPartyCommentAuthorizationWithAdmission(api, s.comment, s.identity, s.admission, csrfMiddleware)
 			handler.RegisterMeComments(api, s.comment, s.identity, csrfMiddleware)
 			handler.RegisterWidget(
 				api,
@@ -78,8 +77,8 @@ func provideRegisters(s *services) ([]router.Register, error) {
 	return registers, nil
 }
 
-// provideRouter 构建 Gin engine 与全局中间件。
-func provideRouter(
+// provideRouterWithAdmission 构建带流程准入的 HTTP 路由。
+func provideRouterWithAdmission(
 	readiness *readinessState,
 	cfg config.HTTPConfig,
 	logger *slog.Logger,
@@ -89,6 +88,7 @@ func provideRouter(
 	registers []router.Register,
 	identityService *identity.Service,
 	runtimeOptions webRuntimeOptions,
+	admission *ratelimit.PolicyRegistry,
 ) (*gin.Engine, error) {
 	gin.SetMode(gin.ReleaseMode)
 	engine, err := router.New(readiness.IsReady, cfg, logger, limiter, translator, authentication, registers)
@@ -96,7 +96,7 @@ func provideRouter(
 		return nil, err
 	}
 	// Apple form_post 桥必须注册在 SPA NoRoute 回退之前。
-	router.RegisterOAuthCallbackBridge(engine, identityService.CreateOAuthHandoff)
+	handler.RegisterOAuthCallbackBridgeWithAdmission(engine, identityService.CreateOAuthHandoff, admission)
 	if !runtimeOptions.Enabled {
 		return engine, nil
 	}

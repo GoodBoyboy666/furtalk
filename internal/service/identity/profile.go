@@ -8,11 +8,11 @@ import (
 	"time"
 
 	"furtalk/internal/domain"
-	"furtalk/internal/platform/logging"
+	"furtalk/internal/platform/gravatar"
 	"furtalk/internal/platform/value"
 )
 
-// Profile 是返回给 HTTP 适配层的用户数据，不包含凭证机密。
+// Profile 返回给 HTTP 适配层的用户数据，不包含凭证机密。
 type Profile struct {
 	ID            int64
 	Email         string
@@ -26,11 +26,11 @@ type Profile struct {
 	AvatarURL     string
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
-	// DeletedAt 是软删除时间，nil 表示账号未被软删除。
+	// DeletedAt 软删除时间，nil 表示账号未被软删除。
 	DeletedAt *time.Time
 }
 
-// Get 返回用户资料、角色与状态以及通知偏好。
+// Get 读取当前用户资料。
 func (s *Service) Get(ctx context.Context, userID int64) (*Profile, error) {
 	return s.getWithPrefs(ctx, userID)
 }
@@ -67,7 +67,7 @@ func (s *Service) UpdateNotificationPreferences(ctx context.Context, userID int6
 	return domain.NotificationPreferences{ReplyEnabled: replyEnabled, ModerationEnabled: moderationEnabled}, nil
 }
 
-// List 按搜索词列出用户，供管理端使用。sort 控制 id 排序方向，page 控制页码。
+// List 分页列出用户资料。
 func (s *Service) List(ctx context.Context, search string, sort domain.CommentSort, page, limit int) ([]Profile, error) {
 	limit = normalizeUserLimit(limit)
 	rows, err := s.users.List(ctx, search, sort, limit, domain.OffsetForPage(page, limit))
@@ -86,7 +86,6 @@ func (s *Service) List(ctx context.Context, search string, sort domain.CommentSo
 }
 
 // normalizeUserLimit 把管理端用户列表的每页数量限制在默认 50、上限 100，
-// 与 UserRepo.List 的归一化保持一致，使 offset 计算与行数取用对齐。
 func normalizeUserLimit(limit int) int {
 	if limit <= 0 || limit > 100 {
 		return 50
@@ -94,7 +93,7 @@ func normalizeUserLimit(limit int) int {
 	return limit
 }
 
-// ListResult 是管理端用户列表及其与搜索条件匹配的总数。
+// ListResult 管理端用户列表及其与搜索条件匹配的总数。
 type ListResult struct {
 	Users []Profile
 	Total int64
@@ -113,7 +112,7 @@ func (s *Service) ListWithTotal(ctx context.Context, search string, sort domain.
 	return &ListResult{Users: users, Total: total}, nil
 }
 
-// Create 预创建普通用户或额外的管理员。
+// Create 创建用户资料。
 func (s *Service) Create(ctx context.Context, email, nickname string, role domain.Role) (*Profile, error) {
 	original, normalized, err := value.NormalizeEmail(email)
 	if err != nil {
@@ -141,50 +140,10 @@ func (s *Service) Create(ctx context.Context, email, nickname string, role domai
 
 // UpdateRoleStatus 修改用户的角色或状态，保护最后一名活跃管理员，并在提交后同步失效 authz 缓存。
 func (s *Service) UpdateRoleStatus(ctx context.Context, targetID int64, role *domain.Role, status *domain.UserStatus) (*Profile, error) {
-	current, err := s.users.FindByID(ctx, targetID)
-	if err != nil {
-		return nil, err
-	}
-	nextRole := current.Role
-	nextStatus := current.Status
-	if role != nil {
-		if *role != domain.RoleUser && *role != domain.RoleAdmin {
-			return nil, fmt.Errorf("%w: role must be user or admin", domain.ErrValidation)
-		}
-		nextRole = *role
-	}
-	if status != nil {
-		if *status != domain.UserStatusActive && *status != domain.UserStatusDisabled {
-			return nil, fmt.Errorf("%w: status must be active or disabled", domain.ErrValidation)
-		}
-		nextStatus = *status
-	}
-
-	if current.Role == domain.RoleAdmin && current.Status == domain.UserStatusActive &&
-		(nextRole != domain.RoleAdmin || nextStatus != domain.UserStatusActive) {
-		count, err := s.users.CountByRoleAndStatus(ctx, domain.RoleAdmin, domain.UserStatusActive)
-		if err != nil {
-			return nil, err
-		}
-		if count <= 1 {
-			return nil, domain.ErrLastAdmin
-		}
-	}
-
-	if nextRole == current.Role && nextStatus == current.Status {
-		return s.getWithPrefs(ctx, targetID)
-	}
-	if err := s.users.UpdateRoleStatus(ctx, targetID, nextRole, nextStatus); err != nil {
-		return nil, err
-	}
-	if err := s.cache.Delete(ctx, authzKey(targetID)); err != nil {
-		logging.FromContext(ctx, s.log).ErrorContext(ctx, "authz cache invalidation failed", logging.ID("user_id", targetID), logging.Error(err))
-		s.failFast(err)
-		return nil, domain.ErrCacheInvalidation
-	}
-	return s.getWithPrefs(ctx, targetID)
+	return s.AdminUpdateUser(ctx, targetID, AdminUpdateUserInput{Role: role, Status: status})
 }
 
+// getWithPrefs 加载用户资料及通知偏好。
 func (s *Service) getWithPrefs(ctx context.Context, userID int64) (*Profile, error) {
 	user, err := s.users.FindByID(ctx, userID)
 	if err != nil {
@@ -193,6 +152,7 @@ func (s *Service) getWithPrefs(ctx context.Context, userID int64) (*Profile, err
 	return s.profileOf(ctx, user)
 }
 
+// profileOf 将用户转换为资料视图。
 func (s *Service) profileOf(ctx context.Context, user *domain.User) (*Profile, error) {
 	prefs := domain.NotificationPreferences{ReplyEnabled: true, ModerationEnabled: true}
 	if row, err := s.prefs.GetByUserID(ctx, user.ID); err == nil {
@@ -218,7 +178,7 @@ func (s *Service) profileOf(ctx context.Context, user *domain.User) (*Profile, e
 		EmailVerified: user.EmailVerifiedAt != nil,
 		HasPassword:   hasPassword,
 		Preferences:   prefs,
-		AvatarURL:     value.GravatarURL(user.EmailNormalized, gravatarBase),
+		AvatarURL:     gravatar.URL(user.EmailNormalized, gravatarBase),
 		CreatedAt:     user.CreatedAt,
 		UpdatedAt:     user.UpdatedAt,
 		DeletedAt:     user.DeletedAt,

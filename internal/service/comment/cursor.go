@@ -10,8 +10,7 @@ import (
 	"furtalk/internal/domain"
 )
 
-// encodeCursor 把完整的公开排序位置序列化为不透明游标。
-// v2 标记携带置顶分组位；旧游标仍按未置顶位置解码。
+// encodeCursor 编码公开排序位置游标。
 func encodeCursor(pinned bool, createdAt time.Time, id int64) string {
 	group := 0
 	if pinned {
@@ -21,8 +20,7 @@ func encodeCursor(pinned bool, createdAt time.Time, id int64) string {
 	return base64.RawURLEncoding.EncodeToString([]byte(raw))
 }
 
-// encodeHotCursor 把 (like_count, created_at, id) 位置序列化为带 hot 前缀的
-// base64url 游标。hot 前缀让解码可以按排序模式拒绝错配的游标。
+// encodeHotCursor 编码热度排序游标。
 func encodeHotCursor(pinned bool, likeCount int64, createdAt time.Time, id int64) string {
 	group := 0
 	if pinned {
@@ -32,9 +30,7 @@ func encodeHotCursor(pinned bool, likeCount int64, createdAt time.Time, id int64
 	return base64.RawURLEncoding.EncodeToString([]byte(raw))
 }
 
-// decodeCursor 解析不透明游标为 keyset 位置，并按排序模式拒绝错配形状：
-// hot 游标只能用于 hot，方向游标（asc/desc 或传统格式）只能用于方向模式。
-// 空游标表示从第一页开始。
+// decodeCursor 按排序模式解析公开游标。
 func decodeCursor(raw string, sort domain.CommentSort) (*domain.Cursor, error) {
 	if strings.TrimSpace(raw) == "" {
 		return nil, nil
@@ -53,7 +49,7 @@ func decodeCursor(raw string, sort domain.CommentSort) (*domain.Cursor, error) {
 	return decodeDirectionalCursor(text)
 }
 
-// decodeDirectionalCursor 解析传统方向游标 "<unixMicros>:<id>"。
+// decodeDirectionalCursor 解析方向排序游标。
 func decodeDirectionalCursor(text string) (*domain.Cursor, error) {
 	if strings.HasPrefix(text, "v2:") {
 		parts := strings.Split(text, ":")
@@ -85,7 +81,7 @@ func decodeDirectionalCursor(text string) (*domain.Cursor, error) {
 	return &domain.Cursor{CreatedAt: time.UnixMicro(micros).UTC(), ID: id}, nil
 }
 
-// decodeHotCursor 解析 hot 游标 "hot:<like_count>:<unixMicros>:<id>"。
+// decodeHotCursor 解析热度排序游标。
 func decodeHotCursor(text string) (*domain.Cursor, error) {
 	parts := strings.Split(text, ":")
 	if len(parts) == 6 && parts[0] == "hot" && parts[1] == "v2" {

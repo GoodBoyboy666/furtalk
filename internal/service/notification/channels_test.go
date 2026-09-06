@@ -11,22 +11,20 @@ import (
 
 	"furtalk/internal/domain"
 	"furtalk/internal/platform/database"
-	"furtalk/internal/platform/gormtx"
 	"furtalk/internal/platform/notifier"
 	"furtalk/internal/repository"
 	"furtalk/internal/repository/model"
-	"furtalk/internal/service/setting"
 
 	"gorm.io/gorm"
 )
 
 // fakeChannelReader 返回可编程的已启用通道列表。
 type fakeChannelReader struct {
-	providers []setting.NotificationProvider
+	providers []ChannelProvider
 	err       error
 }
 
-func (f *fakeChannelReader) EnabledNotificationProviders(context.Context) ([]setting.NotificationProvider, error) {
+func (f *fakeChannelReader) EnabledNotificationProviders(context.Context) ([]ChannelProvider, error) {
 	return f.providers, f.err
 }
 
@@ -59,7 +57,7 @@ func (f *fakeChannelDispatcher) count() int {
 
 // newChannelHarness 构建带站点仓储、fake channel reader/dispatcher、无 SMTP 的通知服务。
 // mailer 为 nil，用于证明非邮件通道在 SMTP 缺失时仍可投递。
-func newChannelHarness(t *testing.T, providers []setting.NotificationProvider, errBy map[string]error) (*gorm.DB, *Service, *fakeChannelDispatcher, *setting.Service) {
+func newChannelHarness(t *testing.T, providers []ChannelProvider, errBy map[string]error) (*gorm.DB, *Service, *fakeChannelDispatcher, *fakeSettingsReader) {
 	t.Helper()
 	dsn := filepath.Join(t.TempDir(), "channel-test.db")
 	db, err := database.Connect(database.Config{Dialect: "sqlite", Path: dsn})
@@ -71,7 +69,7 @@ func newChannelHarness(t *testing.T, providers []setting.NotificationProvider, e
 			_ = sqlDB.Close()
 		}
 	})
-	if err := database.AutoMigrate(db, &model.User{}, &model.Site{}, &model.SiteOrigin{}, &model.Thread{}, &model.Comment{}, &model.CommentLike{}, &model.NotificationPreferences{}, &model.DynamicSetting{}); err != nil {
+	if err := database.AutoMigrate(db, &model.User{}, &model.Site{}, &model.SiteOrigin{}, &model.Thread{}, &model.Comment{}, &model.CommentLike{}, &model.NotificationPreferences{}); err != nil {
 		t.Fatalf("auto migrate: %v", err)
 	}
 	users := repository.NewUserRepo(db)
@@ -79,20 +77,18 @@ func newChannelHarness(t *testing.T, providers []setting.NotificationProvider, e
 	threads := repository.NewThreadRepo(db)
 	prefs := repository.NewPreferenceRepo(db)
 	sites := repository.NewSiteRepo(db)
-	settingsSvc := setting.NewService(gormtx.NewRunner(db), repository.NewSettingsRepo(db))
+	settings := newFakeSettingsReader()
 	reader := &fakeChannelReader{providers: providers}
 	dispatcher := &fakeChannelDispatcher{errBy: errBy}
-	svc := NewService(users, comments, threads, prefs, nil, settingsSvc, sites, reader, dispatcher, nil, nil, nil, fakeSigner{}, "https://furtalk.example.com", nil)
-	return db, svc, dispatcher, settingsSvc
+	svc := NewService(users, comments, threads, prefs, nil, settings, sites, reader, dispatcher, nil, nil, nil, fakeSigner{}, "https://furtalk.example.com", nil)
+	return db, svc, dispatcher, settings
 }
 
 // telegramProvider 返回一个已配置的 Telegram 通道。
-func telegramProvider() setting.NotificationProvider {
-	return setting.NotificationProvider{
+func telegramProvider() ChannelProvider {
+	return ChannelProvider{
 		ProviderKey: "notification.telegram",
-		Enabled:     true,
-		Configured:  true,
-		Config: setting.NotificationConfig{
+		Config: ChannelConfig{
 			BotToken: "tok",
 			ChatID:   "123",
 		},
@@ -100,12 +96,10 @@ func telegramProvider() setting.NotificationProvider {
 }
 
 // webhookProvider 返回一个已配置的通用 WebHook 通道。
-func webhookProvider(secret *string) setting.NotificationProvider {
-	return setting.NotificationProvider{
+func webhookProvider(secret *string) ChannelProvider {
+	return ChannelProvider{
 		ProviderKey: "notification.webhook",
-		Enabled:     true,
-		Configured:  true,
-		Config: setting.NotificationConfig{
+		Config: ChannelConfig{
 			WebhookURL:    "http://127.0.0.1:9000/hook",
 			SigningSecret: secret,
 		},
@@ -125,7 +119,7 @@ func createdEvent(fx notificationFixture) domain.CommentEvent {
 
 // TestChannelDeliveryPublished 验证 published 评论向全部已启用通道各投递一次。
 func TestChannelDeliveryPublished(t *testing.T) {
-	providers := []setting.NotificationProvider{telegramProvider(), webhookProvider(nil)}
+	providers := []ChannelProvider{telegramProvider(), webhookProvider(nil)}
 	db, svc, dispatcher, _ := newChannelHarness(t, providers, nil)
 	fx := seedNotificationData(t, db)
 
@@ -145,7 +139,7 @@ func TestChannelDeliveryPublished(t *testing.T) {
 
 // TestChannelDeliveryPending 验证 pending 评论投递 pending_comment 通知。
 func TestChannelDeliveryPending(t *testing.T) {
-	db, svc, dispatcher, _ := newChannelHarness(t, []setting.NotificationProvider{webhookProvider(nil)}, nil)
+	db, svc, dispatcher, _ := newChannelHarness(t, []ChannelProvider{webhookProvider(nil)}, nil)
 	fx := seedNotificationData(t, db)
 	setCommentStatus(t, db, fx.CommentID, domain.CommentStatusPending)
 
@@ -168,7 +162,7 @@ func TestChannelDeliveryPending(t *testing.T) {
 
 // TestChannelNoDeliveryForSpam 验证 spam 状态不投递通道。
 func TestChannelNoDeliveryForSpam(t *testing.T) {
-	db, svc, dispatcher, _ := newChannelHarness(t, []setting.NotificationProvider{telegramProvider()}, nil)
+	db, svc, dispatcher, _ := newChannelHarness(t, []ChannelProvider{telegramProvider()}, nil)
 	fx := seedNotificationData(t, db)
 	setCommentStatus(t, db, fx.CommentID, domain.CommentStatusSpam)
 
@@ -181,7 +175,7 @@ func TestChannelNoDeliveryForSpam(t *testing.T) {
 
 // TestChannelNoDeliveryForPublishedEvent 验证 comment.published 事件不投递通道。
 func TestChannelNoDeliveryForPublishedEvent(t *testing.T) {
-	db, svc, dispatcher, _ := newChannelHarness(t, []setting.NotificationProvider{telegramProvider()}, nil)
+	db, svc, dispatcher, _ := newChannelHarness(t, []ChannelProvider{telegramProvider()}, nil)
 	fx := seedNotificationData(t, db)
 
 	svc.handle(context.Background(), domain.CommentEvent{
@@ -200,7 +194,7 @@ func TestChannelNoDeliveryForPublishedEvent(t *testing.T) {
 // TestChannelMessageFields 验证通道消息包含站点/页面/作者/正文/状态/时间，
 // 且不含邮箱、IP、UA。
 func TestChannelMessageFields(t *testing.T) {
-	db, svc, dispatcher, _ := newChannelHarness(t, []setting.NotificationProvider{telegramProvider(), webhookProvider(nil)}, nil)
+	db, svc, dispatcher, _ := newChannelHarness(t, []ChannelProvider{telegramProvider(), webhookProvider(nil)}, nil)
 	fx := seedNotificationData(t, db)
 
 	svc.handle(context.Background(), createdEvent(fx))
@@ -252,7 +246,7 @@ func TestChannelMessageFields(t *testing.T) {
 
 // TestChannelFailureIsolation 验证一个通道失败不阻止其他通道与继续投递。
 func TestChannelFailureIsolation(t *testing.T) {
-	providers := []setting.NotificationProvider{telegramProvider(), webhookProvider(nil)}
+	providers := []ChannelProvider{telegramProvider(), webhookProvider(nil)}
 	errBy := map[string]error{string(notifier.PlatformTelegram): notifier.ErrDelivery}
 	db, svc, dispatcher, _ := newChannelHarness(t, providers, errBy)
 	fx := seedNotificationData(t, db)
@@ -267,7 +261,7 @@ func TestChannelFailureIsolation(t *testing.T) {
 
 // TestChannelSMTPNilStillDelivers 验证 SMTP 缺失（mailer=nil）时非邮件通道仍投递。
 func TestChannelSMTPNilStillDelivers(t *testing.T) {
-	db, svc, dispatcher, _ := newChannelHarness(t, []setting.NotificationProvider{telegramProvider()}, nil)
+	db, svc, dispatcher, _ := newChannelHarness(t, []ChannelProvider{telegramProvider()}, nil)
 	if svc.mailer != nil {
 		t.Fatal("harness must run with nil mailer")
 	}

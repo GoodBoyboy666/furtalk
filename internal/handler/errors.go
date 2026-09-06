@@ -8,8 +8,7 @@ import (
 	"furtalk/internal/service/notification"
 )
 
-// errorMappings 返回全部语义错误到 HTTP 响应的单一映射组。
-// 排列顺序决定翻译优先级：业务 sentinel 在前，协议错误在后。
+// errorMappings 返回领域错误到 HTTP 响应的映射。
 func errorMappings() []httpx.Mapping {
 	return []httpx.Mapping{
 		// identity 域错误。
@@ -26,6 +25,7 @@ func errorMappings() []httpx.Mapping {
 		{Target: domain.ErrAnonymousRestricted, Status: http.StatusForbidden, Code: "anonymous_mode_restricted", Message: "匿名模式下不可使用第一方访问"},
 		{Target: domain.ErrRegistrationClosed, Status: http.StatusUnprocessableEntity, Code: "registration_closed", Message: "公开注册已关闭"},
 		{Target: domain.ErrMailUnavailable, Status: http.StatusServiceUnavailable, Code: "mail_unavailable", Message: "邮件服务暂不可用"},
+		{Target: domain.ErrRateLimited, Status: http.StatusTooManyRequests, Code: "rate_limited", Message: "请求过于频繁"},
 		{Target: domain.ErrLastAdmin, Status: http.StatusConflict, Code: "conflict", Message: "不能移除最后一个管理员"},
 		{Target: domain.ErrLastLoginMethod, Status: http.StatusConflict, Code: "conflict", Message: "不能移除最后一个登录方式"},
 		{Target: domain.ErrCacheInvalidation, Status: http.StatusInternalServerError, Code: "cache_invalidation_failed", Message: "授权缓存失效失败"},

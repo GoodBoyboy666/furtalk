@@ -14,15 +14,15 @@ import (
 )
 
 var (
-	// ErrMissingBody 在请求体为空时返回。
+	// ErrMissingBody 请求体为空。
 	ErrMissingBody = errors.New("httpx: request body is missing")
-	// ErrMalformedBody 在请求体不是合法 JSON 时返回。
+	// ErrMalformedBody 请求体不是合法 JSON。
 	ErrMalformedBody = errors.New("httpx: request body is malformed")
-	// ErrMultipleObjects 在请求体包含多个 JSON 值时返回。
+	// ErrMultipleObjects 请求体包含多个 JSON 值。
 	ErrMultipleObjects = errors.New("httpx: request body has multiple values")
-	// ErrInvalidID 在路径/查询参数不是正整数 id 时返回。
+	// ErrInvalidID 路径/查询参数不是正整数 id。
 	ErrInvalidID = errors.New("httpx: invalid id")
-	// ErrUnsupportedMediaType 在 Content-Type 不是 application/json 时返回。
+	// ErrUnsupportedMediaType Content-Type 不是 application/json。
 	ErrUnsupportedMediaType = errors.New("httpx: unsupported media type")
 )
 
@@ -38,10 +38,6 @@ func ProtocolErrorMappings() []Mapping {
 }
 
 // DecodeBody 严格解码单个 JSON 对象到 into，拒绝未知字段与尾随内容。
-// 仅接受 application/json（含合法参数，如 application/json; charset=utf-8）；
-// 缺失、格式错误或其它 media type 返回 ErrUnsupportedMediaType。
-// 空请求体返回 ErrMissingBody，格式错误返回 ErrMalformedBody，
-// 多个 JSON 值返回 ErrMultipleObjects。
 func DecodeBody(c *gin.Context, into any) error {
 	if err := requireJSONContentType(c); err != nil {
 		return err
@@ -61,7 +57,6 @@ func DecodeBody(c *gin.Context, into any) error {
 }
 
 // requireJSONContentType 校验请求 Content-Type 为 application/json。
-// 兼容合法参数（如 charset），缺失或其它 media type 返回 ErrUnsupportedMediaType。
 func requireJSONContentType(c *gin.Context) error {
 	raw := c.GetHeader("Content-Type")
 	if raw == "" {
@@ -89,7 +84,6 @@ func ParseDecimalID(raw string) (int64, error) {
 }
 
 // ParseOptionalID 解析可选的十进制 id。
-// 空字符串或 nil 返回 nil，否则按 ParseDecimalID 解析。
 func ParseOptionalID(raw *string) (*int64, error) {
 	if raw == nil || strings.TrimSpace(*raw) == "" {
 		return nil, nil

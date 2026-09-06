@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"furtalk/internal/domain"
-	pkgcaptcha "furtalk/internal/platform/captcha"
 	"furtalk/internal/platform/database"
 	"furtalk/internal/platform/gormtx"
 	"furtalk/internal/repository"
@@ -57,7 +56,7 @@ func (b *recordingEventBus) Publish(domain.CommentEvent) error {
 	return nil
 }
 
-// replyCaptchaVerifier 记录调用参数并返回固定的 platform CAPTCHA 错误。
+// replyCaptchaVerifier 记录调用参数并返回固定的 domain CAPTCHA 错误。
 type replyCaptchaVerifier struct {
 	err    error
 	calls  int
@@ -181,17 +180,17 @@ func TestCreateReplyFirstPartyCaptchaMatrix(t *testing.T) {
 			wantTx:   0,
 		},
 		{
-			name:     "verifier failure maps to ErrCaptchaFailed",
+			name:     "verifier failure returns ErrCaptchaFailed",
 			policy:   replyPolicyWithComment(),
-			verifier: &replyCaptchaVerifier{err: pkgcaptcha.ErrFailed},
+			verifier: &replyCaptchaVerifier{err: domain.ErrCaptchaFailed},
 			token:    "token",
 			wantErr:  domain.ErrCaptchaFailed,
 			wantTx:   0,
 		},
 		{
-			name:     "provider unavailable maps to ErrCaptchaUnavailable",
+			name:     "provider unavailable returns ErrCaptchaUnavailable",
 			policy:   replyPolicyWithComment(),
-			verifier: &replyCaptchaVerifier{err: pkgcaptcha.ErrUnavailable},
+			verifier: &replyCaptchaVerifier{err: domain.ErrCaptchaUnavailable},
 			token:    "token",
 			wantErr:  domain.ErrCaptchaUnavailable,
 			wantTx:   0,
@@ -273,7 +272,7 @@ func TestCreateReplyFirstPartyCaptchaFailureWritesNothing(t *testing.T) {
 	fx := seedReplyFixture(t, db)
 	runner := &recordingTxRunner{inner: gormtx.NewRunner(db)}
 	bus := &recordingEventBus{}
-	verifier := &replyCaptchaVerifier{err: pkgcaptcha.ErrFailed}
+	verifier := &replyCaptchaVerifier{err: domain.ErrCaptchaFailed}
 	svc := newReplyService(db, replyPolicyWithComment(), verifier, runner, bus)
 
 	_, err := svc.CreateReplyFirstParty(
@@ -307,7 +306,7 @@ func TestCreateReplyFirstPartyGatesBeforeParentLookup(t *testing.T) {
 	_ = seedReplyFixture(t, db)
 	runner := &recordingTxRunner{inner: gormtx.NewRunner(db)}
 	bus := &recordingEventBus{}
-	verifier := &replyCaptchaVerifier{err: pkgcaptcha.ErrFailed}
+	verifier := &replyCaptchaVerifier{err: domain.ErrCaptchaFailed}
 	svc := newReplyService(db, replyPolicyWithComment(), verifier, runner, bus)
 
 	_, err := svc.CreateReplyFirstParty(

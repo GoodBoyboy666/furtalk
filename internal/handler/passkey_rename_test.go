@@ -73,7 +73,7 @@ func newPasskeyRenameHandlerEnv(t *testing.T) (*gin.Engine, *identity.Service, *
 	router := gin.New()
 	router.Use(httpx.ErrorWriter(translator))
 	api := router.Group("/api/v1", userPrincipal(1))
-	RegisterMe(api, svc, svc, middleware.CSRFProtection())
+	RegisterMeWithAdmission(api, svc, svc, nil, middleware.CSRFProtection())
 	return router, svc, db
 }
 

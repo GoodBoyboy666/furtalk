@@ -14,6 +14,7 @@ import (
 	"furtalk/internal/platform/ratelimit"
 	"furtalk/internal/service/comment"
 	"furtalk/internal/service/identity"
+
 	"go.uber.org/fx"
 )
 
@@ -34,7 +35,7 @@ func newLogger(cfg config.Config) *slog.Logger {
 	return logging.NewWithFormat(os.Stdout, cfg.Logging.Format)
 }
 
-// configSections 是 config.Config 拆分出的类型化配置集合。
+// configSections  config.Config 拆分出的类型化配置集合。
 type configSections struct {
 	fx.Out
 	HTTP         config.HTTPConfig

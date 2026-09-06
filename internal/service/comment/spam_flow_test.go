@@ -90,6 +90,7 @@ func newSpamFlowWidgetService(t *testing.T, db *gorm.DB, fx spamFlowFixture, rea
 		UserW: identity.NewService(identity.Dependencies{
 			TxRunner: gormtx.NewRunner(db),
 			Users:    repository.NewUserRepo(db),
+			Policy:   widgetDomainIdentityPolicy{},
 		}),
 		Captcha: &countingCaptchaVerifier{},
 		Authz:   adminAuthzResolver{users: repository.NewUserRepo(db)},
@@ -242,7 +243,7 @@ func TestFirstPartyReplySpam(t *testing.T) {
 		Users:    repository.NewUserRepo(db),
 		Settings: &staticCommentPolicyReader{policy: pol},
 		UserW: identity.NewService(identity.Dependencies{
-			TxRunner: gormtx.NewRunner(db), Users: repository.NewUserRepo(db),
+			TxRunner: gormtx.NewRunner(db), Users: repository.NewUserRepo(db), Policy: widgetDomainIdentityPolicy{},
 		}),
 		Captcha: &countingCaptchaVerifier{},
 		Authz:   adminAuthzResolver{users: repository.NewUserRepo(db)},
@@ -270,7 +271,7 @@ func TestFirstPartyReplySpam(t *testing.T) {
 		Users:    repository.NewUserRepo(db),
 		Settings: &staticCommentPolicyReader{policy: pol},
 		UserW: identity.NewService(identity.Dependencies{
-			TxRunner: gormtx.NewRunner(db), Users: repository.NewUserRepo(db),
+			TxRunner: gormtx.NewRunner(db), Users: repository.NewUserRepo(db), Policy: widgetDomainIdentityPolicy{},
 		}),
 		Captcha: &countingCaptchaVerifier{},
 		Authz:   adminAuthzResolver{users: repository.NewUserRepo(db)},

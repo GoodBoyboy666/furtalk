@@ -15,28 +15,27 @@ import (
 	"time"
 )
 
-// tencentTMSEndpoint 是腾讯云 TMS TextModeration 端点。
+// tencentTMSEndpoint 腾讯云 TMS TextModeration Endpoint。
 const tencentTMSEndpoint = "tms.tencentcloudapi.com"
 
-// TencentConfig 是腾讯云内容安全检测器的配置。
+// TencentConfig 腾讯云内容安全检测器的配置。
 type TencentConfig struct {
-	// Region 是必填区域，例如 ap-guangzhou。
+	// Region 必填区域，例如 ap-guangzhou。
 	Region string
-	// SecretID 与 SecretKey 是腾讯云 API 凭据。
+	// 腾讯云 API 凭据。
 	SecretID  string
 	SecretKey string
-	// BizType 是可选的策略编号。
+	// BizType 可选的策略编号。
 	BizType string
 }
 
-// Tencent 调用腾讯云 TMS TextModeration 接口，只提交 Base64 后的评论正文。
+// Tencent 调用腾讯云 TMS TextModeration 接口，提交 Base64 后的评论正文。
 type Tencent struct {
 	client *http.Client
 	cfg    TencentConfig
 }
 
 // NewTencent 构建腾讯云内容安全检测器。
-// client 为 nil 时使用携带有界超时的默认客户端。
 func NewTencent(client *http.Client, cfg TencentConfig) *Tencent {
 	if client == nil {
 		client = defaultClient()
@@ -45,7 +44,6 @@ func NewTencent(client *http.Client, cfg TencentConfig) *Tencent {
 }
 
 // Check 提交正文并按 Suggestion 判定：
-// Pass 继续、Review 映射可疑、Block 映射垃圾；API 错误或建议未知为 unknown。
 func (t *Tencent) Check(ctx context.Context, input Input) (Result, error) {
 	payload, err := t.buildRequest(input.Body)
 	if err != nil {
@@ -91,8 +89,7 @@ func (t *Tencent) Check(ctx context.Context, input Input) (Result, error) {
 	}
 }
 
-// buildRequest 构造 TextModeration 请求体，只包含 Base64 正文；
-// BizType 仅在非空时提交。
+// buildRequest 构造仅包含 Base64 正文的 TextModeration 请求体。
 func (t *Tencent) buildRequest(body string) ([]byte, error) {
 	values := map[string]string{
 		"Content": base64.StdEncoding.EncodeToString([]byte(body)),

@@ -6,8 +6,6 @@ import (
 )
 
 // newBoundedClient 构建带 5 秒整体超时、禁止跟随重定向的 HTTP client。
-// 禁止重定向是为了避免把携带凭据/签名的请求转发到非预期地址，
-// 也避免绕过配置时的 URL 校验（见 url.go）。
 func newBoundedClient() *http.Client {
 	return &http.Client{
 		Timeout: requestTimeout,

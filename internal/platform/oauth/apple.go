@@ -17,7 +17,6 @@ import (
 )
 
 // Apple 的固定端点、issuer 与 scopes。
-// 端点由适配器代码所有，不可配置；cfg 中的同名值仅在测试时覆盖。
 const (
 	appleAuthorizeURL = "https://appleid.apple.com/auth/authorize"
 	appleTokenURL     = "https://appleid.apple.com/auth/token"
@@ -47,6 +46,7 @@ type appleProvider struct {
 	httpClient *http.Client
 }
 
+// newAppleProvider 创建 Apple 固定端点适配器。
 func newAppleProvider(cfg Config, client *http.Client) (*appleProvider, error) {
 	if strings.TrimSpace(cfg.AppleTeamID) == "" || strings.TrimSpace(cfg.AppleKeyID) == "" {
 		return nil, fmt.Errorf("%w: apple team id and key id are required", ErrUnsupported)
@@ -85,8 +85,7 @@ func (p *appleProvider) Name() string {
 	return "Apple"
 }
 
-// clientContext 返回注入共享 HTTP client 的上下文，
-// 使 token/JWKS 的全部网络请求走同一 client（含超时）。
+// clientContext 返回注入共享 HTTP client 的上下文。
 func (p *appleProvider) clientContext(ctx context.Context) context.Context {
 	if p.httpClient == nil {
 		return ctx
@@ -94,6 +93,7 @@ func (p *appleProvider) clientContext(ctx context.Context) context.Context {
 	return oidc.ClientContext(ctx, p.httpClient)
 }
 
+// oauthConfig 构建 Apple OAuth 配置。
 func (p *appleProvider) oauthConfig(redirectURI string) *oauth2.Config {
 	return &oauth2.Config{
 		ClientID: p.clientID,
@@ -107,8 +107,6 @@ func (p *appleProvider) oauthConfig(redirectURI string) *oauth2.Config {
 }
 
 // BuildAuthURL 为新的 state 与可选 nonce 生成 Apple 授权 URL。
-// Apple 网页流程未定义 PKCE，即使请求中带 verifier 也不附加 code_challenge；
-// response_mode=form_post 始终附加（申请 name/email scope 的强制要求）。
 func (p *appleProvider) BuildAuthURL(ctx context.Context, req AuthorizationRequest) (string, error) {
 	opts := make([]oauth2.AuthCodeOption, 0, 2)
 	if req.Nonce != "" {
@@ -119,8 +117,6 @@ func (p *appleProvider) BuildAuthURL(ctx context.Context, req AuthorizationReque
 }
 
 // Exchange 用 code 换取 token 并完整验证 Apple ID token。
-// client-secret JWT 每次交换现场生成，绝不持久化或记录。
-// 任何失败统一映射为 ErrIdentity；错误文本不包含 code/token/secret。
 func (p *appleProvider) Exchange(ctx context.Context, req ExchangeRequest) (*Identity, error) {
 	clientSecret, err := p.clientSecret(time.Now().UTC())
 	if err != nil {
@@ -136,7 +132,7 @@ func (p *appleProvider) Exchange(ctx context.Context, req ExchangeRequest) (*Ide
 		IDToken string `json:"id_token"`
 	}
 	if err := postForm(ctx, p.httpClient, p.tokenURL, form, &body); err != nil {
-		return nil, ErrIdentity
+		return nil, preserveProviderError(err)
 	}
 	if body.IDToken == "" {
 		return nil, ErrIdentity
@@ -144,10 +140,7 @@ func (p *appleProvider) Exchange(ctx context.Context, req ExchangeRequest) (*Ide
 	return p.verifyIDToken(ctx, body.IDToken, req.Nonce)
 }
 
-// verifyIDToken 用 Apple 固定 JWKS 校验 ID token（Apple issuer 固定，go-oidc
-// 的固定 issuer verifier 适用）。校验前先解析 JWS 头并要求 alg 为 RS256；
-// go-oidc 负责签名、issuer、audience 与有效期，nonce 由本包恒定时间比较。
-// email_verified 只在语义明确为 true 且 email 非空时输出为 VerifiedEmail。
+// verifyIDToken 用 Apple 固定 JWKS 校验 ID token（Apple issuer 固定，go-oidc 的固定 issuer verifier 适用）。
 func (p *appleProvider) verifyIDToken(ctx context.Context, raw string, nonce string) (*Identity, error) {
 	parsed, err := jose.ParseSigned(raw, []jose.SignatureAlgorithm{jose.RS256})
 	if err != nil {
@@ -160,7 +153,7 @@ func (p *appleProvider) verifyIDToken(ctx context.Context, raw string, nonce str
 	verifier := oidc.NewVerifier(appleIssuer, keySet, &oidc.Config{ClientID: p.clientID})
 	idToken, err := verifier.Verify(ctx, raw)
 	if err != nil {
-		return nil, ErrIdentity
+		return nil, preserveProviderError(err)
 	}
 	// go-oidc 的 Verify 不校验 nonce：必须与 ID token 的 nonce claim 恒定时间
 	// 比较；流程发送了 nonce 时，缺失或不等一律拒绝。
@@ -178,9 +171,6 @@ func (p *appleProvider) verifyIDToken(ctx context.Context, raw string, nonce str
 }
 
 // appleVerifiedEmail 严格解析 Apple 的 email/email_verified claims。
-// Apple 的 email_verified 可能序列化为布尔或字符串；仅当 email 非空且
-// email_verified 语义上为 true（bool true 或大小写不敏感的 "true"）时返回邮箱；
-// 任何缺失、false 或其他值都返回空邮箱。
 func appleVerifiedEmail(token *oidc.IDToken) (string, bool) {
 	var claims struct {
 		Email         string          `json:"email"`

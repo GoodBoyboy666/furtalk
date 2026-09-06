@@ -9,7 +9,7 @@ import (
 	"furtalk/internal/domain"
 	"furtalk/internal/platform/database"
 	"furtalk/internal/platform/gormtx"
-	"furtalk/internal/platform/value"
+	"furtalk/internal/platform/gravatar"
 	"furtalk/internal/repository"
 	"furtalk/internal/repository/model"
 
@@ -74,7 +74,7 @@ func TestCommentViewsDeriveAvatarURL(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create reply: %v", err)
 	}
-	want := value.GravatarURL("actor@example.com", "https://avatars.example.com/avatar/")
+	want := gravatar.URL("actor@example.com", "https://avatars.example.com/avatar/")
 	if view.AuthorAvatarURL != want {
 		t.Fatalf("avatar = %q, want %q", view.AuthorAvatarURL, want)
 	}
@@ -147,7 +147,7 @@ func TestAdminListIncludesAvatarURL(t *testing.T) {
 	if len(result.Comments) == 0 {
 		t.Fatal("admin list returned no comments")
 	}
-	want := value.GravatarURL("actor@example.com", "https://www.gravatar.com/avatar")
+	want := gravatar.URL("actor@example.com", "https://www.gravatar.com/avatar")
 	if result.Comments[0].AuthorAvatarURL != want {
 		t.Fatalf("admin avatar = %q, want %q", result.Comments[0].AuthorAvatarURL, want)
 	}
@@ -199,7 +199,7 @@ func TestAvatarChangesWithBaseSetting(t *testing.T) {
 	if len(after) <= len("https://avatars.example.com") || after[:len("https://avatars.example.com")] != "https://avatars.example.com" {
 		t.Fatalf("avatar after switch = %q, want new base prefix", after)
 	}
-	if after != value.GravatarURL("actor@example.com", "https://avatars.example.com") {
+	if after != gravatar.URL("actor@example.com", "https://avatars.example.com") {
 		t.Fatalf("avatar after switch = %q", after)
 	}
 }

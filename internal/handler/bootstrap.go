@@ -21,6 +21,7 @@ func RegisterNotification(api *gin.RouterGroup, service *notification.Service) {
 	api.POST("/notification-unsubscriptions", notificationUnsubscribe(service))
 }
 
+// bootstrapStatus 返回应用初始化状态。
 // @Summary 查询系统是否完成初始化
 // @Tags bootstrap
 // @Produce json
@@ -37,6 +38,7 @@ func bootstrapStatus(service *bootstrap.Service) gin.HandlerFunc {
 	}
 }
 
+// bootstrapAdmin 创建首位管理员并完成初始化。
 // @Summary 创建首位管理员
 // @Tags bootstrap
 // @Accept json
@@ -67,6 +69,7 @@ func bootstrapAdmin(service *bootstrap.Service) gin.HandlerFunc {
 	}
 }
 
+// notificationUnsubscribe 处理通知退订请求。
 // @Summary 退订通知邮件
 // @Tags notification
 // @Accept json

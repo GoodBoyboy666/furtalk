@@ -1,4 +1,4 @@
-// Command atlas-loader 以 Atlas GORM Program Mode 输出 furtalk 的期望 schema。
+// atlas-loader 以 Atlas GORM Program Mode 输出 Furtalk 的期望 schema。
 // 它是独立工具模块，只供 atlas.hcl 的 external schema 数据源调用，不进入
 // 应用运行依赖图。用法：go run -mod=readonly . <sqlite|postgres>。
 package main
@@ -13,6 +13,7 @@ import (
 
 const usage = "usage: atlas-loader <sqlite|postgres>"
 
+// main 输出指定数据库方言的 Atlas schema。
 func main() {
 	if len(os.Args) != 2 {
 		fail(usage)
@@ -29,6 +30,7 @@ func main() {
 	fmt.Print(ddl)
 }
 
+// fail 输出错误并以失败状态退出工具。
 func fail(format string, args ...any) {
 	fmt.Fprintf(os.Stderr, format+"\n", args...)
 	os.Exit(1)

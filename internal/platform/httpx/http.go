@@ -8,18 +8,18 @@ import (
 
 	"furtalk/internal/platform/clientip"
 	"furtalk/internal/platform/logging"
+
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
 
-// RequestIDKey 是请求上下文中保存请求 ID 的键。
+// RequestIDKey 是请求 ID 在 Gin 上下文中的键名。
 const RequestIDKey = "request_id"
 
-// ClientIPKey 是请求上下文中保存解析后客户端 IP 的键。
+// ClientIPKey 是客户端 IP 在 Gin 上下文中的键名。
 const ClientIPKey = "client_ip"
 
 // RequestID 读取或生成 X-Request-ID，同时写入 Gin 上下文与标准 context，
-// 并写回响应头，使 AccessLog 与业务日志共享同一关联字段。
 func RequestID() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		requestID := c.GetHeader("X-Request-ID")
@@ -34,8 +34,6 @@ func RequestID() gin.HandlerFunc {
 }
 
 // ClientIP 通过 internal/platform/clientip 中的可信代理逻辑解析有效的客户端 IP。
-// 仅当直接对端位于已配置的可信代理 CIDR 内时才采用 X-Forwarded-For；
-// RemoteAddr 无法解析时该键留空，下游限流仍能以稳定的未知键工作。
 func ClientIP(trustedProxies []string) gin.HandlerFunc {
 	trusted, _ := clientip.ParseTrustedCIDRs(trustedProxies)
 	return func(c *gin.Context) {
@@ -69,7 +67,6 @@ func BodyLimit(maxBytes int64) gin.HandlerFunc {
 }
 
 // AccessLog 记录每个请求的方法、路径、状态码、耗时与请求 ID。
-// logger 从当前请求 context 派生，因此能看到后续鉴权中间件追加的关联属性。
 func AccessLog(logger *slog.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		started := time.Now()
@@ -93,7 +90,6 @@ func Recovery() gin.HandlerFunc {
 }
 
 // ErrorWriter 把翻译器挂到上下文，并把未被消费的 c.Error 转为响应。
-// 请求体超限（http.MaxBytesError）时返回 413。
 func ErrorWriter(translator *Translator) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Set(translatorContextKey, translator)

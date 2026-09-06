@@ -3,21 +3,23 @@ package app
 import (
 	"context"
 	"log/slog"
+	"time"
 
 	"furtalk/internal/domain"
 	"furtalk/internal/platform/cache"
 	"furtalk/internal/platform/eventbus"
-	"furtalk/internal/platform/logging"
 	"furtalk/internal/platform/mailer"
 	"furtalk/internal/platform/notifier"
 	"furtalk/internal/platform/passkey"
 	"furtalk/internal/platform/ratelimit"
 	"furtalk/internal/service/bootstrap"
+	servicecaptcha "furtalk/internal/service/captcha"
 	"furtalk/internal/service/comment"
 	"furtalk/internal/service/identity"
 	"furtalk/internal/service/notification"
 	"furtalk/internal/service/setting"
 	"furtalk/internal/service/site"
+
 	"go.uber.org/fx"
 )
 
@@ -34,6 +36,7 @@ func featureModule() fx.Option {
 		provideNotificationJob,
 		provideCacheMonitorJob,
 		provideRateLimitCleanupJob,
+		provideFlowRateLimitCleanupJob,
 	)
 }
 
@@ -48,13 +51,14 @@ type services struct {
 	identity      *identity.Service
 	comment       *comment.Service
 	notifications *notification.Service
+	admission     *ratelimit.PolicyRegistry
 
 	signer            *identity.Signer
 	widgetSigner      *comment.WidgetSigner
 	widgetJWTVerifier *comment.WidgetJWTVerifier
 }
 
-// servicesConfig 是 newServices 的最小装配配置。
+// servicesConfig  newServices 的最小装配配置。
 type servicesConfig struct {
 	ProviderSecretKey []byte
 	PublicBaseURL     string
@@ -68,7 +72,8 @@ func newServices(
 	store cache.Store,
 	bus *eventbus.Bus[domain.CommentEvent],
 	logger *slog.Logger,
-	readiness *readinessState,
+	fatal *fatalCoordinator,
+	admission *ratelimit.PolicyRegistry,
 	smtp smtpDelivery,
 	templates mailer.TemplateRenderer,
 	signer *identity.Signer,
@@ -78,19 +83,24 @@ func newServices(
 	oauthFactory identity.OAuthProviderFactory,
 ) (*services, error) {
 	settingsService := setting.NewService(repos.txRunner, repos.settings)
-	providerService := setting.NewProviderService(repos.txRunner, repos.settings, cfg.ProviderSecretKey)
+	providerService, err := setting.NewProviderService(repos.txRunner, repos.settings, cfg.ProviderSecretKey, logger)
+	if err != nil {
+		return nil, err
+	}
+	auditCtx, cancelAudit := context.WithTimeout(context.Background(), 5*time.Second)
+	providerService.AuditSecrets(auditCtx)
+	cancelAudit()
 	settingsService.SetCaptchaValidator(providerService)
 	providerService.SetSettingsInvalidator(settingsService.Invalidate)
 	captchaConfigService := setting.NewCaptchaConfigService(settingsService, providerService)
 	sitesService := site.NewService(repos.sites)
 	smtpService := setting.NewSMTPProbe(smtpConfig)
 
-	failFast := func(err error) {
-		readiness.MarkNotReady()
-		logger.Error("fail-fast: authorization cache invalidation failed", logging.Error(err))
+	captchaGateway := servicecaptcha.NewGateway(captchaProviderReader{svc: providerService})
+	emailCodes, err := identity.NewEmailCodeStore(store)
+	if err != nil {
+		return nil, err
 	}
-
-	captchaGateway := comment.NewCaptchaGateway(captchaGatewayReader{svc: providerService})
 
 	identityService := identity.NewService(identity.Dependencies{
 		TxRunner:       repos.txRunner,
@@ -99,9 +109,10 @@ func newServices(
 		Identities:     repos.identities,
 		Prefs:          repos.prefs,
 		Cache:          store,
+		EmailCodes:     emailCodes,
 		Policy:         policyReader{svc: settingsService},
 		CaptchaPolicy:  captchaPolicyReader{svc: settingsService},
-		Captcha:        identityCaptchaVerifier{gateway: captchaGateway},
+		Captcha:        captchaGateway,
 		Providers:      oauthProviderReader{svc: providerService},
 		Signer:         signer,
 		Mailer:         smtp.Mailer,
@@ -109,8 +120,9 @@ func newServices(
 		PasskeyAdapter: passkeyAdapter,
 		OAuthFactory:   oauthFactory,
 		BaseURL:        cfg.PublicBaseURL,
-		FailFast:       failFast,
+		FailFast:       fatal.Fatal,
 		Logger:         logger,
+		Admission:      admission,
 	})
 
 	bootstrapService, err := bootstrap.NewService(repos.txRunner, identityService, repos.bootstrap, logger)
@@ -127,7 +139,7 @@ func newServices(
 		Sites:     repos.sites,
 		Users:     repos.users,
 		Settings:  commentPolicyReader{svc: settingsService},
-		Providers: captchaGatewayReader{svc: providerService},
+		Providers: commentCaptchaProviderReader{svc: providerService},
 		UserW:     identityService,
 		Captcha:   captchaGateway,
 		Authz:     identityService,
@@ -140,7 +152,23 @@ func newServices(
 	})
 
 	notifierDispatcher := notifier.NewDispatcher()
-	notificationsService := notification.NewService(repos.users, repos.comments, repos.threads, repos.prefs, identityService, settingsService, repos.sites, providerService, notifierDispatcher, bus, smtp.Mailer, templates, signer, cfg.PublicBaseURL, logger)
+	notificationsService := notification.NewService(
+		repos.users,
+		repos.comments,
+		repos.threads,
+		repos.prefs,
+		identityService,
+		notificationSettingsReader{svc: settingsService},
+		repos.sites,
+		notificationProviderReader{svc: providerService},
+		notifierDispatcher,
+		bus,
+		smtp.Mailer,
+		templates,
+		signer,
+		cfg.PublicBaseURL,
+		logger,
+	)
 	providerService.SetNotificationTester(notificationTesterAdapter{svc: notificationsService})
 
 	// identity 与 comment 相互引用，清理接线通过 setter 在两侧装配完成后进行。
@@ -159,6 +187,7 @@ func newServices(
 		signer:            signer,
 		widgetSigner:      widgetSigner,
 		widgetJWTVerifier: widgetJWTVerifier,
+		admission:         admission,
 	}, nil
 }
 
@@ -172,7 +201,7 @@ func provideIdentityService(s *services) *identity.Service {
 	return s.identity
 }
 
-// jobContribution 是后台任务的可选分组贡献。
+// jobContribution 后台任务的可选分组贡献。
 type jobContribution struct {
 	fx.Out
 	Jobs []BackgroundJob `group:"backgroundJobs,flatten"`
@@ -186,11 +215,10 @@ type notificationTesterAdapter struct {
 
 // TestNotification 向指定通知通道发送显式标记的测试消息。
 func (a notificationTesterAdapter) TestNotification(ctx context.Context, providerKey string, cfg setting.NotificationConfig) error {
-	return a.svc.TestChannel(ctx, providerKey, cfg)
+	return a.svc.TestChannel(ctx, providerKey, projectNotificationConfig(cfg))
 }
 
-// provideNotificationJob 贡献通知消费任务。任务只要事件总线存在就运行，
-// SMTP 缺失时通知服务只跳过邮件、不跳过实例级管理员通道投递。
+// provideNotificationJob 提供通知消费后台任务。
 func provideNotificationJob(s *services) jobContribution {
 	return jobContribution{Jobs: []BackgroundJob{{Name: "notification-consumer", Run: s.notifications.Run}}}
 }
@@ -204,8 +232,12 @@ func provideCacheMonitorJob(store cache.Store, logger *slog.Logger) jobContribut
 	return jobContribution{Jobs: []BackgroundJob{{Name: "cache-monitor", Run: monitor}}}
 }
 
-// provideRateLimitCleanupJob 贡献限流器空闲桶后台清理任务。
-// 清理循环随 Fx 生命周期启动、取消与等待，应用退出时不泄漏 goroutine。
+// provideRateLimitCleanupJob 提供限流器清理后台任务。
 func provideRateLimitCleanupJob(limiter *ratelimit.Limiter) jobContribution {
 	return jobContribution{Jobs: []BackgroundJob{{Name: "rate-limit-cleanup", Run: limiter.CleanupLoop}}}
+}
+
+// provideFlowRateLimitCleanupJob 提供限流准入桶的清理任务。
+func provideFlowRateLimitCleanupJob(admission *ratelimit.PolicyRegistry) jobContribution {
+	return jobContribution{Jobs: []BackgroundJob{{Name: "flow-rate-limit-cleanup", Run: admission.CleanupLoop}}}
 }

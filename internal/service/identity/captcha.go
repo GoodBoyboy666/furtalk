@@ -8,8 +8,6 @@ import (
 )
 
 // checkCaptcha 在给定 action 的策略开启时校验 CAPTCHA token。
-// 策略读取错误直接返回；策略关闭时直接放行，不读取 provider 也不要求 token；
-// 策略开启时缺少 token、验证器不可用或校验失败分别映射为对应的 CAPTCHA 错误。
 func (s *Service) checkCaptcha(ctx context.Context, action, token string) error {
 	policy, err := s.captchaPolicy.CaptchaPolicy(ctx)
 	if err != nil {

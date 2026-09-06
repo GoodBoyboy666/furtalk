@@ -12,7 +12,6 @@ import (
 const authzCacheTTL = 5 * time.Minute
 
 // firstPartyAllowed 判断在给定评论模式下，非 admin 用户是否可以使用第一方 API。
-// 匿名模式下普通用户返回 false，管理员在任何模式下都有第一方访问权限。
 func firstPartyAllowed(mode string, role domain.Role) bool {
 	return mode != domain.CommentModeAnonymous || role == domain.RoleAdmin
 }
@@ -24,6 +23,9 @@ func authzKey(userID int64) string {
 
 // Resolve 返回用户 id 的当前主体，优先从 authz 缓存读取。
 func (s *Service) Resolve(ctx context.Context, userID int64) (domain.Principal, error) {
+	unlock := s.authzLocks.lock(userID)
+	defer unlock()
+
 	var info domain.AuthzInfo
 	key := authzKey(userID)
 	err := s.cache.GetOrLoad(ctx, key, &info, authzCacheTTL, func() (any, error) {
@@ -71,6 +73,7 @@ func (s *Service) RequireUser(ctx context.Context, p domain.Principal) error {
 	return nil
 }
 
+// validateInfo 校验身份信息。
 func validateInfo(role domain.Role, status domain.UserStatus) error {
 	if role != domain.RoleAdmin && role != domain.RoleUser {
 		return fmt.Errorf("identity: unknown role %q", role)

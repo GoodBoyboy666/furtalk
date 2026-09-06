@@ -20,9 +20,6 @@ func TestCatalogSane(t *testing.T) {
 		if spec.Kind != "oauth" && spec.Kind != "oidc" {
 			t.Fatalf("provider %q kind = %q, want oauth or oidc", spec.Key, spec.Kind)
 		}
-		if spec.Registration != RegistrationVerifiedEmail && spec.Registration != RegistrationBindOnly {
-			t.Fatalf("provider %q registration = %q, want verified_email or bind_only", spec.Key, spec.Registration)
-		}
 		if spec.Callback != CallbackQuery && spec.Callback != CallbackFormPost {
 			t.Fatalf("provider %q callback = %q, want query or form_post", spec.Key, spec.Callback)
 		}

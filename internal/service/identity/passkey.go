@@ -19,19 +19,19 @@ const (
 	passkeyKeyPrefix    = "webauthn:"
 )
 
-// RegistrationOptions 是返回给客户端的仪式输出。
+// RegistrationOptions 保存 WebAuthn 注册流程返回给客户端的选项。
 type RegistrationOptions struct {
 	Challenge string
 	Options   json.RawMessage
 }
 
-// LoginOptions 是断言仪式输出。
+// LoginOptions 保存 WebAuthn 认证流程返回给客户端的选项。
 type LoginOptions struct {
 	Challenge string
 	Options   json.RawMessage
 }
 
-// PasskeyAdapter 是 WebAuthn 仪式边界，由 internal/platform/passkey 实现。
+// PasskeyAdapter 定义由 internal/platform/passkey 实现的 WebAuthn 适配边界。
 type PasskeyAdapter interface {
 	BeginRegistration(user passkey.User) (json.RawMessage, []byte, error)
 	FinishRegistration(user passkey.User, session, response []byte) (*passkey.Credential, error)
@@ -39,7 +39,7 @@ type PasskeyAdapter interface {
 	FinishLogin(session, response []byte, lookup func(rawID, userHandle []byte) (*passkey.User, error)) (*passkey.Credential, uint32, error)
 }
 
-// BeginPasskeyRegistration 为用户启动 WebAuthn 注册仪式。
+// BeginPasskeyRegistration 启动 WebAuthn 注册流程。
 func (s *Service) BeginPasskeyRegistration(ctx context.Context, userID int64) (*RegistrationOptions, error) {
 	if s.passkeyAdapter == nil {
 		return nil, domain.ErrInvalidCredentials
@@ -60,7 +60,7 @@ func (s *Service) BeginPasskeyRegistration(ctx context.Context, userID int64) (*
 	return &RegistrationOptions{Challenge: sessionKey, Options: options}, nil
 }
 
-// FinishPasskeyRegistration 消费挑战、验证证明并持久化凭证记录。
+// FinishPasskeyRegistration 完成 WebAuthn 注册并保存凭证。
 func (s *Service) FinishPasskeyRegistration(ctx context.Context, userID int64, challenge string, response json.RawMessage) error {
 	if s.passkeyAdapter == nil {
 		return domain.ErrInvalidCredentials
@@ -103,7 +103,7 @@ func (s *Service) FinishPasskeyRegistration(ctx context.Context, userID int64, c
 	return nil
 }
 
-// BeginPasskeyLogin 启动 discoverable 断言仪式。
+// BeginPasskeyLogin 启动 WebAuthn 认证流程。
 func (s *Service) BeginPasskeyLogin(ctx context.Context) (*LoginOptions, error) {
 	if s.passkeyAdapter == nil {
 		return nil, domain.ErrInvalidCredentials
@@ -120,7 +120,7 @@ func (s *Service) BeginPasskeyLogin(ctx context.Context) (*LoginOptions, error) 
 	return &LoginOptions{Challenge: sessionKey, Options: options}, nil
 }
 
-// VerifyPasskeyLogin 消费挑战并验证断言。
+// VerifyPasskeyLogin 完成 WebAuthn 认证并生成会话。
 func (s *Service) VerifyPasskeyLogin(ctx context.Context, challenge string, response json.RawMessage) (*Session, error) {
 	if s.passkeyAdapter == nil {
 		return nil, domain.ErrInvalidCredentials
@@ -192,6 +192,7 @@ func (s *Service) lookupPasskeyUser(ctx context.Context, rawID, userHandle []byt
 	return s.toPasskeyUser(ctx, user, rows), nil
 }
 
+// toPasskeyUser 将领域用户转换为 Passkey 适配器用户。
 func (s *Service) toPasskeyUser(ctx context.Context, user *domain.User, rows []domain.PasskeyCredential) *passkey.User {
 	credentials := make([]passkey.Credential, 0, len(rows))
 	for _, row := range rows {
@@ -229,18 +230,18 @@ func (s *Service) storePasskeySession(ctx context.Context, session []byte) (stri
 	if err := json.Unmarshal(session, &parsed); err != nil || parsed.Challenge == "" {
 		return "", domain.ErrInvalidCredentials
 	}
-	key := passkeyKeyPrefix + parsed.Challenge
-	if err := s.ephemeral.Set(ctx, key, session, passkeyChallengeTTL); err != nil {
-		return "", err
+	if err := s.passkeyStore.Set(ctx, parsed.Challenge, session, passkeyChallengeTTL); err != nil {
+		return "", s.mapEphemeralError(ctx, "passkey", err)
 	}
 	return parsed.Challenge, nil
 }
 
+// consumePasskeySession 消费 Passkey 挑战会话。
 func (s *Service) consumePasskeySession(ctx context.Context, challenge string) ([]byte, error) {
 	if challenge == "" {
 		return nil, domain.ErrInvalidCredentials
 	}
-	raw, err := s.ephemeral.AtomicConsume(ctx, passkeyKeyPrefix+challenge)
+	raw, err := s.passkeyStore.AtomicConsume(ctx, challenge)
 	if err != nil {
 		return nil, domain.ErrInvalidCredentials
 	}
@@ -256,10 +257,12 @@ func userHandle(userID int64) []byte {
 	return []byte(strconv.FormatInt(userID, 10))
 }
 
+// encodeCredentialID 编码 Passkey 凭证标识。
 func encodeCredentialID(raw []byte) string {
 	return base64.RawURLEncoding.EncodeToString(raw)
 }
 
+// decodeCredentialID 解码 Passkey 凭证标识。
 func decodeCredentialID(encoded string) ([]byte, error) {
 	return base64.RawURLEncoding.DecodeString(encoded)
 }

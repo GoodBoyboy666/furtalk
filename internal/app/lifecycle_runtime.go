@@ -16,6 +16,7 @@ import (
 	"furtalk/internal/platform/config"
 	"furtalk/internal/platform/eventbus"
 	"furtalk/internal/platform/logging"
+
 	"go.uber.org/fx"
 	"gorm.io/gorm"
 )
@@ -50,12 +51,12 @@ type fatalCoordinator struct {
 	logger     *slog.Logger
 }
 
+// newFatalCoordinator 创建致命错误关闭协调器。
 func newFatalCoordinator(shutdowner fx.Shutdowner, readiness *readinessState, logger *slog.Logger) *fatalCoordinator {
 	return &fatalCoordinator{shutdowner: shutdowner, readiness: readiness, logger: logger}
 }
 
-// Fatal 记录净化错误、标记 not-ready，并请求 Fx 以退出码 1 关闭。
-// 多次调用只有第一次生效。
+// Fatal 请求应用以非零退出码关闭并标记为未就绪。
 func (f *fatalCoordinator) Fatal(err error) {
 	f.once.Do(func() {
 		f.readiness.MarkNotReady()
@@ -73,11 +74,12 @@ type databaseCleanup struct {
 	logger *slog.Logger
 }
 
+// newDatabaseCleanup 创建数据库清理器。
 func newDatabaseCleanup(db *gorm.DB, logger *slog.Logger) *databaseCleanup {
 	return &databaseCleanup{db: db, logger: logger}
 }
 
-// Start 是 fx.Hook 的空实现，数据库清理在启动阶段无动作。
+// Start  fx.Hook 的空实现，数据库清理在启动阶段无动作。
 func (c *databaseCleanup) Start(context.Context) error { return nil }
 
 // Stop 关闭数据库连接池；关闭失败只记录日志并继续。
@@ -102,11 +104,12 @@ type cacheCleanup struct {
 	logger *slog.Logger
 }
 
+// newCacheCleanup 创建缓存清理器。
 func newCacheCleanup(store cache.Store, logger *slog.Logger) *cacheCleanup {
 	return &cacheCleanup{store: store, logger: logger}
 }
 
-// Start 是 fx.Hook 的空实现，缓存清理在启动阶段无动作。
+// Start  fx.Hook 的空实现，缓存清理在启动阶段无动作。
 func (c *cacheCleanup) Start(context.Context) error { return nil }
 
 // Stop 关闭缓存后端连接；内存后端无连接，直接跳过。
@@ -124,11 +127,12 @@ type busCleanup struct {
 	bus *eventbus.Bus[domain.CommentEvent]
 }
 
+// newBusCleanup 创建事件总线清理器。
 func newBusCleanup(bus *eventbus.Bus[domain.CommentEvent]) *busCleanup {
 	return &busCleanup{bus: bus}
 }
 
-// Start 是 fx.Hook 的空实现，事件总线在启动阶段无动作。
+// Start  fx.Hook 的空实现，事件总线在启动阶段无动作。
 func (c *busCleanup) Start(context.Context) error { return nil }
 
 // Stop 幂等关闭事件总线；关闭后待处理事件被丢弃。
@@ -158,6 +162,7 @@ type jobSupervisorParams struct {
 	Fatal  *fatalCoordinator
 }
 
+// newJobSupervisor 创建后台任务监督器。
 func newJobSupervisor(params jobSupervisorParams) *jobSupervisor {
 	return &jobSupervisor{
 		jobs:   params.Jobs,
@@ -166,8 +171,7 @@ func newJobSupervisor(params jobSupervisorParams) *jobSupervisor {
 	}
 }
 
-// Start 并发启动全部任务。任何任务返回非取消错误或未取消即提前返回时，
-// 通过致命协调器请求关闭并取消所有任务。
+// Start 并发启动后台任务并协调任务失败时的关闭。
 func (s *jobSupervisor) Start(ctx context.Context) error {
 	if len(s.jobs) == 0 {
 		return nil
@@ -246,6 +250,7 @@ type httpServerLifecycle struct {
 	serveFinished chan struct{}
 }
 
+// newHTTPServerLifecycle 创建 HTTP 服务生命周期管理器。
 func newHTTPServerLifecycle(
 	server *http.Server,
 	cfg config.Config,
@@ -263,8 +268,7 @@ func newHTTPServerLifecycle(
 	}
 }
 
-// Start 同步绑定 listener，启动 Serve goroutine，仅在绑定成功后标记就绪。
-// 建议配置缺失告警在配置摘要与 listener 绑定之前输出。
+// Start 绑定 HTTP 监听器并启动服务。
 func (h *httpServerLifecycle) Start(ctx context.Context) error {
 	h.logRecommendedDefaultWarnings()
 	h.logConfigSummary()
@@ -286,8 +290,7 @@ func (h *httpServerLifecycle) Start(ctx context.Context) error {
 	return nil
 }
 
-// Stop 标记 not-ready、优雅关闭 HTTP 并按需关闭 listener、等待 Serve 退出。
-// 未开始服务（启动失败回滚）时直接返回。
+// Stop 标记未就绪并优雅停止 HTTP 服务。
 func (h *httpServerLifecycle) Stop(ctx context.Context) error {
 	h.readiness.MarkNotReady()
 	if h.server == nil || h.serveFinished == nil {
@@ -313,8 +316,7 @@ func (h *httpServerLifecycle) Stop(ctx context.Context) error {
 	return shutdownErr
 }
 
-// logRecommendedDefaultWarnings 输出缺失的建议配置项及其安全默认值。
-// 告警不含 DSN、Redis URL 或任何密钥等敏感值，仅暴露字段键与默认值。
+// logRecommendedDefaultWarnings 记录缺失建议配置的安全默认值。
 func (h *httpServerLifecycle) logRecommendedDefaultWarnings() {
 	for _, w := range h.cfg.Warnings() {
 		h.logger.Warn("missing recommended configuration, using default",
@@ -340,10 +342,7 @@ func (h *httpServerLifecycle) logConfigSummary() {
 	})
 }
 
-// registerLifecycle 以显式顺序注册全部生命周期钩子。
-// Fx 按相反顺序执行 OnStop，关闭顺序为：
-// not-ready + HTTP -> 取消并等待任务 -> 关闭总线 -> 关闭缓存 -> 关闭数据库。
-// 该顺序由本函数的注册顺序决定，与 provider 声明顺序无关。
+// registerLifecycle 按关闭依赖顺序注册应用生命周期钩子。
 func registerLifecycle(
 	lc fx.Lifecycle,
 	databaseCleanup *databaseCleanup,

@@ -2,11 +2,12 @@ package cryptox
 
 import (
 	"bytes"
+	"errors"
 	"testing"
 )
 
 func TestEncryptDecryptRoundTrip(t *testing.T) {
-	key := bytes.Repeat([]byte{0x42}, minimumKeyLength)
+	key := bytes.Repeat([]byte{0x42}, derivedKeyLength)
 	plaintext := []byte("secret provider configuration")
 
 	envelope, err := Encrypt(key, 7, plaintext)
@@ -30,7 +31,7 @@ func TestEncryptDecryptRoundTrip(t *testing.T) {
 }
 
 func TestDecryptRejectsWrongVersionAndTampering(t *testing.T) {
-	key := bytes.Repeat([]byte{0x24}, minimumKeyLength)
+	key := bytes.Repeat([]byte{0x24}, derivedKeyLength)
 	envelope, err := Encrypt(key, 1, []byte("payload"))
 	if err != nil {
 		t.Fatalf("Encrypt() error = %v", err)
@@ -43,6 +44,52 @@ func TestDecryptRejectsWrongVersionAndTampering(t *testing.T) {
 	tampered[len(tampered)-1] ^= 1
 	if _, err := Decrypt(key, 1, tampered); err != ErrBadEnvelope {
 		t.Fatalf("tampered envelope error = %v, want ErrBadEnvelope", err)
+	}
+}
+
+func TestDeriveProviderKeySupportsConfiguredKeyLengths(t *testing.T) {
+	for _, size := range []int{32, 33, 48, 64} {
+		raw := bytes.Repeat([]byte{byte(size)}, size)
+		first, err := DeriveProviderKey(raw)
+		if err != nil {
+			t.Fatalf("DeriveProviderKey(%d) error = %v", size, err)
+		}
+		if len(first) != derivedKeyLength {
+			t.Fatalf("DeriveProviderKey(%d) length = %d, want %d", size, len(first), derivedKeyLength)
+		}
+		second, err := DeriveProviderKey(raw)
+		if err != nil {
+			t.Fatalf("DeriveProviderKey(%d) second error = %v", size, err)
+		}
+		if !bytes.Equal(first, second) {
+			t.Fatalf("DeriveProviderKey(%d) is not deterministic", size)
+		}
+	}
+}
+
+func TestDeriveKeySeparatesPurposesAndRejectsShortSources(t *testing.T) {
+	raw := bytes.Repeat([]byte{0x52}, 32)
+	provider, err := DeriveKey(raw, "provider")
+	if err != nil {
+		t.Fatalf("DeriveKey(provider): %v", err)
+	}
+	other, err := DeriveKey(raw, "other")
+	if err != nil {
+		t.Fatalf("DeriveKey(other): %v", err)
+	}
+	if bytes.Equal(provider, other) {
+		t.Fatal("different derivation purposes produced the same key")
+	}
+	if _, err := DeriveProviderKey(bytes.Repeat([]byte{0x01}, 31)); !errors.Is(err, ErrSourceKeyLength) {
+		t.Fatalf("short source error = %v, want ErrSourceKeyLength", err)
+	}
+}
+
+func TestEncryptRejectsNonAES256Keys(t *testing.T) {
+	for _, size := range []int{16, 24, 31, 33, 64} {
+		if _, err := Encrypt(bytes.Repeat([]byte{0x42}, size), 1, []byte("payload")); !errors.Is(err, ErrKeyLength) {
+			t.Fatalf("key size %d error = %v, want ErrKeyLength", size, err)
+		}
 	}
 }
 

@@ -11,10 +11,6 @@ import (
 const scopedSubjectVersion = "ft1:"
 
 // ScopedSubject 返回 (issuer, rawSubject) 二元组的确定性、版本化、抗碰撞编码。
-// 自托管 GitLab/Gitea 的数字 sub 只在单个实例内稳定：把同一固定 key 重新配置到
-// 另一实例时，新的数字 sub 绝不能与旧绑定碰撞。编码先对两部分做长度前缀
-// （8 字节大端 uint64），再对拼接字节做版本化 SHA-256，输出以 ft1: 开头，
-// 因此 ("ab", "c") 与 ("a", "bc") 即使字符串拼接相同也产生不同的结果。
 func ScopedSubject(issuer, rawSubject string) string {
 	h := sha256.New()
 	var lenBuf [8]byte

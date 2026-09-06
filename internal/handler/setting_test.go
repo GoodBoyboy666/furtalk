@@ -70,7 +70,10 @@ func newSettingsTestRouterWithProviders(t *testing.T) (*gin.Engine, *setting.Pro
 		t.Fatalf("auto migrate: %v", err)
 	}
 	svc := setting.NewService(gormtx.NewRunner(db), repository.NewSettingsRepo(db))
-	providers := setting.NewProviderService(gormtx.NewRunner(db), repository.NewSettingsRepo(db), []byte("test-master-key-0123456789abcdef"))
+	providers, err := setting.NewProviderService(gormtx.NewRunner(db), repository.NewSettingsRepo(db), []byte("test-master-key-0123456789abcdef"), nil)
+	if err != nil {
+		t.Fatalf("new provider service: %v", err)
+	}
 	svc.SetCaptchaValidator(providers)
 	providers.SetSettingsInvalidator(svc.Invalidate)
 	translator, err := NewTranslator()

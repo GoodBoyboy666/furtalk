@@ -1,5 +1,5 @@
 // Package middleware 承载业务鉴权中间件。
-// 数据查询一律经 service 搭桥，禁止直接操作 repository；不触碰 GORM。
+// 主体状态通过 service 提供的读取接口获取，数据访问由上层业务组件负责。
 package middleware
 
 import (
@@ -23,7 +23,7 @@ const FirstPartyCookieName = "__Host-furtalk_session"
 const (
 	CSRFCookieName  = "__Host-furtalk_csrf"
 	CSRFHeaderName  = "X-CSRF-Token"
-	csrfTokenLength = 43 // base64.RawURLEncoding of 32 random bytes
+	csrfTokenLength = 43 // 32 个随机字节经 base64.RawURLEncoding 编码后的长度。
 )
 
 // gin 上下文键：已验证的 claims 与解析出的 principal。
@@ -139,8 +139,7 @@ func PrincipalResolution(store PrincipalStore) gin.HandlerFunc {
 	}
 }
 
-// sessionVersionMatches 判断第一方 JWT 的会话代次是否与当前 principal 一致。
-// 缺失（解码为 0）或非正版本一律视为陈旧会话；principal 当前版本必须为正数。
+// sessionVersionMatches 判断 JWT 会话代次是否与主体一致。
 func sessionVersionMatches(claims *jwt.Claims, principal domain.Principal) bool {
 	return claims.SessionVersion > 0 && principal.SessionVersion > 0 && claims.SessionVersion == principal.SessionVersion
 }
@@ -227,6 +226,7 @@ func SetCSRFCookie(c *gin.Context, token string, ttl time.Duration) {
 	})
 }
 
+// cookieMaxAge 把会话有效期转换为 Cookie Max-Age。
 func cookieMaxAge(ttl time.Duration) int {
 	seconds := int(ttl / time.Second)
 	if seconds <= 0 {
@@ -235,7 +235,7 @@ func cookieMaxAge(ttl time.Duration) int {
 	return seconds
 }
 
-// clearFirstPartyCookie 使 FP 登录 cookie 过期。
+// clearFirstPartyCookie 清理 FP 登录与 CSRF Cookie。
 func clearFirstPartyCookie(c *gin.Context) {
 	http.SetCookie(c.Writer, &http.Cookie{
 		Name:     FirstPartyCookieName,

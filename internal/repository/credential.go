@@ -14,7 +14,7 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// PasskeyRepo 持久化 passkey_credentials 行。
+// PasskeyRepo 提供 Passkey 凭据的持久化操作。
 type PasskeyRepo struct {
 	db *gorm.DB
 }
@@ -141,7 +141,7 @@ func (r *PasskeyRepo) UpdateLoginState(ctx context.Context, id int64, signCount 
 	return nil
 }
 
-// ExternalIdentityRepo 持久化 external_identities 行。
+// ExternalIdentityRepo 提供外部身份绑定的持久化操作。
 type ExternalIdentityRepo struct {
 	db *gorm.DB
 }
@@ -248,7 +248,7 @@ func (r *ExternalIdentityRepo) TouchLastLogin(ctx context.Context, id int64, at 
 	return nil
 }
 
-// PreferenceRepo 持久化 notification_preferences 行。
+// PreferenceRepo 提供通知偏好的持久化操作。
 type PreferenceRepo struct {
 	db *gorm.DB
 }

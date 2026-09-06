@@ -11,6 +11,7 @@ import (
 	"furtalk/internal/middleware"
 	"furtalk/internal/platform/httpx"
 	"furtalk/internal/service/comment"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -73,12 +74,17 @@ func RegisterWidget(api *gin.RouterGroup, service *comment.Service, verifier com
 	widget.OPTIONS("/session", httpx.CORSForCredentialContext())
 }
 
-// RegisterFirstPartyCommentAuthorization 挂载第一方评论授权签发端点。
-func RegisterFirstPartyCommentAuthorization(api *gin.RouterGroup, service *comment.Service, userGate middleware.UserGate, csrf ...gin.HandlerFunc) {
+// RegisterFirstPartyCommentAuthorizationWithAdmission 注册 HTTP 路由。
+func RegisterFirstPartyCommentAuthorizationWithAdmission(api *gin.RouterGroup, service *comment.Service, userGate middleware.UserGate, admission FlowAdmission, csrf ...gin.HandlerFunc) {
+	registerFirstPartyCommentAuthorization(api, service, userGate, admission, csrf...)
+}
+
+// registerFirstPartyCommentAuthorization 注册 HTTP 路由。
+func registerFirstPartyCommentAuthorization(api *gin.RouterGroup, service *comment.Service, userGate middleware.UserGate, admission FlowAdmission, csrf ...gin.HandlerFunc) {
 	issueGroup := api.Group("/comment-authorizations")
 	issueGroup.Use(append([]gin.HandlerFunc{middleware.RequireUser(userGate)}, csrf...)...)
 	issueGroup.GET("/context", firstPartyAuthorizationContext(service))
-	issueGroup.POST("", firstPartyIssueAuthorization(service))
+	issueGroup.POST("", flowAdmission(admission, PolicyWidgetAuthCode, principalSubject), firstPartyIssueAuthorization(service))
 }
 
 // RegisterFirstParty 挂载第一方评论端点。
@@ -126,6 +132,7 @@ func RegisterAdminThreads(admin *gin.RouterGroup, service *comment.Service) {
 	group.DELETE("/:thread_id", adminThreadsDelete(service))
 }
 
+// widgetRuntimeConfig 处理 Widget HTTP 请求。
 // @Summary 获取 widget 运行时配置
 // @Tags widget
 // @Produce json
@@ -154,6 +161,7 @@ func widgetRuntimeConfig(service *comment.Service) gin.HandlerFunc {
 	}
 }
 
+// widgetListComments 处理 Widget HTTP 请求。
 // @Summary 列出 widget 线程评论
 // @Tags widget
 // @Produce json
@@ -188,6 +196,7 @@ func widgetListComments(service *comment.Service) gin.HandlerFunc {
 	}
 }
 
+// widgetLikeComment 处理 Widget HTTP 请求。
 // @Summary 点赞一条已发布的评论
 // @Tags widget
 // @Produce json
@@ -225,6 +234,7 @@ func widgetLikeComment(service *comment.Service) gin.HandlerFunc {
 	}
 }
 
+// widgetUnlikeComment 处理 Widget HTTP 请求。
 // @Summary 取消点赞一条已发布的评论
 // @Tags widget
 // @Produce json
@@ -262,6 +272,7 @@ func widgetUnlikeComment(service *comment.Service) gin.HandlerFunc {
 	}
 }
 
+// widgetPinComment 处理 Widget HTTP 请求。
 // @Summary 置顶一条根评论
 // @Tags widget
 // @Produce json
@@ -302,6 +313,7 @@ func widgetPinComment(service *comment.Service, pinned bool) gin.HandlerFunc {
 	}
 }
 
+// widgetUnpinComment 处理 Widget HTTP 请求。
 // @Summary 取消一条根评论置顶
 // @Tags widget
 // @Produce json
@@ -317,6 +329,7 @@ func widgetUnpinComment(service *comment.Service) gin.HandlerFunc {
 	return widgetPinComment(service, false)
 }
 
+// widgetListLatestComments 处理 Widget HTTP 请求。
 // @Summary 列出站点最新公开评论
 // @Tags widget
 // @Produce json
@@ -344,6 +357,7 @@ func widgetListLatestComments(service *comment.Service) gin.HandlerFunc {
 	}
 }
 
+// widgetCreateComment 处理 Widget HTTP 请求。
 // @Summary 创建 widget 评论
 // @Tags widget
 // @Accept json
@@ -391,7 +405,7 @@ func widgetCreateComment(service *comment.Service) gin.HandlerFunc {
 			IP:           clientIPFromContext(c),
 			UA:           c.GetHeader("User-Agent"),
 			CaptchaToken: req.CaptchaToken,
-			Origin:       httpx.ValidRequestOrigin(c),
+			Origin:       httpx.RequestOrigin(c),
 			Email:        req.Email,
 			Nickname:     req.Nickname,
 			WebsiteURL: comment.WebsiteOperation{
@@ -413,6 +427,7 @@ func widgetCreateComment(service *comment.Service) gin.HandlerFunc {
 	}
 }
 
+// widgetDeleteComment 处理 Widget HTTP 请求。
 // @Summary 删除自己的 widget 评论
 // @Tags widget
 // @Produce json
@@ -445,6 +460,7 @@ func widgetDeleteComment(service *comment.Service) gin.HandlerFunc {
 	}
 }
 
+// widgetExchange 处理 Widget HTTP 请求。
 // @Summary 用授权码交换 widget 会话凭证
 // @Tags widget
 // @Accept json
@@ -461,7 +477,7 @@ func widgetExchange(service *comment.Service) gin.HandlerFunc {
 			writeError(c, err)
 			return
 		}
-		requestOrigin := httpx.ValidRequestOrigin(c)
+		requestOrigin := httpx.RequestOrigin(c)
 		result, err := service.ExchangeAuthorization(c.Request.Context(), req.Code, requestOrigin)
 		if err != nil {
 			writeError(c, err)
@@ -472,6 +488,7 @@ func widgetExchange(service *comment.Service) gin.HandlerFunc {
 	}
 }
 
+// widgetSession 处理 Widget HTTP 请求。
 // @Summary 探测当前 widget 会话
 // @Tags widget
 // @Produce json
@@ -481,12 +498,13 @@ func widgetSession(service *comment.Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Header("Cache-Control", "no-store")
 		raw, _ := c.Cookie(middleware.WidgetCookieName)
-		requestOrigin := httpx.ValidRequestOrigin(c)
+		requestOrigin := httpx.RequestOrigin(c)
 		result := service.Probe(c.Request.Context(), raw, requestOrigin)
 		c.JSON(http.StatusOK, toWidgetSessionResponse(*result))
 	}
 }
 
+// widgetClear 处理 Widget HTTP 请求。
 // @Summary 清除当前 widget 会话
 // @Tags widget
 // @Success 204 "已清除会话 Cookie"
@@ -498,6 +516,7 @@ func widgetClear(service *comment.Service) gin.HandlerFunc {
 	}
 }
 
+// firstPartyIssueAuthorization 处理第一方评论 HTTP 请求。
 // @Summary 为第一方页面签发一次性授权码
 // @Tags first-party
 // @Accept json
@@ -552,6 +571,7 @@ func firstPartyIssueAuthorization(service *comment.Service) gin.HandlerFunc {
 	}
 }
 
+// firstPartyAuthorizationContext 处理第一方评论 HTTP 请求。
 // @Summary 获取授权上下文（只读）
 // @Tags first-party
 // @Produce json
@@ -592,6 +612,7 @@ func firstPartyAuthorizationContext(service *comment.Service) gin.HandlerFunc {
 	}
 }
 
+// firstPartyCreateReply 处理第一方评论 HTTP 请求。
 // @Summary 第一方回复评论
 // @Tags first-party
 // @Accept json
@@ -642,6 +663,7 @@ func firstPartyCreateReply(service *comment.Service) gin.HandlerFunc {
 	}
 }
 
+// firstPartyDelete 处理第一方评论 HTTP 请求。
 // @Summary 第一方删除自己的评论
 // @Tags first-party
 // @Produce json
@@ -672,6 +694,7 @@ func firstPartyDelete(service *comment.Service) gin.HandlerFunc {
 	}
 }
 
+// meCommentsList 处理当前用户 HTTP 请求。
 // @Summary 分页列出本人评论
 // @Tags me
 // @Produce json
@@ -728,6 +751,7 @@ func meCommentsList(service *comment.Service) gin.HandlerFunc {
 	}
 }
 
+// meCommentsSites 处理当前用户 HTTP 请求。
 // @Summary 列出本人评论的站点选项
 // @Tags me
 // @Produce json
@@ -756,6 +780,7 @@ func meCommentsSites(service *comment.Service) gin.HandlerFunc {
 	}
 }
 
+// meCommentsGet 处理当前用户 HTTP 请求。
 // @Summary 获取本人单条评论详情
 // @Tags me
 // @Produce json
@@ -785,6 +810,7 @@ func meCommentsGet(service *comment.Service) gin.HandlerFunc {
 	}
 }
 
+// adminCommentsBatch 处理管理端评论 HTTP 请求。
 // @Summary 批量管理评论
 // @Tags admin-comments
 // @Accept json
@@ -815,6 +841,7 @@ func adminCommentsBatch(service *comment.Service) gin.HandlerFunc {
 	}
 }
 
+// adminCommentsList 处理管理端评论 HTTP 请求。
 // @Summary 使用过滤器与页码分页列出评论
 // @Tags admin-comments
 // @Produce json
@@ -861,6 +888,7 @@ func adminCommentsList(service *comment.Service) gin.HandlerFunc {
 	}
 }
 
+// adminCommentsTrend 处理管理端评论 HTTP 请求。
 // @Summary 获取管理员评论趋势
 // @Tags admin-comments
 // @Produce json
@@ -891,6 +919,7 @@ func adminCommentsTrend(service *comment.Service) gin.HandlerFunc {
 	}
 }
 
+// adminCommentsGet 处理管理端评论 HTTP 请求。
 // @Summary 获取单条评论的管理视图
 // @Tags admin-comments
 // @Produce json
@@ -916,6 +945,7 @@ func adminCommentsGet(service *comment.Service) gin.HandlerFunc {
 	}
 }
 
+// adminCommentsPin 处理管理端评论 HTTP 请求。
 // @Summary 设置或取消评论置顶
 // @Tags admin-comments
 // @Produce json
@@ -944,6 +974,7 @@ func adminCommentsPin(service *comment.Service, pinned bool) gin.HandlerFunc {
 	}
 }
 
+// adminCommentsUnpin 处理管理端评论 HTTP 请求。
 // @Summary 取消评论置顶
 // @Tags admin-comments
 // @Produce json
@@ -960,6 +991,7 @@ func adminCommentsUnpin(service *comment.Service) gin.HandlerFunc {
 	return adminCommentsPin(service, false)
 }
 
+// adminCommentsPatch 处理管理端评论 HTTP 请求。
 // @Summary 编辑评论的 Markdown 正文
 // @Tags admin-comments
 // @Accept json
@@ -993,6 +1025,7 @@ func adminCommentsPatch(service *comment.Service) gin.HandlerFunc {
 	}
 }
 
+// adminCommentsPending 处理管理端评论 HTTP 请求。
 // @Summary 把评论移入待审核
 // @Tags admin-comments
 // @Produce json
@@ -1020,6 +1053,7 @@ func adminCommentsPending(service *comment.Service) gin.HandlerFunc {
 	}
 }
 
+// adminCommentsPublish 处理管理端评论 HTTP 请求。
 // @Summary 发布待审评论
 // @Tags admin-comments
 // @Produce json
@@ -1047,6 +1081,7 @@ func adminCommentsPublish(service *comment.Service) gin.HandlerFunc {
 	}
 }
 
+// adminCommentsSpam 处理管理端评论 HTTP 请求。
 // @Summary 将评论标记为垃圾评论
 // @Tags admin-comments
 // @Produce json
@@ -1074,6 +1109,7 @@ func adminCommentsSpam(service *comment.Service) gin.HandlerFunc {
 	}
 }
 
+// adminCommentsDelete 处理管理端评论 HTTP 请求。
 // @Summary 删除评论（软删除或硬删除）
 // @Tags admin-comments
 // @Produce json
@@ -1106,6 +1142,7 @@ func adminCommentsDelete(service *comment.Service) gin.HandlerFunc {
 	}
 }
 
+// adminCommentsRestore 处理管理端评论 HTTP 请求。
 // @Summary 恢复已删除的评论
 // @Tags admin-comments
 // @Produce json
@@ -1133,6 +1170,7 @@ func adminCommentsRestore(service *comment.Service) gin.HandlerFunc {
 	}
 }
 
+// adminThreadsBatch 处理管理端线程 HTTP 请求。
 // @Summary 批量管理评论区
 // @Tags admin-threads
 // @Accept json
@@ -1168,6 +1206,7 @@ func adminThreadsBatch(service *comment.Service) gin.HandlerFunc {
 	}
 }
 
+// adminThreadsList 处理管理端线程 HTTP 请求。
 // @Summary 按站点列出线程
 // @Tags admin-threads
 // @Produce json
@@ -1221,6 +1260,7 @@ func adminThreadsList(service *comment.Service) gin.HandlerFunc {
 	}
 }
 
+// adminThreadsPatch 处理管理端线程 HTTP 请求。
 // @Summary 更新线程元数据（page_key / page_title / comments_enabled）
 // @Tags admin-threads
 // @Accept json
@@ -1272,6 +1312,7 @@ func adminThreadsPatch(service *comment.Service) gin.HandlerFunc {
 	}
 }
 
+// adminThreadsDelete 处理管理端线程 HTTP 请求。
 // @Summary 硬删除线程及其全部评论
 // @Tags admin-threads
 // @Produce json
@@ -1359,8 +1400,7 @@ func validCommentStatus(status domain.CommentStatus) bool {
 	}
 }
 
-// validOwnerCommentStatus 报告状态字符串是否为普通用户侧可见的审核状态。
-// 软删除（deleted）对普通用户不可见，视为无效筛选参数。
+// validOwnerCommentStatus 判断用户评论状态是否允许查询。
 func validOwnerCommentStatus(status domain.CommentStatus) bool {
 	switch status {
 	case domain.CommentStatusPending, domain.CommentStatusPublished, domain.CommentStatusSpam:

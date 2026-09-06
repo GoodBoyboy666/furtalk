@@ -75,7 +75,7 @@ func TestRouterRejectsEmptyRegisters(t *testing.T) {
 	}
 }
 
-// TestReadinessEndpointUsesSuppliedState 验证 readiness 状态由组合根控制。
+// TestReadinessEndpointUsesSuppliedState 验证 readiness 状态由依赖组装入口控制。
 func TestReadinessEndpointUsesSuppliedState(t *testing.T) {
 	ready := false
 	translator, err := httpx.NewTranslator(httpx.ProtocolErrorMappings())

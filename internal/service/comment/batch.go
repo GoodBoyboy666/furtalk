@@ -2,16 +2,17 @@ package comment
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"time"
 
 	"furtalk/internal/domain"
+	"furtalk/internal/repository"
 )
 
 // AdminBatch 批量执行评论管理命令。
-// 所有目标都在同一个数据库事务中按稳定 ID 顺序校验和写入；任何一个
-// 目标失败都会使事务回滚。发布事件只在事务成功提交后发送。
 func (s *Service) AdminBatch(ctx context.Context, input AdminBatchInput) (*domain.BatchResult, error) {
+	// 目标在事务内一次锁定读取，业务校验全部通过后再执行有限数量的复数写入。
 	if len(input.IDs) == 0 || len(input.IDs) > maxLimit || !ValidAdminBatchAction(string(input.Action)) {
 		return nil, domain.ErrValidation
 	}
@@ -40,30 +41,88 @@ func (s *Service) AdminBatch(ctx context.Context, input AdminBatchInput) (*domai
 		Action:         string(input.Action),
 		RequestedCount: len(ids),
 	}
-	published := make([]*domain.Comment, 0)
+	var published []*domain.Comment
 	err = s.txRunner.RunInTx(ctx, func(txCtx context.Context) error {
-		now := s.now().UTC()
-		for _, id := range ids {
-			comment, findErr := s.comments.FindGlobalByID(txCtx, id)
-			if findErr != nil {
-				return &domain.ResourceError{ResourceID: id, Err: findErr}
-			}
+		now := s.now().UTC().Truncate(time.Microsecond)
+		comments, err := s.comments.FindGlobalByIDsLocked(txCtx, ids)
+		if err != nil {
+			// 单条 SQL 覆盖完整读取；基础设施错误无法诚实归因到某个 ID。
+			return err
+		}
+		byID := make(map[int64]*domain.Comment, len(comments))
+		for i := range comments {
+			comment := comments[i]
+			byID[comment.ID] = &comment
+		}
 
-			changed, actionErr := s.applyAdminBatchAction(txCtx, comment, input.Action, now)
+		statusGroups := make(map[string][]repository.CommentStatusBatchTarget)
+		pinTargets := make([]repository.CommentBatchTarget, 0, len(ids))
+		deleteTargets := make([]repository.CommentBatchTarget, 0, len(ids))
+		for _, id := range ids {
+			comment := byID[id]
+			if comment == nil {
+				return &domain.ResourceError{ResourceID: id, Err: domain.ErrNotFound}
+			}
+			plan, changed, actionErr := planAdminBatchComment(comment, input.Action, now)
 			if actionErr != nil {
 				return &domain.ResourceError{ResourceID: id, Err: actionErr}
 			}
-			if changed {
-				result.ChangedCount++
-				if input.Action == AdminBatchPublish {
-					updated, reloadErr := s.comments.FindGlobalByID(txCtx, id)
-					if reloadErr != nil {
-						return &domain.ResourceError{ResourceID: id, Err: reloadErr}
-					}
-					published = append(published, updated)
-				}
-			} else {
+			if !changed {
 				result.UnchangedCount++
+				continue
+			}
+			result.ChangedCount++
+			switch input.Action {
+			case AdminBatchPin, AdminBatchUnpin:
+				pinTargets = append(pinTargets, repository.CommentBatchTarget{SiteID: comment.SiteID, ID: comment.ID})
+			case AdminBatchHardDelete:
+				deleteTargets = append(deleteTargets, repository.CommentBatchTarget{SiteID: comment.SiteID, ID: comment.ID})
+			default:
+				key := commentStatusBatchGroupKey(plan)
+				statusGroups[key] = append(statusGroups[key], plan)
+			}
+
+			if input.Action == AdminBatchPublish {
+				updated := *comment
+				updated.Status = plan.Status
+				updated.StatusBeforeDelete = plan.StatusBeforeDelete
+				updated.PublishedAt = plan.PublishedAt
+				updated.DeletedAt = plan.DeletedAt
+				published = append(published, &updated)
+			}
+		}
+
+		switch input.Action {
+		case AdminBatchPin:
+			affected, writeErr := s.comments.SetPinnedMany(txCtx, pinTargets, true)
+			if err := requireRows("pin comments", affected, writeErr, len(pinTargets)); err != nil {
+				return err
+			}
+		case AdminBatchUnpin:
+			affected, writeErr := s.comments.SetPinnedMany(txCtx, pinTargets, false)
+			if err := requireRows("unpin comments", affected, writeErr, len(pinTargets)); err != nil {
+				return err
+			}
+		case AdminBatchHardDelete:
+			if err := s.comments.DetachCommentChildrenMany(txCtx, deleteTargets); err != nil {
+				return err
+			}
+			affected, writeErr := s.comments.HardDeleteMany(txCtx, deleteTargets)
+			if err := requireRows("hard delete comments", affected, writeErr, len(deleteTargets)); err != nil {
+				return err
+			}
+		default:
+			keys := make([]string, 0, len(statusGroups))
+			for key := range statusGroups {
+				keys = append(keys, key)
+			}
+			sort.Strings(keys)
+			for _, key := range keys {
+				targets := statusGroups[key]
+				affected, writeErr := s.comments.UpdateStatusMany(txCtx, targets)
+				if err := requireRows("update comment statuses", affected, writeErr, len(targets)); err != nil {
+					return err
+				}
 			}
 		}
 		return nil
@@ -79,69 +138,124 @@ func (s *Service) AdminBatch(ctx context.Context, input AdminBatchInput) (*domai
 	return result, nil
 }
 
-// applyAdminBatchAction 应用批量动作并返回是否发生实际写入。
-// 状态动作允许合法的同状态 no-op；置顶动作仍先验证资格，避免把回复
-// 或未发布根评论错误地当作“已是目标状态”。
-func (s *Service) applyAdminBatchAction(ctx context.Context, comment *domain.Comment, action AdminBatchAction, now time.Time) (bool, error) {
+// planAdminBatchComment 校验单个动作并返回状态变更计划。
+func planAdminBatchComment(comment *domain.Comment, action AdminBatchAction, now time.Time) (repository.CommentStatusBatchTarget, bool, error) {
+	// 计划阶段只做内存校验，数据库 I/O 留给后续分组写入。
 	if comment == nil {
-		return false, domain.ErrNotFound
+		return repository.CommentStatusBatchTarget{}, false, domain.ErrNotFound
+	}
+	target := repository.CommentStatusBatchTarget{
+		CommentBatchTarget: repository.CommentBatchTarget{SiteID: comment.SiteID, ID: comment.ID},
 	}
 	switch action {
 	case AdminBatchPending:
 		if comment.Status == domain.CommentStatusPending {
-			return false, nil
+			return target, false, nil
 		}
-		return s.applyAdminTransition(ctx, comment, actionPending, now)
+		if !canTransition(comment.Status, domain.CommentStatusPending) {
+			return target, false, domain.ErrConflict
+		}
+		target.Status = domain.CommentStatusPending
 	case AdminBatchPublish:
 		if comment.Status == domain.CommentStatusPublished {
-			return false, nil
+			return target, false, nil
 		}
-		return s.applyAdminTransition(ctx, comment, actionPublish, now)
+		if !canTransition(comment.Status, domain.CommentStatusPublished) {
+			return target, false, domain.ErrConflict
+		}
+		target.Status = domain.CommentStatusPublished
+		target.PublishedAt = &now
 	case AdminBatchSpam:
 		if comment.Status == domain.CommentStatusSpam {
-			return false, nil
+			return target, false, nil
 		}
-		return s.applyAdminTransition(ctx, comment, actionSpam, now)
+		if !canTransition(comment.Status, domain.CommentStatusSpam) {
+			return target, false, domain.ErrConflict
+		}
+		target.Status = domain.CommentStatusSpam
+		target.PreservePublishedAt = true
 	case AdminBatchSoftDelete:
 		if comment.Status == domain.CommentStatusDeleted {
-			return false, nil
+			return target, false, nil
 		}
-		return s.applyAdminTransition(ctx, comment, actionSoftDelete, now)
+		if !canTransition(comment.Status, domain.CommentStatusDeleted) {
+			return target, false, domain.ErrConflict
+		}
+		before := comment.Status
+		target.Status = domain.CommentStatusDeleted
+		target.StatusBeforeDelete = &before
+		target.PreservePublishedAt = true
+		target.DeletedAt = &now
 	case AdminBatchRestore:
-		return s.applyAdminTransition(ctx, comment, actionRestore, now)
-	case AdminBatchHardDelete:
-		if err := s.hardDeleteInCurrentTx(ctx, comment.SiteID, comment.ID); err != nil {
-			return false, err
+		if comment.Status != domain.CommentStatusDeleted || comment.StatusBeforeDelete == nil {
+			return target, false, domain.ErrConflict
 		}
-		return true, nil
+		if *comment.StatusBeforeDelete != domain.CommentStatusPending &&
+			*comment.StatusBeforeDelete != domain.CommentStatusPublished &&
+			*comment.StatusBeforeDelete != domain.CommentStatusSpam {
+			return target, false, domain.ErrConflict
+		}
+		target.Status = *comment.StatusBeforeDelete
+		if target.Status == domain.CommentStatusPublished {
+			target.PublishedAt = &now
+		}
 	case AdminBatchPin:
 		if err := validatePinTarget(comment, true); err != nil {
-			return false, err
+			return target, false, err
 		}
 		if comment.IsPinned {
-			return false, nil
+			return target, false, nil
 		}
-		if _, err := s.comments.SetPinned(ctx, comment.SiteID, comment.ID, true); err != nil {
-			return false, err
-		}
-		return true, nil
+		return target, true, nil
 	case AdminBatchUnpin:
 		if err := validatePinTarget(comment, false); err != nil {
-			return false, err
+			return target, false, err
 		}
 		if !comment.IsPinned {
-			return false, nil
+			return target, false, nil
 		}
-		if _, err := s.comments.SetPinned(ctx, comment.SiteID, comment.ID, false); err != nil {
-			return false, err
-		}
-		return true, nil
+		return target, true, nil
+	case AdminBatchHardDelete:
+		return target, true, nil
 	default:
-		return false, domain.ErrValidation
+		return target, false, domain.ErrValidation
 	}
+	return target, true, nil
 }
 
-// hardDeleteInCurrentTx 解除回复引用并删除目标行；调用方已经位于外层事务。
+// requireRows 校验批量写入的影响行数与预期一致。
+func requireRows(operation string, count int64, err error, expected int) error {
+	// 分组 SQL 无法准确定位单个目标，错误保持为批量事务错误。
+	if err != nil {
+		return err
+	}
+	if count != int64(expected) {
+		return fmt.Errorf("%s affected %d rows, expected %d", operation, count, expected)
+	}
+	return nil
+}
+
+// commentStatusBatchGroupKey 描述状态变更实际写入的字段值。
+func commentStatusBatchGroupKey(target repository.CommentStatusBatchTarget) string {
+	// 分组数量限制在有限状态机范围内，并保留 spam/soft-delete 各行的发布时间。
+	before := ""
+	if target.StatusBeforeDelete != nil {
+		before = string(*target.StatusBeforeDelete)
+	}
+	published := "clear"
+	if target.PreservePublishedAt {
+		published = "preserve"
+	} else if target.PublishedAt != nil {
+		published = "set"
+	}
+	deleted := "clear"
+	if target.DeletedAt != nil {
+		deleted = "set"
+	}
+	return string(target.Status) + "|" + before + "|" + published + "|" + deleted
+}
+
+// hardDeleteInCurrentTx 解除回复引用并删除目标行；使用方必须已位于外层事务。
 func (s *Service) hardDeleteInCurrentTx(ctx context.Context, siteID, id int64) error {
 	if err := s.comments.DetachCommentChildren(ctx, siteID, id); err != nil {
 		return err

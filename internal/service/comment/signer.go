@@ -7,19 +7,19 @@ import (
 	"furtalk/internal/platform/token"
 )
 
-// WidgetSignerConfig 是 widget signer 的最小静态配置。
+// WidgetSignerConfig widget signer 的最小静态配置。
 type WidgetSignerConfig struct {
 	Issuer   string
 	Key      []byte
 	Lifetime time.Duration
 }
 
-// WidgetSigner 是面向 widget token 的 JWT 签名与验签服务。
+// WidgetSigner 面向 widget token 的 JWT 签名与验签服务。
 type WidgetSigner struct {
 	*jwt.Service
 }
 
-// NewWidgetSigner 按 feature 自己的配置构建 widget JWT signer。
+// NewWidgetSigner 按评论模块配置构建 Widget JWT 签名器。
 func NewWidgetSigner(cfg WidgetSignerConfig) *WidgetSigner {
 	return &WidgetSigner{jwt.NewService(jwt.Config{
 		Issuer:   cfg.Issuer,
@@ -33,12 +33,12 @@ func NewWidgetJWTVerifierFromSigner(signer *WidgetSigner) *WidgetJWTVerifier {
 	return NewWidgetJWTVerifier(signer.Service)
 }
 
-// NewSettingsReader 构建从策略读取器投影出 widget 模式与代次的读取器。
+// NewSettingsReader 构建读取 Widget 模式与凭证代次的适配器。
 func NewSettingsReader(reader SettingsReader) WidgetSettingsReader {
 	return widgetSettingsReader{reader: reader}
 }
 
-// widgetSettingsReader 把评论策略投影为 widget 中间件所需的模式与凭证代次。
+// widgetSettingsReader 将评论策略转换为 Widget 中间件所需的模式与凭证代次。
 type widgetSettingsReader struct {
 	reader SettingsReader
 }

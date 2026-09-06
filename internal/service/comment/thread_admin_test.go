@@ -367,6 +367,7 @@ func TestAdminUpdateThreadPageURLValidation(t *testing.T) {
 		"javascript:alert(1)",
 		"https://",
 		"//example.com/x",
+		"https://user:pass@example.com/x",
 		strings.Repeat("u", maxPageURLLength+1),
 	} {
 		if _, err := svc.AdminUpdateThread(ctx, siteID, threadA, AdminThreadUpdateInput{

@@ -126,6 +126,7 @@ func buildAdminAuthorizationRouter(t *testing.T) (*gin.Engine, *comment.WidgetSi
 	userW := identity.NewService(identity.Dependencies{
 		TxRunner: gormtx.NewRunner(db),
 		Users:    userRepo,
+		Policy:   authPolicyReader{},
 	})
 	svc := comment.NewService(comment.Dependencies{
 		TxRunner: gormtx.NewRunner(db),
@@ -152,7 +153,7 @@ func buildAdminAuthorizationRouter(t *testing.T) (*gin.Engine, *comment.WidgetSi
 	router.Use(middleware.JWTVerification(identitySigner))
 	router.Use(middleware.PrincipalResolution(authz))
 	RegisterWidget(router.Group("/api/v1"), svc, verifier, adminSessionSettingsReader{}, authz, origins)
-	RegisterFirstPartyCommentAuthorization(router.Group("/api/v1"), svc, adminSessionGate{})
+	RegisterFirstPartyCommentAuthorizationWithAdmission(router.Group("/api/v1"), svc, adminSessionGate{}, nil)
 	return router, widgetSigner, userRepo, admin.ID, ordinary.ID
 }
 

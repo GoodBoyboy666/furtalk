@@ -1,17 +1,14 @@
-// Package site 是站点与 Origin 管理用例的业务层。
-// 只依赖 domain 与 repository，不触碰 GORM；数据经 repository 读写。
+// Package site 站点与 Origin 管理用例的业务层。
 package site
 
 import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
-	"net/url"
-	"strconv"
 	"strings"
 
 	"furtalk/internal/domain"
+	"furtalk/internal/platform/urlx"
 	"furtalk/internal/repository"
 )
 
@@ -27,12 +24,12 @@ type SiteUpdate struct {
 	Status       *domain.SiteStatus
 }
 
-// NewService 构建站点服务，并注入站点仓储。
+// NewService 构建站点服务。
 func NewService(sites *repository.SiteRepo) *Service {
 	return &Service{sites: sites}
 }
 
-// List 返回全部站点及其 origins，按 id 升序排列。
+// List 列出全部站点。
 func (s *Service) List(ctx context.Context) ([]domain.Site, error) {
 	rows, err := s.sites.List(ctx)
 	if err != nil {
@@ -50,7 +47,7 @@ func (s *Service) List(ctx context.Context) ([]domain.Site, error) {
 	return out, nil
 }
 
-// Create 规范化站点名称与规范 URL 后创建站点，并返回带 origins 的完整站点。
+// Create 创建站点。
 func (s *Service) Create(ctx context.Context, name, canonicalURL string) (*domain.Site, error) {
 	name, canonical, err := normalizeSiteInput(name, canonicalURL)
 	if err != nil {
@@ -67,7 +64,7 @@ func (s *Service) Create(ctx context.Context, name, canonicalURL string) (*domai
 	return s.Get(ctx, row.ID)
 }
 
-// Get 按 ID 返回站点及其 origins；站点不存在时返回 domain.ErrNotFound。
+// Get 读取指定站点。
 func (s *Service) Get(ctx context.Context, id int64) (*domain.Site, error) {
 	row, err := s.sites.Get(ctx, id)
 	if err != nil {
@@ -96,7 +93,7 @@ func (s *Service) Update(ctx context.Context, id int64, patch SiteUpdate) (*doma
 		}
 	}
 	if patch.CanonicalURL != nil {
-		canonical, err := normalizeURL(*patch.CanonicalURL)
+		canonical, err := urlx.CanonicalOrigin(*patch.CanonicalURL)
 		if err != nil {
 			return nil, fmt.Errorf("%w: invalid canonical url", domain.ErrValidation)
 		}
@@ -111,7 +108,7 @@ func (s *Service) Update(ctx context.Context, id int64, patch SiteUpdate) (*doma
 	return s.Get(ctx, id)
 }
 
-// Delete 需要显式确认后才执行破坏性级联删除。
+// Delete 删除站点。
 func (s *Service) Delete(ctx context.Context, id int64, confirm bool) error {
 	if !confirm {
 		return domain.ErrConfirmationRequired
@@ -120,12 +117,11 @@ func (s *Service) Delete(ctx context.Context, id int64, confirm bool) error {
 }
 
 // AddOrigin 校验站点存在后规范化并添加一个 origin；
-// 站点不存在返回 domain.ErrNotFound，重复时返回 domain.ErrConflict。
 func (s *Service) AddOrigin(ctx context.Context, siteID int64, origin string) (*domain.Origin, error) {
 	if _, err := s.sites.Get(ctx, siteID); err != nil {
 		return nil, err
 	}
-	normalized, err := normalizeURL(origin)
+	normalized, err := urlx.CanonicalOrigin(origin)
 	if err != nil {
 		return nil, fmt.Errorf("%w: invalid origin", domain.ErrValidation)
 	}
@@ -140,9 +136,8 @@ func (s *Service) AddOrigin(ctx context.Context, siteID int64, origin string) (*
 }
 
 // UpdateOrigin 按 site 与 origin ID 更新 origin 值并返回更新后的记录；
-// 记录不存在返回 domain.ErrNotFound，重复值返回 domain.ErrConflict。
 func (s *Service) UpdateOrigin(ctx context.Context, siteID, originID int64, origin string) (*domain.Origin, error) {
-	normalized, err := normalizeURL(origin)
+	normalized, err := urlx.CanonicalOrigin(origin)
 	if err != nil {
 		return nil, fmt.Errorf("%w: invalid origin", domain.ErrValidation)
 	}
@@ -172,83 +167,9 @@ func normalizeSiteInput(name, canonicalURL string) (string, string, error) {
 	if name == "" {
 		return "", "", fmt.Errorf("%w: site name is required", domain.ErrValidation)
 	}
-	canonical, err := normalizeURL(canonicalURL)
+	canonical, err := urlx.CanonicalOrigin(canonicalURL)
 	if err != nil {
 		return "", "", fmt.Errorf("%w: invalid canonical url", domain.ErrValidation)
 	}
 	return name, canonical, nil
-}
-
-// normalizeURL 规范化精确 origin 或 canonical URL。
-func normalizeURL(input string) (string, error) {
-	trimmed := strings.TrimSpace(input)
-	if trimmed == "" || trimmed == "null" {
-		return "", domain.ErrValidation
-	}
-	if strings.ContainsAny(trimmed, " \t\r\n,") {
-		return "", domain.ErrValidation
-	}
-	if strings.Contains(trimmed, "*") {
-		return "", domain.ErrValidation
-	}
-	u, err := url.Parse(trimmed)
-	if err != nil {
-		return "", domain.ErrValidation
-	}
-	if u.Scheme != "https" && u.Scheme != "http" {
-		return "", domain.ErrValidation
-	}
-	if u.Host == "" {
-		return "", domain.ErrValidation
-	}
-	if u.User != nil {
-		return "", domain.ErrValidation
-	}
-	if u.Path != "" {
-		return "", domain.ErrValidation
-	}
-	if u.RawQuery != "" || u.Fragment != "" {
-		return "", domain.ErrValidation
-	}
-	if strings.Contains(u.Host, "*") {
-		return "", domain.ErrValidation
-	}
-	host, port, splitErr := net.SplitHostPort(u.Host)
-	if splitErr != nil {
-		host = u.Host
-		port = ""
-	}
-	host = strings.ToLower(host)
-	if host == "" {
-		return "", domain.ErrValidation
-	}
-	if u.Scheme == "http" && !isLocalhost(host) {
-		return "", domain.ErrValidation
-	}
-	switch port {
-	case "":
-	case "443":
-		if u.Scheme != "https" {
-			return "", domain.ErrValidation
-		}
-		port = ""
-	case "80":
-		if u.Scheme != "http" {
-			return "", domain.ErrValidation
-		}
-		port = ""
-	default:
-		portNum, err := strconv.Atoi(port)
-		if err != nil || portNum < 1 || portNum > 65535 {
-			return "", domain.ErrValidation
-		}
-	}
-	if port == "" {
-		return u.Scheme + "://" + host, nil
-	}
-	return u.Scheme + "://" + net.JoinHostPort(host, port), nil
-}
-
-func isLocalhost(host string) bool {
-	return host == "localhost" || host == "127.0.0.1" || host == "::1"
 }

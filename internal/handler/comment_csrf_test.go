@@ -32,9 +32,10 @@ func newCommentAuthzRouter(t *testing.T, csrf ...gin.HandlerFunc) *gin.Engine {
 	router.Use(httpx.ErrorWriter(translator))
 	router.Use(middleware.JWTVerification(signer))
 	router.Use(middleware.PrincipalResolution(principals))
-	RegisterFirstPartyCommentAuthorization(
+	RegisterFirstPartyCommentAuthorizationWithAdmission(
 		router.Group("/api/v1"),
 		service, userGate,
+		nil,
 		csrf...,
 	)
 	return router

@@ -8,17 +8,18 @@ import (
 	"furtalk/internal/platform/httpx"
 	"furtalk/internal/service/comment"
 	"furtalk/internal/service/identity"
+
 	"github.com/gin-gonic/gin"
 )
 
-// AdminBatchRequest 是三个管理员资源批量命令共用的请求体。
+// AdminBatchRequest 三个管理员资源批量命令共用的请求体。
 type AdminBatchRequest struct {
 	IDs     []string `json:"ids"`
 	Action  string   `json:"action"`
 	Confirm bool     `json:"confirm"`
 }
 
-// AdminBatchResponse 是三个管理员资源批量命令共用的成功响应。
+// AdminBatchResponse 三个管理员资源批量命令共用的成功响应。
 type AdminBatchResponse struct {
 	Action         string `json:"action"`
 	RequestedCount int    `json:"requested_count"`
@@ -26,8 +27,7 @@ type AdminBatchResponse struct {
 	UnchangedCount int    `json:"unchanged_count"`
 }
 
-// parseBatchIDs 校验十进制业务 ID、数量上限与唯一性。
-// ID 在 HTTP 边界保持字符串，解析后才进入服务层和事务。
+// parseBatchIDs 解析并校验批量操作中的业务 ID。
 func parseBatchIDs(raw []string) ([]int64, error) {
 	if len(raw) < 1 || len(raw) > 100 {
 		return nil, httpx.ErrInvalidID
@@ -48,6 +48,7 @@ func parseBatchIDs(raw []string) ([]int64, error) {
 	return ids, nil
 }
 
+// toAdminBatchResponse 将批量操作结果转换为响应数据。
 func toAdminBatchResponse(result domain.BatchResult) AdminBatchResponse {
 	return AdminBatchResponse{
 		Action:         result.Action,
@@ -57,7 +58,7 @@ func toAdminBatchResponse(result domain.BatchResult) AdminBatchResponse {
 	}
 }
 
-// writeBatchError 保留统一错误翻译，同时在业务失败时安全地投影 failed_id。
+// writeBatchError 保留统一错误翻译，并在业务失败时附带 failed_id。
 func writeBatchError(c *gin.Context, err error) {
 	details := map[string]any(nil)
 	var resourceErr *domain.ResourceError
@@ -67,6 +68,7 @@ func writeBatchError(c *gin.Context, err error) {
 	httpx.WriteErrorWithDetails(c, err, details)
 }
 
+// decodeCommentBatchRequest 解码请求体。
 func decodeCommentBatchRequest(c *gin.Context) (comment.AdminBatchInput, error) {
 	var req AdminBatchRequest
 	if err := httpx.DecodeBody(c, &req); err != nil {
@@ -82,6 +84,7 @@ func decodeCommentBatchRequest(c *gin.Context) (comment.AdminBatchInput, error) 
 	return comment.AdminBatchInput{IDs: ids, Action: comment.AdminBatchAction(req.Action), Confirm: req.Confirm}, nil
 }
 
+// decodeThreadBatchRequest 解码请求体。
 func decodeThreadBatchRequest(c *gin.Context) (comment.AdminThreadBatchInput, error) {
 	var req AdminBatchRequest
 	if err := httpx.DecodeBody(c, &req); err != nil {
@@ -99,6 +102,7 @@ func decodeThreadBatchRequest(c *gin.Context) (comment.AdminThreadBatchInput, er
 	}, nil
 }
 
+// decodeUserBatchRequest 解码请求体。
 func decodeUserBatchRequest(c *gin.Context) (identity.AdminUserBatchInput, error) {
 	var req AdminBatchRequest
 	if err := httpx.DecodeBody(c, &req); err != nil {

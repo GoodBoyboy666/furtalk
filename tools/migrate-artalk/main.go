@@ -1,4 +1,4 @@
-// Tool migrate-artalk imports an Artalk Artrans export into Furtalk.
+// migrate-artalk 工具将 Artalk Artrans 导出数据导入 Furtalk。
 package main
 
 import (
@@ -38,6 +38,7 @@ type config struct {
 	databaseSSLMode string
 }
 
+// main 解析参数并执行 Artalk 数据迁移。
 func main() {
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, "迁移失败:", err)
@@ -45,6 +46,7 @@ func main() {
 	}
 }
 
+// run 加载源数据并执行一次迁移事务。
 func run() error {
 	cfg, err := parseFlags(os.Args[1:])
 	if err != nil {
@@ -116,6 +118,7 @@ func run() error {
 	return nil
 }
 
+// parseFlags 解析迁移工具的命令行参数和环境变量。
 func parseFlags(args []string) (config, error) {
 	var cfg config
 	set := flag.NewFlagSet("migrate-artalk", flag.ContinueOnError)
@@ -174,6 +177,7 @@ func parseFlags(args []string) (config, error) {
 	return cfg, nil
 }
 
+// openInput 打开指定文件或返回标准输入。
 func openInput(path string) (io.Reader, func(), error) {
 	if path == "-" {
 		return os.Stdin, func() {}, nil
@@ -185,8 +189,10 @@ func openInput(path string) (io.Reader, func(), error) {
 	return file, func() { _ = file.Close() }, nil
 }
 
+// env 读取并清理环境变量。
 func env(key string) string { return strings.TrimSpace(os.Getenv(key)) }
 
+// envInt 读取环境变量中的整数值。
 func envInt(key string) int {
 	value := env(key)
 	if value == "" {
@@ -199,6 +205,7 @@ func envInt(key string) int {
 	return parsed
 }
 
+// printReport 输出迁移结果统计。
 func printReport(report Report) {
 	mode := "正式执行"
 	if report.DryRun {

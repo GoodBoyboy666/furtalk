@@ -15,261 +15,30 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// ThreadRepo 持久化 threads 行。
-type ThreadRepo struct {
-	db *gorm.DB
-}
-
-// NewThreadRepo 构建线程仓储。
-func NewThreadRepo(db *gorm.DB) *ThreadRepo {
-	return &ThreadRepo{db: db}
-}
-
-// ResolveOrCreate 返回 (site_id, page_key) 对应的 thread，不存在时插入。
-// 冲突时按非 nil 元数据更新 page_url/page_title，并刷新 updated_at（写路径语义）。
-func (r *ThreadRepo) ResolveOrCreate(ctx context.Context, siteID int64, pageKey string, pageURL, pageTitle *string) (*domain.Thread, error) {
-	row := &model.Thread{SiteID: siteID, PageKey: pageKey, PageURL: pageURL, PageTitle: pageTitle}
-	assignments := map[string]any{"updated_at": time.Now().UTC()}
-	if pageURL != nil {
-		assignments["page_url"] = *pageURL
-	}
-	if pageTitle != nil {
-		assignments["page_title"] = *pageTitle
-	}
-	err := gormtx.DB(ctx, r.db).Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "site_id"}, {Name: "page_key"}},
-		DoUpdates: clause.Assignments(assignments),
-	}).Create(row).Error
-	if err != nil {
-		return nil, fmt.Errorf("resolve or create thread: %w", err)
-	}
-	if row.ID == 0 {
-		return r.GetBySiteAndKey(ctx, siteID, pageKey)
-	}
-	thread := row.ToThread()
-	return &thread, nil
-}
-
-// ResolveOrCreateLazy 返回 (site_id, page_key) 对应的 thread，不存在时插入，
-// 冲突时什么都不做（不更新元数据与时间戳），供只读的惰性发现使用。
-func (r *ThreadRepo) ResolveOrCreateLazy(ctx context.Context, siteID int64, pageKey string) (*domain.Thread, error) {
-	row := &model.Thread{SiteID: siteID, PageKey: pageKey}
-	err := gormtx.DB(ctx, r.db).Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "site_id"}, {Name: "page_key"}},
-		DoNothing: true,
-	}).Create(row).Error
-	if err != nil {
-		return nil, fmt.Errorf("lazy resolve thread: %w", err)
-	}
-	if row.ID == 0 {
-		return r.GetBySiteAndKey(ctx, siteID, pageKey)
-	}
-	thread := row.ToThread()
-	return &thread, nil
-}
-
-// GetBySiteAndKey 返回 (site_id, page_key) 对应的 thread。
-func (r *ThreadRepo) GetBySiteAndKey(ctx context.Context, siteID int64, pageKey string) (*domain.Thread, error) {
-	var row model.Thread
-	err := gormtx.DB(ctx, r.db).
-		Where("site_id = ? AND page_key = ?", siteID, pageKey).
-		First(&row).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, domain.ErrNotFound
-	}
-	if err != nil {
-		return nil, fmt.Errorf("get thread by site and key: %w", err)
-	}
-	thread := row.ToThread()
-	return &thread, nil
-}
-
-// GetBySiteAndID 返回限定在某个站点内的一条 thread。
-func (r *ThreadRepo) GetBySiteAndID(ctx context.Context, siteID, threadID int64) (*domain.Thread, error) {
-	var row model.Thread
-	err := gormtx.DB(ctx, r.db).
-		Where("site_id = ? AND id = ?", siteID, threadID).
-		First(&row).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, domain.ErrNotFound
-	}
-	if err != nil {
-		return nil, fmt.Errorf("get thread by site and id: %w", err)
-	}
-	thread := row.ToThread()
-	return &thread, nil
-}
-
-// GetBySiteAndKeyLocked 在写事务内按 (site_id, page_key) 读取 thread，
-// 在 PostgreSQL 上对行加锁，SQLite 依赖事务忙等待。
-func (r *ThreadRepo) GetBySiteAndKeyLocked(ctx context.Context, siteID int64, pageKey string) (*domain.Thread, error) {
-	return r.threadLocked(ctx, func(db *gorm.DB) *gorm.DB {
-		return db.Where("site_id = ? AND page_key = ?", siteID, pageKey)
-	})
-}
-
-// GetBySiteAndIDLocked 在写事务内按 (site_id, thread_id) 读取 thread，
-// 在 PostgreSQL 上对行加锁，SQLite 依赖事务忙等待。
-func (r *ThreadRepo) GetBySiteAndIDLocked(ctx context.Context, siteID, threadID int64) (*domain.Thread, error) {
-	return r.threadLocked(ctx, func(db *gorm.DB) *gorm.DB {
-		return db.Where("site_id = ? AND id = ?", siteID, threadID)
-	})
-}
-
-// threadLocked 应用方言感知的行锁并读取第一条 thread 行。
-func (r *ThreadRepo) threadLocked(ctx context.Context, cond func(db *gorm.DB) *gorm.DB) (*domain.Thread, error) {
-	db := gormtx.DB(ctx, r.db)
-	if db.Dialector.Name() != "sqlite" {
-		db = db.Clauses(clause.Locking{Strength: "UPDATE"})
-	}
-	var row model.Thread
-	err := cond(db).First(&row).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, domain.ErrNotFound
-	}
-	if err != nil {
-		return nil, fmt.Errorf("get thread locked: %w", err)
-	}
-	thread := row.ToThread()
-	return &thread, nil
-}
-
-// ListAdmin 按管理员过滤条件列出线程并关联站点名。
-// q 对 page_key、page_title 与 page_url 做包含匹配；结果使用 (created_at, id) 排序。
-func (r *ThreadRepo) ListAdmin(ctx context.Context, filter domain.AdminThreadFilter) ([]domain.AdminThread, error) {
-	query := gormtx.DB(ctx, r.db).
-		Table("threads").
-		Joins("JOIN sites ON sites.id = threads.site_id").
-		Select("threads.*, sites.name AS site_name")
-	query = applyAdminThreadFilters(query, filter)
-	sort := filter.Sort
-	if sort == "" {
-		sort = domain.CommentSortDesc
-	}
-	query = query.Order(applyCursorOrder("threads", sort))
-	if filter.Offset > 0 {
-		query = query.Offset(filter.Offset)
-	}
-	limit := filter.Limit
-	if limit <= 0 {
-		limit = 50
-	}
-	var rows []domain.AdminThread
-	if err := query.Limit(limit).Find(&rows).Error; err != nil {
-		return nil, fmt.Errorf("list admin threads: %w", err)
-	}
-	return rows, nil
-}
-
-// CountAdmin 统计与 ListAdmin 完全相同的过滤条件匹配的线程总数。
-func (r *ThreadRepo) CountAdmin(ctx context.Context, filter domain.AdminThreadFilter) (int64, error) {
-	query := applyAdminThreadFilters(gormtx.DB(ctx, r.db).Table("threads"), filter)
-	var count int64
-	if err := query.Count(&count).Error; err != nil {
-		return 0, fmt.Errorf("count admin threads: %w", err)
-	}
-	return count, nil
-}
-
-// applyAdminThreadFilters 把管理员线程列表的全部过滤条件应用到查询。
-// ListAdmin 与 CountAdmin 共享此构建器，保证 total 与行查询条件一致。
-func applyAdminThreadFilters(query *gorm.DB, filter domain.AdminThreadFilter) *gorm.DB {
-	if filter.SiteID != nil {
-		query = query.Where("threads.site_id = ?", *filter.SiteID)
-	}
-	if filter.CommentsEnabled != nil {
-		query = query.Where("threads.comments_enabled = ?", *filter.CommentsEnabled)
-	}
-	if filter.Q != "" {
-		pattern := "%" + filter.Q + "%"
-		query = query.Where("(threads.page_key LIKE ? OR threads.page_title LIKE ? OR threads.page_url LIKE ?)", pattern, pattern, pattern)
-	}
-	return query
-}
-
-// UpdateThread 以 site_id 与 thread_id 限定范围更新线程的元数据字段并返回
-// 更新后的完整 thread。更新前先确认记录存在，因为 SQLite 只统计实际变更行，
-// 同值更新时 RowsAffected 为 0；page_key 违反站点内唯一时返回 domain.ErrConflict。
-func (r *ThreadRepo) UpdateThread(ctx context.Context, siteID, threadID int64, patch domain.ThreadPatch) (*domain.Thread, error) {
-	db := gormtx.DB(ctx, r.db)
-	var row model.Thread
-	if err := db.Where("site_id = ? AND id = ?", siteID, threadID).First(&row).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, domain.ErrNotFound
-		}
-		return nil, fmt.Errorf("get thread by site and id: %w", err)
-	}
-	updates := map[string]any{}
-	if patch.PageKey != nil {
-		updates["page_key"] = *patch.PageKey
-	}
-	if patch.PageTitle != nil {
-		updates["page_title"] = *patch.PageTitle
-	}
-	if patch.ClearPageTitle {
-		updates["page_title"] = nil
-	}
-	if patch.PageURL != nil {
-		updates["page_url"] = *patch.PageURL
-	}
-	if patch.ClearPageURL {
-		updates["page_url"] = nil
-	}
-	if patch.CommentsEnabled != nil {
-		updates["comments_enabled"] = *patch.CommentsEnabled
-	}
-	if len(updates) == 0 {
-		thread := row.ToThread()
-		return &thread, nil
-	}
-	if err := db.Model(&model.Thread{}).
-		Where("site_id = ? AND id = ?", siteID, threadID).
-		Updates(updates).Error; err != nil {
-		if gormtx.IsDuplicateKeyError(err) {
-			return nil, fmt.Errorf("update thread: %w", domain.ErrConflict)
-		}
-		return nil, fmt.Errorf("update thread: %w", err)
-	}
-	// 更新后的行重新读取，使返回与持久化状态一致。
-	if err := db.Where("site_id = ? AND id = ?", siteID, threadID).First(&row).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, domain.ErrNotFound
-		}
-		return nil, fmt.Errorf("get thread by site and id: %w", err)
-	}
-	thread := row.ToThread()
-	return &thread, nil
-}
-
-// UpdateCommentsEnabled 以 site_id 与 thread_id 限定范围更新页面级评论开关，
-// 返回更新后的完整 thread。
-func (r *ThreadRepo) UpdateCommentsEnabled(ctx context.Context, siteID, threadID int64, enabled bool) (*domain.Thread, error) {
-	return r.UpdateThread(ctx, siteID, threadID, domain.ThreadPatch{CommentsEnabled: &enabled})
-}
-
-// DeleteThread 以 site_id 与 thread_id 限定范围硬删除一条 thread。
-// 依赖数据库复合外键 ON DELETE CASCADE 移除该线程下全部（含父子）评论，
-// 作者用户、站点与其他线程不受影响；跨站点或缺失的 thread 返回
-// domain.ErrNotFound，绝不删除其他站点数据。
-func (r *ThreadRepo) DeleteThread(ctx context.Context, siteID, threadID int64) error {
-	result := gormtx.DB(ctx, r.db).
-		Where("site_id = ? AND id = ?", siteID, threadID).
-		Delete(&model.Thread{})
-	if result.Error != nil {
-		return fmt.Errorf("delete thread: %w", result.Error)
-	}
-	if result.RowsAffected == 0 {
-		return domain.ErrNotFound
-	}
-	return nil
-}
-
-// CommentRepo 持久化评论行。
+// CommentRepo 提供评论及其关联数据的持久化操作。
 type CommentRepo struct {
 	db *gorm.DB
 }
 
-// NewCommentRepo 构建评论仓储。
+// CommentBatchTarget 标识带所属站点的评论目标。
+// 即使评论 ID 全局唯一，批量写入仍要求同时传入站点，确保每次写入都显式保留站点边界。
+type CommentBatchTarget struct {
+	SiteID int64
+	ID     int64
+}
+
+// CommentStatusBatchTarget 表示一组同构状态变更目标。
+// UpdateStatusMany 接收按相同字段值分组的评论更新。
+type CommentStatusBatchTarget struct {
+	CommentBatchTarget
+	Status              domain.CommentStatus
+	StatusBeforeDelete  *domain.CommentStatus
+	PublishedAt         *time.Time
+	DeletedAt           *time.Time
+	PreservePublishedAt bool
+}
+
+// NewCommentRepo 构建评论repository。
 func NewCommentRepo(db *gorm.DB) *CommentRepo {
 	return &CommentRepo{db: db}
 }
@@ -286,7 +55,7 @@ func (r *CommentRepo) Create(ctx context.Context, comment *domain.Comment) error
 	return nil
 }
 
-// FindBySiteAndID 返回限定在某个站点内的一条评论。
+// FindBySiteAndID 返回某个站点内的一条评论。
 func (r *CommentRepo) FindBySiteAndID(ctx context.Context, siteID, id int64) (*domain.Comment, error) {
 	var row model.Comment
 	err := gormtx.DB(ctx, r.db).
@@ -297,6 +66,24 @@ func (r *CommentRepo) FindBySiteAndID(ctx context.Context, siteID, id int64) (*d
 	}
 	if err != nil {
 		return nil, fmt.Errorf("find comment by site and id: %w", err)
+	}
+	out := row.ToComment()
+	return &out, nil
+}
+
+// FindBySiteAndIDLocked 在写事务中查询并锁定站点内的评论。
+func (r *CommentRepo) FindBySiteAndIDLocked(ctx context.Context, siteID, id int64) (*domain.Comment, error) {
+	db := gormtx.DB(ctx, r.db)
+	if db.Dialector.Name() != "sqlite" {
+		db = db.Clauses(clause.Locking{Strength: "UPDATE"})
+	}
+	var row model.Comment
+	err := db.Where("site_id = ? AND id = ?", siteID, id).First(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, domain.ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("find comment locked by site and id: %w", err)
 	}
 	out := row.ToComment()
 	return &out, nil
@@ -318,8 +105,28 @@ func (r *CommentRepo) FindGlobalByID(ctx context.Context, id int64) (*domain.Com
 	return &out, nil
 }
 
+// FindGlobalByIDsLocked 在写事务内按稳定 ID 顺序批量读取评论。
+func (r *CommentRepo) FindGlobalByIDsLocked(ctx context.Context, ids []int64) ([]domain.Comment, error) {
+	// PostgreSQL 分支对目标行加锁；SQLite 分支省略 FOR UPDATE，沿用事务写入锁语义。
+	if len(ids) == 0 {
+		return []domain.Comment{}, nil
+	}
+	db := gormtx.DB(ctx, r.db)
+	if db.Dialector.Name() != "sqlite" {
+		db = db.Clauses(clause.Locking{Strength: "UPDATE"})
+	}
+	var rows []model.Comment
+	if err := db.Where("id IN ?", ids).Order("id ASC").Find(&rows).Error; err != nil {
+		return nil, fmt.Errorf("find comments locked by ids: %w", err)
+	}
+	out := make([]domain.Comment, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, row.ToComment())
+	}
+	return out, nil
+}
+
 // CountCreatedByRanges 按多个 UTC 半开区间统计物理存在的评论行。
-// 查询结构由服务层提供的区间数量决定，所有边界仍通过参数绑定。
 func (r *CommentRepo) CountCreatedByRanges(ctx context.Context, ranges []domain.CommentTrendRange) ([]int64, error) {
 	if len(ranges) == 0 {
 		return []int64{}, nil
@@ -352,12 +159,9 @@ func (r *CommentRepo) CountCreatedByRanges(ctx context.Context, ranges []domain.
 	return counts, nil
 }
 
-// ListPublic 使用的递归 CTE 由下面三段 SQL 模板拼接：锚点 + 递归步进 + 投影。
-// 占位符 ? 按顺序绑定 site_id/thread_id、site_id/thread_id、published 状态。
-
-// publicListCteAnchor 遍历线程内全部状态的评论（不做状态过滤），从根评论出发，
-// 初始携带 vis_parent_id/vis_root_id 均为 BIGINT 类型的 NULL，以便与递归步进中
-// 的评论 id 保持一致（PostgreSQL 要求递归 CTE 的同一列类型一致）。
+// publicListCteAnchor 遍历线程内全部状态的评论，从根评论出发，
+// 初始携带 vis_parent_id/vis_root_id 均为 BIGINT 类型的 NULL，
+// 以便与递归步进中的评论 id 保持一致。
 const publicListCteAnchor = `
 	SELECT id, site_id, thread_id, user_id, reply_to_user_id, depth, body_markdown, status,
 	       status_before_delete, ip_mode, ip_value, ua_mode, ua_raw, ua_browser, ua_os, ua_device,
@@ -366,9 +170,9 @@ const publicListCteAnchor = `
 	  FROM comments
 	 WHERE site_id = ? AND thread_id = ? AND parent_id IS NULL`
 
-// publicListCteStep 向下递归：父节点为 published 时子节点连接到父节点
-// （vis_parent_id=父 id，vis_root_id=父的可见根或父本身）；父节点不可见时继承父
-// 节点携带的最近可见祖先，连续多层不可见被一次跨过。
+// publicListCteStep 向下递归
+// 父节点为 published 时子节点连接到父节点（vis_parent_id=父 id，vis_root_id=父的可见根或父本身）；
+// 父节点不可见时继承父节点携带的最近可见祖先，连续多层不可见被一次跨过。
 const publicListCteStep = `
 	UNION ALL
 	SELECT c.id, c.site_id, c.thread_id, c.user_id, c.reply_to_user_id, c.depth, c.body_markdown, c.status,
@@ -381,7 +185,7 @@ const publicListCteStep = `
 	 WHERE c.site_id = ? AND c.thread_id = ?`
 
 // publicListProjection 只选择 published 行，把递归得到的 vis_parent_id/vis_root_id
-// 投影为公开响应的 parent_id/root_id，并 join 作者与回复目标资料。
+// 映射为公开响应的 parent_id/root_id，并关联作者与回复目标资料。
 // like_count 是相关子查询，对 (site_id, comment_id) 前缀索引做计数；
 // liked_by_me 只在有已验证查看者时输出 EXISTS，否则输出常量 0。
 const publicListProjection = `
@@ -404,23 +208,12 @@ SELECT visible.id, visible.site_id, visible.thread_id, visible.user_id,
   LEFT JOIN users AS reply_users ON reply_users.id = visible.reply_to_user_id
  WHERE visible.status = ?`
 
-// likeCountExpr 返回以 qualifier 为表前缀的 Like 计数相关子查询表达式，
-// 供投影、hot 排序与 hot keyset 谓词复用，保证三者使用同一索引与语义。
+// likeCountExpr 返回指定别名评论表的点赞计数 SQL 表达式。
 func likeCountExpr(qualifier string) string {
 	return "(SELECT COUNT(*) FROM comment_likes AS cl WHERE cl.site_id = " + qualifier + ".site_id AND cl.comment_id = " + qualifier + ".id)"
 }
 
-// ListPublic 按受控排序方向返回某个线程中已发布的评论。
-// asc 使用 (created_at, id) 升序与 `>` keyset 谓词；desc 使用降序与 `<` 谓词；
-// hot 使用 (like_count, created_at, id) 降序与镜像的 `<` keyset 谓词。
-// 排序方向必须先在服务层校验为受控枚举；仓储只根据该枚举构造固定 SQL 片段，
-// 绝不拼接未校验的请求值。
-// 软删除等非公开评论完全不进入响应，但其后代会被压缩到祖先链上最近的一个
-// published 节点下（无可见祖先时成为公开树根）。数据库中的原始 parent_id /
-// root_id / depth 保持不变，查询输出的 parent_id/root_id 是压缩后的可见树关系，
-// depth 保留真实持久化值供回复深度校验使用。
-// 规范化邮箱只在仓储/服务边界读取，用于派生头像 URL，绝不进入 HTTP DTO。
-// viewerID 非空时输出该查看者是否点赞；为空时 liked_by_me 恒为 false，读取保持公开。
+// ListPublic 按排序和游标列出站点的公开评论。
 func (r *CommentRepo) ListPublic(ctx context.Context, siteID, threadID int64, sort domain.CommentSort, cursor *domain.Cursor, limit int, viewerID *int64) ([]domain.PublicComment, error) {
 	likedByMe := "0"
 	if viewerID != nil {
@@ -428,22 +221,21 @@ func (r *CommentRepo) ListPublic(ctx context.Context, siteID, threadID int64, so
 	}
 	projection := fmt.Sprintf(publicListProjection, likedByMe)
 	sql := "WITH RECURSIVE visible AS (" + publicListCteAnchor + publicListCteStep + ") " + projection
-	// SQL 占位符顺序：锚点 site/thread → 步进 site/thread → 投影 SELECT 列表中的
-	// 查看者 EXISTS（若有）→ 投影 WHERE status → 追加的 keyset 谓词。
+	// SQL 占位符顺序：锚点 site/thread → 步进 site/thread → 映射 SELECT 列表中的
+	// 查看者 EXISTS（若有）→ 映射 WHERE status → 追加的 keyset 谓词。
 	args := []any{siteID, threadID, siteID, threadID}
 	if viewerID != nil {
 		args = append(args, *viewerID)
 	}
 	args = append(args, string(domain.CommentStatusPublished))
 	qualifier := "visible"
-	// Compare the pinned group through an integer expression. This keeps the
-	// keyset SQL portable across SQLite and PostgreSQL instead of relying on
-	// dialect-specific boolean ordering operators.
+	// 置顶分组使用整数表达式，以兼容 SQLite 与 PostgreSQL 的排序语义。
 	pinnedExpr := "CASE WHEN visible.is_pinned THEN 1 ELSE 0 END"
 	pinnedCursor := 0
 	if cursor != nil && cursor.Pinned {
 		pinnedCursor = 1
 	}
+	// 三种排序均以置顶分组为首序，并按各自的游标字段排序。
 	switch sort {
 	case domain.CommentSortHot:
 		countExpr := likeCountExpr(qualifier)
@@ -477,9 +269,7 @@ func (r *CommentRepo) ListPublic(ctx context.Context, siteID, threadID int64, so
 	return rows, nil
 }
 
-// ListLatestPublic 返回某个站点中最新发布的评论，关联所属线程的页面元数据及作者当前公开资料。
-// 固定按 (created_at DESC, id DESC) 稳定排序。
-// 规范化邮箱只在仓储/服务边界读取，用于派生头像 URL，绝不进入 HTTP DTO。
+// ListLatestPublic 列出站点按最新时间排序的公开评论。
 func (r *CommentRepo) ListLatestPublic(ctx context.Context, siteID int64, limit int) ([]domain.LatestPublicComment, error) {
 	if limit <= 0 {
 		limit = 25
@@ -501,8 +291,7 @@ func (r *CommentRepo) ListLatestPublic(ctx context.Context, siteID int64, limit 
 	return rows, nil
 }
 
-// ListAdmin 返回符合管理员过滤条件、且与作者邮箱连接的评论。
-// 规范化邮箱只在仓储/服务边界读取，用于派生头像 URL，绝不进入 HTTP DTO。
+// ListAdmin 按筛选条件列出管理端评论。
 func (r *CommentRepo) ListAdmin(ctx context.Context, filter domain.AdminFilter) ([]domain.AdminComment, error) {
 	query := gormtx.DB(ctx, r.db).
 		Table("comments").
@@ -529,8 +318,7 @@ func (r *CommentRepo) ListAdmin(ctx context.Context, filter domain.AdminFilter) 
 	return rows, nil
 }
 
-// CountAdmin 统计与 ListAdmin 完全相同的过滤条件匹配的管理员评论总数，
-// 使分页 total 与行查询永不漂移。q 过滤引用作者字段，因此 count 也必须 join users。
+// CountAdmin 统计符合管理端筛选条件的评论数量。
 func (r *CommentRepo) CountAdmin(ctx context.Context, filter domain.AdminFilter) (int64, error) {
 	query := applyAdminCommentFilters(gormtx.DB(ctx, r.db).Table("comments").
 		Joins("JOIN users ON users.id = comments.user_id"), filter)
@@ -541,8 +329,7 @@ func (r *CommentRepo) CountAdmin(ctx context.Context, filter domain.AdminFilter)
 	return count, nil
 }
 
-// applyAdminCommentFilters 把管理员评论列表的全部过滤条件应用到查询。
-// q 对正文、作者邮箱与昵称做包含匹配；ListAdmin 与 CountAdmin 共享此构建器。
+// applyAdminCommentFilters 将管理端评论筛选条件应用到查询。
 func applyAdminCommentFilters(query *gorm.DB, filter domain.AdminFilter) *gorm.DB {
 	if filter.SiteID != nil {
 		query = query.Where("comments.site_id = ?", *filter.SiteID)
@@ -570,8 +357,7 @@ func applyAdminCommentFilters(query *gorm.DB, filter domain.AdminFilter) *gorm.D
 	return query
 }
 
-// ownerVisibleStatus 是普通用户侧可见的评论审核状态集合。
-// 软删除（deleted）评论对普通用户一律不可见；管理端使用完整四状态，不复用此集合。
+// ownerVisibleStatus 返回用户可见的评论状态集合。
 func ownerVisibleStatus() []domain.CommentStatus {
 	return []domain.CommentStatus{
 		domain.CommentStatusPublished,
@@ -580,10 +366,7 @@ func ownerVisibleStatus() []domain.CommentStatus {
 	}
 }
 
-// ListByOwner 返回当前用户本人的评论，关联作者、站点与线程公开元数据。
-// 所有行都必须命中 ownerID；仅返回 owner-visible 状态的评论；
-// site/status 过滤在 offset 之前应用。
-// 规范化邮箱只在仓储/服务边界读取，用于派生头像 URL，绝不进入 HTTP DTO。
+// ListByOwner 列出指定用户可见的评论及其关联资料。
 func (r *CommentRepo) ListByOwner(ctx context.Context, ownerID int64, filter domain.OwnerFilter) ([]domain.OwnerComment, error) {
 	query := gormtx.DB(ctx, r.db).
 		Table("comments").
@@ -634,8 +417,7 @@ func (r *CommentRepo) CountByOwner(ctx context.Context, ownerID int64, filter do
 	return count, nil
 }
 
-// GetByOwnerAndID 返回当前用户本人一条评论，关联站点与线程公开元数据。
-// 记录不属于 ownerID 时视为不存在，不披露他人评论。
+// GetByOwnerAndID 查询指定用户拥有的一条评论。
 func (r *CommentRepo) GetByOwnerAndID(ctx context.Context, ownerID, id int64) (*domain.OwnerComment, error) {
 	var row domain.OwnerComment
 	err := gormtx.DB(ctx, r.db).
@@ -709,8 +491,31 @@ func (r *CommentRepo) UpdateStatus(ctx context.Context, siteID, id int64, status
 	return nil
 }
 
-// SetPinned 只更新站点范围内评论的置顶位并返回权威行。
-// 先读后写使 SQLite 在同值更新 RowsAffected 为零时仍保持幂等。
+// UpdateStatusMany 对显式站点范围内的一组同构目标更新状态并返回影响行数。
+func (r *CommentRepo) UpdateStatusMany(ctx context.Context, targets []CommentStatusBatchTarget) (int64, error) {
+	// 目标存在性已由同一事务中的锁定快照校验，本方法直接执行复数更新。
+	if len(targets) == 0 {
+		return 0, nil
+	}
+	db := gormtx.DB(ctx, r.db).Model(&model.Comment{})
+	db = whereCommentBatchTargets(db, targetsToCommentTargets(targets))
+	first := targets[0]
+	updates := map[string]any{
+		"status":               first.Status,
+		"status_before_delete": first.StatusBeforeDelete,
+		"deleted_at":           first.DeletedAt,
+	}
+	if !first.PreservePublishedAt {
+		updates["published_at"] = first.PublishedAt
+	}
+	result := db.Updates(updates)
+	if result.Error != nil {
+		return 0, fmt.Errorf("update comment statuses: %w", result.Error)
+	}
+	return result.RowsAffected, nil
+}
+
+// SetPinned 更新评论置顶状态并返回最新评论。
 func (r *CommentRepo) SetPinned(ctx context.Context, siteID, id int64, pinned bool) (*domain.Comment, error) {
 	db := gormtx.DB(ctx, r.db)
 	var row model.Comment
@@ -740,9 +545,24 @@ func (r *CommentRepo) SetPinned(ctx context.Context, siteID, id int64, pinned bo
 	return &out, nil
 }
 
-// DetachCommentChildren 解除保留评论对待删除评论的 parent_id / root_id 引用。
-// 必须在删除目标行前执行，复合外键 ON DELETE CASCADE 否则会误删回复；
-// 保留评论自身保持原状态与正文。同一事务内与 HardDelete 一起提交。
+// SetPinnedMany 对已校验的一组同构目标更新置顶标记并返回影响行数。
+func (r *CommentRepo) SetPinnedMany(ctx context.Context, targets []CommentBatchTarget, pinned bool) (int64, error) {
+	// 使用方已过滤 no-op，RowsAffected 用于确认目标数量。
+	if len(targets) == 0 {
+		return 0, nil
+	}
+	result := whereCommentBatchTargets(gormtx.DB(ctx, r.db).Model(&model.Comment{}), targets).
+		Update("is_pinned", pinned)
+	if result.Error != nil {
+		if strings.Contains(strings.ToLower(result.Error.Error()), "check constraint") || strings.Contains(strings.ToLower(result.Error.Error()), "ck_comments_pinned_root") {
+			return 0, fmt.Errorf("set comments pinned: %w", domain.ErrConflict)
+		}
+		return 0, fmt.Errorf("set comments pinned: %w", result.Error)
+	}
+	return result.RowsAffected, nil
+}
+
+// DetachCommentChildren 清除评论子项对指定评论的引用。
 func (r *CommentRepo) DetachCommentChildren(ctx context.Context, siteID, id int64) error {
 	db := gormtx.DB(ctx, r.db)
 	if err := db.Model(&model.Comment{}).
@@ -758,8 +578,23 @@ func (r *CommentRepo) DetachCommentChildren(ctx context.Context, siteID, id int6
 	return nil
 }
 
-// HardDelete 只删除一条评论行，不触碰其回复。
-// 调用方必须先在同一事务内解除保留回复对该评论的 parent_id / root_id 引用。
+// DetachCommentChildrenMany 用两次有界更新解除所有选中评论的 parent/root 引用。
+func (r *CommentRepo) DetachCommentChildrenMany(ctx context.Context, targets []CommentBatchTarget) error {
+	// 选中评论的回复引用被清空，未选中的回复记录及正文保持不变。
+	if len(targets) == 0 {
+		return nil
+	}
+	db := gormtx.DB(ctx, r.db)
+	if err := whereCommentReferenceTargets(db.Model(&model.Comment{}), targets, "parent_id").Update("parent_id", nil).Error; err != nil {
+		return fmt.Errorf("detach comment parent refs: %w", err)
+	}
+	if err := whereCommentReferenceTargets(db.Model(&model.Comment{}), targets, "root_id").Update("root_id", nil).Error; err != nil {
+		return fmt.Errorf("detach comment root refs: %w", err)
+	}
+	return nil
+}
+
+// HardDelete 物理删除指定评论。
 func (r *CommentRepo) HardDelete(ctx context.Context, siteID, id int64) error {
 	result := gormtx.DB(ctx, r.db).
 		Where("site_id = ? AND id = ?", siteID, id).
@@ -773,9 +608,20 @@ func (r *CommentRepo) HardDelete(ctx context.Context, siteID, id int64) error {
 	return nil
 }
 
-// SoftDeleteByUser 单行软删除某用户自己发表的全部评论。
-// 只更新 comments.user_id 命中的行，其他用户的回复保持原状态；
-// 已删除的节点保持不变。
+// HardDeleteMany 删除已校验的目标集合并返回影响行数。
+func (r *CommentRepo) HardDeleteMany(ctx context.Context, targets []CommentBatchTarget) (int64, error) {
+	// 使用方必须先解除需要保留的回复引用，并校验目标已加锁。
+	if len(targets) == 0 {
+		return 0, nil
+	}
+	result := whereCommentBatchTargets(gormtx.DB(ctx, r.db).Model(&model.Comment{}), targets).Delete(&model.Comment{})
+	if result.Error != nil {
+		return 0, fmt.Errorf("hard delete comments: %w", result.Error)
+	}
+	return result.RowsAffected, nil
+}
+
+// SoftDeleteByUser 软删除指定用户的全部未删除评论。
 func (r *CommentRepo) SoftDeleteByUser(ctx context.Context, userID int64, now time.Time) error {
 	result := gormtx.DB(ctx, r.db).
 		Model(&model.Comment{}).
@@ -791,9 +637,27 @@ func (r *CommentRepo) SoftDeleteByUser(ctx context.Context, userID int64, now ti
 	return nil
 }
 
-// DetachUserCommentChildren 在物理删除用户前解除保留评论对该用户评论的
-// parent_id / root_id 引用。非目标用户的评论引用目标用户评论时，清空引用，
-// 使删除用户只级联删除其本人评论，其他用户的回复保留。
+// SoftDeleteByUsers 用一条语句软删除多个用户拥有的全部未删除评论。
+func (r *CommentRepo) SoftDeleteByUsers(ctx context.Context, userIDs []int64, now time.Time) (int64, error) {
+	// 返回物理影响行数仅供参考，因为用户可能没有评论。
+	if len(userIDs) == 0 {
+		return 0, nil
+	}
+	result := gormtx.DB(ctx, r.db).
+		Model(&model.Comment{}).
+		Where("user_id IN ? AND status <> ?", userIDs, domain.CommentStatusDeleted).
+		Updates(map[string]any{
+			"status_before_delete": gorm.Expr("status"),
+			"status":               domain.CommentStatusDeleted,
+			"deleted_at":           now,
+		})
+	if result.Error != nil {
+		return 0, fmt.Errorf("soft delete user comments: %w", result.Error)
+	}
+	return result.RowsAffected, nil
+}
+
+// DetachUserCommentChildren 清除其他用户评论对指定用户评论的引用。
 func (r *CommentRepo) DetachUserCommentChildren(ctx context.Context, userID int64) error {
 	db := gormtx.DB(ctx, r.db)
 	if err := db.Model(&model.Comment{}).
@@ -809,8 +673,61 @@ func (r *CommentRepo) DetachUserCommentChildren(ctx context.Context, userID int6
 	return nil
 }
 
-// applyCursor 向查询追加 (created_at, id) keyset 谓词。
-// asc 使用 `>` 谓词，desc 使用 `<` 谓词，与请求方向的 ORDER BY 一致。
+// DetachUserCommentChildrenMany 解除保留评论对多个目标用户评论的引用。
+func (r *CommentRepo) DetachUserCommentChildrenMany(ctx context.Context, userIDs []int64) error {
+	// 每个外键列只执行一次有界更新，删除用户后其他用户的回复仍保留。
+	if len(userIDs) == 0 {
+		return nil
+	}
+	db := gormtx.DB(ctx, r.db)
+	if err := db.Model(&model.Comment{}).
+		Where("user_id NOT IN ? AND parent_id IN (SELECT id FROM comments WHERE user_id IN ?)", userIDs, userIDs).
+		Update("parent_id", nil).Error; err != nil {
+		return fmt.Errorf("detach user parent refs: %w", err)
+	}
+	if err := db.Model(&model.Comment{}).
+		Where("user_id NOT IN ? AND root_id IN (SELECT id FROM comments WHERE user_id IN ?)", userIDs, userIDs).
+		Update("root_id", nil).Error; err != nil {
+		return fmt.Errorf("detach user root refs: %w", err)
+	}
+	return nil
+}
+
+// targetsToCommentTargets 提取状态变更目标的站点与 ID。
+func targetsToCommentTargets(targets []CommentStatusBatchTarget) []CommentBatchTarget {
+	out := make([]CommentBatchTarget, len(targets))
+	for i, target := range targets {
+		out[i] = target.CommentBatchTarget
+	}
+	return out
+}
+
+// whereCommentBatchTargets 为评论目标构造显式站点与 ID 谓词。
+func whereCommentBatchTargets(db *gorm.DB, targets []CommentBatchTarget) *gorm.DB {
+	if len(targets) == 0 {
+		return db.Where("1 = 0")
+	}
+	parts := make([]string, 0, len(targets))
+	args := make([]any, 0, len(targets)*2)
+	for _, target := range targets {
+		parts = append(parts, "(site_id = ? AND id = ?)")
+		args = append(args, target.SiteID, target.ID)
+	}
+	return db.Where("("+strings.Join(parts, " OR ")+")", args...)
+}
+
+// whereCommentReferenceTargets 为回复引用目标构造显式站点与 ID 谓词。
+func whereCommentReferenceTargets(db *gorm.DB, targets []CommentBatchTarget, refColumn string) *gorm.DB {
+	parts := make([]string, 0, len(targets))
+	args := make([]any, 0, len(targets)*2)
+	for _, target := range targets {
+		parts = append(parts, "(site_id = ? AND "+refColumn+" = ?)")
+		args = append(args, target.SiteID, target.ID)
+	}
+	return db.Where("("+strings.Join(parts, " OR ")+")", args...)
+}
+
+// applyCursor 将分页游标条件应用到评论查询。
 func applyCursor(db *gorm.DB, cursor *domain.Cursor, qualifier string, sort domain.CommentSort) *gorm.DB {
 	if cursor == nil {
 		return db
@@ -827,19 +744,7 @@ func applyCursor(db *gorm.DB, cursor *domain.Cursor, qualifier string, sort doma
 		cursor.CreatedAt, cursor.CreatedAt, cursor.ID)
 }
 
-// applyCursorOrder 返回与 keyset 谓词同向的 ORDER BY 片段。
-func applyCursorOrder(qualifier string, sort domain.CommentSort) string {
-	prefix := ""
-	if qualifier != "" {
-		prefix = qualifier + "."
-	}
-	if sort == domain.CommentSortDesc {
-		return prefix + "created_at DESC, " + prefix + "id DESC"
-	}
-	return prefix + "created_at ASC, " + prefix + "id ASC"
-}
-
-// fromComment 把业务评论转为持久化行。
+// fromComment 将领域评论转换为持久化模型。
 func fromComment(c *domain.Comment) *model.Comment {
 	if c == nil {
 		return nil

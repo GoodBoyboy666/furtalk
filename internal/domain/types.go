@@ -1,127 +1,122 @@
-// Package domain 是跨层共享的领域类型层。
-// 只承载纯净的业务结构体、枚举常量、错误 sentinel 与跨模块写接口，
-// 不依赖任何业务包或框架（仅标准库）；任何包都可以依赖本层。
+// Package domain 跨层共享的领域类型层。
+// 仅承载纯净的业务结构体、枚举常量、错误 sentinel 与跨模块写接口，
 package domain
 
 import (
 	"time"
 )
 
-// Role 表示用户角色。
+// Role 用户角色。
 type Role string
 
 // 用户角色枚举。
 const (
-	// RoleAdmin 表示管理员。
+	// RoleAdmin 管理员。
 	RoleAdmin Role = "admin"
-	// RoleUser 表示普通用户。
+	// RoleUser 普通用户。
 	RoleUser Role = "user"
 )
 
-// UserStatus 表示用户账户状态。
+// UserStatus 用户账户状态。
 type UserStatus string
 
 // 用户账户状态枚举。
 const (
-	// UserStatusActive 表示账户可用。
+	// UserStatusActive 账户可用。
 	UserStatusActive UserStatus = "active"
-	// UserStatusDisabled 表示账户已禁用。
+	// UserStatusDisabled 账户已禁用。
 	UserStatusDisabled UserStatus = "disabled"
-	// UserStatusDeleted 表示账户已被管理员软删除，可恢复。
+	// UserStatusDeleted 账户已被管理员软删除，可恢复。
 	UserStatusDeleted UserStatus = "deleted"
 )
 
-// SiteStatus 表示站点状态。
+// SiteStatus 站点状态。
 type SiteStatus string
 
 // 站点状态枚举。
 const (
-	// SiteStatusActive 表示站点可用。
+	// SiteStatusActive 站点可用。
 	SiteStatusActive SiteStatus = "active"
-	// SiteStatusDisabled 表示站点已停用。
+	// SiteStatusDisabled 站点已停用。
 	SiteStatusDisabled SiteStatus = "disabled"
 )
 
-// CommentStatus 表示评论审核状态。
-// 与 GORM CHECK 约束的枚举字符串保持一致。
+// CommentStatus 评论审核状态。
 type CommentStatus string
 
 // 评论审核状态枚举。
 const (
-	// CommentStatusPending 表示待审核。
+	// CommentStatusPending 待审核。
 	CommentStatusPending CommentStatus = "pending"
-	// CommentStatusPublished 表示已发布。
+	// CommentStatusPublished 已发布。
 	CommentStatusPublished CommentStatus = "published"
-	// CommentStatusSpam 表示标记为垃圾。
+	// CommentStatusSpam 标记为垃圾。
 	CommentStatusSpam CommentStatus = "spam"
-	// CommentStatusDeleted 表示已删除。
+	// CommentStatusDeleted 已删除。
 	CommentStatusDeleted CommentStatus = "deleted"
 )
 
-// PrivacyMode 表示捕获隐私字段（IP/UA）的模式。
+// PrivacyMode 捕获隐私字段（IP/UA）的模式。
 type PrivacyMode string
 
 // 隐私字段捕获模式枚举。
 const (
-	// PrivacyModeNone 表示不捕获。
+	// PrivacyModeNone 不捕获。
 	PrivacyModeNone PrivacyMode = "none"
-	// PrivacyModeCoarse 表示仅捕获粗略信息。
+	// PrivacyModeCoarse 仅捕获粗略信息。
 	PrivacyModeCoarse PrivacyMode = "coarse"
-	// PrivacyModeFull 表示完整捕获。
+	// PrivacyModeFull 完整捕获。
 	PrivacyModeFull PrivacyMode = "full"
 )
 
-// CommentMode 表示实例评论模式的值。
+// CommentMode 实例评论模式的值。
 const (
-	// CommentModeAnonymous 表示任何人都可评论。
+	// CommentModeAnonymous 任何人都可评论。
 	CommentModeAnonymous = "anonymous"
-	// CommentModeAuthenticated 表示仅认证用户可评论。
+	// CommentModeAuthenticated 仅认证用户可评论。
 	CommentModeAuthenticated = "authenticated"
 )
 
-// Moderation 表示审核策略的值。
+// Moderation 审核策略的值。
 const (
-	// ModerationDirect 表示评论直接发布。
+	// ModerationDirect 评论直接发布。
 	ModerationDirect = "direct"
-	// ModerationReview 表示评论需人工审核。
+	// ModerationReview 评论需人工审核。
 	ModerationReview = "review"
 )
 
-// UserDeleteMode 表示用户删除评论的方式。
+// UserDeleteMode 用户删除评论的方式。
 const (
-	// UserDeleteModeSoft 表示软删除（保留占位节点）。
+	// UserDeleteModeSoft 软删除并保留评论记录。
 	UserDeleteModeSoft = "soft"
-	// UserDeleteModeHard 表示硬删除（物理移除该评论）。
+	// UserDeleteModeHard 硬删除（物理移除该评论）。
 	UserDeleteModeHard = "hard"
 )
 
-// CommentSort 表示公开评论列表的排序方向。
+// CommentSort 公开评论列表的排序方向。
 type CommentSort string
 
-// 公开评论列表的受控排序方向。
+// 公开评论列表的排序方向。
 const (
-	// CommentSortAsc 表示按 (created_at, id) 升序。
+	// CommentSortAsc 按置顶分组内的 (created_at, id) 升序。
 	CommentSortAsc CommentSort = "asc"
-	// CommentSortDesc 表示按 (created_at, id) 降序。
+	// CommentSortDesc 按置顶分组内的 (created_at, id) 降序。
 	CommentSortDesc CommentSort = "desc"
-	// CommentSortHot 表示按 (like_count, created_at, id) 降序（仅 Like 计数，无时间衰减）。
+	// CommentSortHot 按置顶分组内的 (like_count, created_at, id) 降序。
 	CommentSortHot CommentSort = "hot"
 )
 
-// ValidCommentSort 报告排序方向字符串是否为受控的 asc/desc。
-// 该校验只用于管理端/用户端列表，不包含 hot。
+// ValidCommentSort 判断排序参数是否为 asc 或 desc。
 func ValidCommentSort(sort string) bool {
 	return CommentSort(sort) == CommentSortAsc || CommentSort(sort) == CommentSortDesc
 }
 
-// ValidPublicCommentSort 报告公开 Widget 评论列表的受控排序值：
-// 兼容的 asc/desc 与新增的 hot。
+// ValidPublicCommentSort 判断公开排序参数是否为 asc、desc 或 hot。
 func ValidPublicCommentSort(sort string) bool {
 	return ValidCommentSort(sort) || CommentSort(sort) == CommentSortHot
 }
 
-// NormalizeAdminSort 解析管理列表的 sort 参数：空值归一化为 desc（最新优先），
-// 显式值必须是受控的 asc/desc，非法值返回验证错误。
+// NormalizeAdminSort 规范化管理端评论列表的排序参数。
 func NormalizeAdminSort(raw string) (CommentSort, error) {
 	if raw == "" {
 		return CommentSortDesc, nil
@@ -132,8 +127,7 @@ func NormalizeAdminSort(raw string) (CommentSort, error) {
 	return CommentSort(raw), nil
 }
 
-// OffsetForPage 从已归一化的页码与每页数量安全推导 offset（第 1 页返回 0）。
-// 页码由 handler 边界保证为正整数；本函数只做纯整数运算，溢出时钳制到最大可用偏移。
+// OffsetForPage 根据页码和页长计算分页偏移量。
 func OffsetForPage(page, limit int) int {
 	if page <= 1 || limit <= 0 {
 		return 0
@@ -145,20 +139,20 @@ func OffsetForPage(page, limit int) int {
 	return (page - 1) * limit
 }
 
-// ProviderKind 表示外部提供商类型。
+// ProviderKind 外部提供商类型。
 type ProviderKind string
 
 // 提供商类型枚举。
 const (
-	// ProviderKindCaptcha 表示验证码提供商。
+	// ProviderKindCaptcha 验证码提供商。
 	ProviderKindCaptcha ProviderKind = "captcha"
-	// ProviderKindOAuth 表示 OAuth 提供商。
+	// ProviderKindOAuth  OAuth 提供商。
 	ProviderKindOAuth ProviderKind = "oauth"
-	// ProviderKindOIDC 表示 OIDC 提供商。
+	// ProviderKindOIDC  OIDC 提供商。
 	ProviderKindOIDC ProviderKind = "oidc"
-	// ProviderKindSpam 表示垃圾检测提供商。
+	// ProviderKindSpam 垃圾检测提供商。
 	ProviderKindSpam ProviderKind = "spam"
-	// ProviderKindNotification 表示实例级通知通道提供商。
+	// ProviderKindNotification 通知通道提供商。
 	ProviderKindNotification ProviderKind = "notification"
 )
 
@@ -174,7 +168,7 @@ const (
 	TypeCommentPublished CommentEventType = "comment.published"
 )
 
-// User 是用户的业务数据，不含 GORM tag。
+// User 用户的业务数据。
 type User struct {
 	ID              int64
 	Email           string
@@ -183,35 +177,34 @@ type User struct {
 	WebsiteURL      *string
 	Role            Role
 	Status          UserStatus
-	// SessionVersion 是第一方会话代次，随改密/重置/主动撤销单调递增。
-	// 第一方 JWT 携带签发时的版本，鉴权时与当前版本比较。
+	// SessionVersion 第一方会话代次，随改密/重置/主动撤销单调递增。
 	SessionVersion  int64
 	EmailVerifiedAt *time.Time
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
-	// DeletedAt 是软删除时间，nil 表示账户未被软删除。
+	// DeletedAt 软删除时间，nil 表示账户未被软删除。
 	DeletedAt *time.Time
-	// StatusBeforeDelete 是软删除前的账户状态，仅软删除后有意义。
+	// StatusBeforeDelete 软删除前的账户状态，仅软删除后有意义。
 	StatusBeforeDelete *UserStatus
 }
 
-// Principal 是解析出的当前主体，注入请求上下文。
+// Principal 解析出的当前主体，注入请求上下文。
 type Principal struct {
 	UserID int64
 	Role   Role
 	Status UserStatus
-	// SessionVersion 是解析时缓存的当前会话代次，用于与 JWT 声明比较。
+	// SessionVersion 解析时缓存的当前会话代次，用于与 JWT 声明比较。
 	SessionVersion int64
 }
 
-// AuthzInfo 是以用户 id 为键缓存的状态、角色与会话代次数据。
+// AuthzInfo 以用户 id 为键缓存的状态、角色与会话代次数据。
 type AuthzInfo struct {
 	Role           Role       `json:"role"`
 	Status         UserStatus `json:"status"`
 	SessionVersion int64      `json:"session_version"`
 }
 
-// NotificationPreferences 是用户的邮件偏好数据。
+// NotificationPreferences 用户的邮件偏好数据。
 type NotificationPreferences struct {
 	ID                int64
 	UserID            int64
@@ -220,7 +213,7 @@ type NotificationPreferences struct {
 	UpdatedAt         time.Time
 }
 
-// Comment 是评论的业务实体，不含 GORM tag。
+// Comment 评论的业务实体。
 type Comment struct {
 	ID       int64
 	SiteID   int64
@@ -228,31 +221,28 @@ type Comment struct {
 	UserID   int64
 	ParentID *int64
 	RootID   *int64
-	// ReplyToUserID 是被回复作者的 user id；根评论为 nil。
+	// ReplyToUserID 被回复作者的 user id；根评论为 nil。
 	// 被回复者账号硬删除后由外键 SET NULL 清空。
 	ReplyToUserID      *int64
 	Depth              int
 	BodyMarkdown       string
 	Status             CommentStatus
 	StatusBeforeDelete *CommentStatus
-	// IsPinned 标记根评论是否属于公开置顶分组；持久化层同时约束回复不能携带该标记。
-	IsPinned    bool
-	IPMode      PrivacyMode
-	IPValue     *string
-	UAMode      PrivacyMode
-	UARaw       *string
-	UABrowser   *string
-	UAOS        *string
-	UADevice    *string
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
-	PublishedAt *time.Time
-	DeletedAt   *time.Time
+	IsPinned           bool
+	IPMode             PrivacyMode
+	IPValue            *string
+	UAMode             PrivacyMode
+	UARaw              *string
+	UABrowser          *string
+	UAOS               *string
+	UADevice           *string
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+	PublishedAt        *time.Time
+	DeletedAt          *time.Time
 }
 
-// Thread 是线程的业务数据。
-// 线程身份是 (site_id, page_key)，page_url 与 page_title 只是元数据。
-// CommentsEnabled 是页面级评论开关，默认开启。
+// Thread 线程的业务数据。
 type Thread struct {
 	ID              int64
 	SiteID          int64
@@ -274,13 +264,13 @@ type AdminThreadFilter struct {
 	Limit           int
 }
 
-// AdminThread 是管理端线程列表行，关联站点名。
+// AdminThread 管理端线程列表行，关联站点名。
 type AdminThread struct {
 	Thread
 	SiteName string
 }
 
-// ThreadPatch 是线程元数据 PATCH 的更新项。nil 字段表示不修改；
+// ThreadPatch 线程元数据 PATCH 的更新项。nil 字段表示不修改；
 // ClearPageTitle / ClearPageURL 为 true 时显式清空 page_title / page_url。
 type ThreadPatch struct {
 	PageKey         *string
@@ -291,11 +281,10 @@ type ThreadPatch struct {
 	CommentsEnabled *bool
 }
 
-// Cursor 是每个列表查询使用的 (created_at, id) 分页位置。
-// LikeCount 与 Hot 仅对 hot 排序游标有意义：hot 游标携带
-// (like_count, created_at, id) 且带版本/排序标记，方向游标不得用于 hot。
+// Cursor 保存列表查询的分页位置与排序标记。
+// Hot 排序游标携带 LikeCount、CreatedAt、ID 和 Hot 标记，方向排序游标不含 LikeCount。
 type Cursor struct {
-	// Pinned 是公开排序中的置顶分组位；旧游标解码为 false 以保持兼容。
+	// Pinned 公开排序中的置顶分组位；旧游标解码为 false 以保持兼容。
 	Pinned    bool
 	CreatedAt time.Time
 	ID        int64
@@ -303,11 +292,7 @@ type Cursor struct {
 	Hot       bool
 }
 
-// PublicComment 是评论与作者当前公开资料的连接结果。
-// 公开读取时不会加载邮箱；AuthorEmailNormalized 只存在于 domain/service 边界，
-// 供服务层派生头像 URL，绝不进入 HTTP DTO。
-// ReplyToNickname 是回复目标作者的当前昵称；目标缺失或已注销时为 nil。
-// LikeCount 是该评论的公开 Like 计数；LikedByMe 仅在有已验证查看者时反映其状态。
+// PublicComment 评论信息以及作者当前公开资料。
 type PublicComment struct {
 	Comment
 	AuthorNickname        string
@@ -319,10 +304,7 @@ type PublicComment struct {
 	LikedByMe             bool
 }
 
-// LatestPublicComment 是站点公开最新评论与所属线程元数据及作者当前公开资料的连接结果。
-// 公开读取时不会加载邮箱；AuthorEmailNormalized 只存在于 domain/service 边界，
-// 供服务层派生头像 URL，绝不进入 HTTP DTO。
-// ReplyToNickname 是回复目标作者的当前昵称；目标缺失或已注销时为 nil。
+// LatestPublicComment 站点公开最新评论与所属线程元数据及作者当前公开资料。
 type LatestPublicComment struct {
 	Comment
 	AuthorNickname        string
@@ -335,9 +317,7 @@ type LatestPublicComment struct {
 	PageTitle             *string
 }
 
-// AdminComment 是评论与作者邮箱及当前公开资料的连接结果。
-// 保留捕获到的隐私字段，只提供给管理员。
-// AuthorEmailNormalized 只用于派生头像 URL，不进入 HTTP DTO。
+// AdminComment 评论与作者邮箱及当前公开资料。
 type AdminComment struct {
 	Comment
 	AuthorEmail           string
@@ -348,8 +328,7 @@ type AdminComment struct {
 	ReplyToNickname       *string
 }
 
-// AdminFilter 收窄管理员评论列表。nil 字段表示"不过滤"。
-// Q 对正文、作者邮箱与昵称做全局包含搜索，与分页统计使用相同的过滤条件。
+// AdminFilter 收窄管理员评论列表。nil 字段代表"不过滤"。
 type AdminFilter struct {
 	SiteID   *int64
 	ThreadID *int64
@@ -363,29 +342,26 @@ type AdminFilter struct {
 	Limit    int
 }
 
-// CommentTrendRange 是评论趋势统计使用的一个 UTC 半开时间区间。
-// 日期标签由服务层按请求时区计算，仓储层只接收边界时间。
+// CommentTrendRange 评论趋势统计使用的一个 UTC 半开时间区间。
 type CommentTrendRange struct {
 	Start time.Time
 	End   time.Time
 }
 
-// CommentTrendPoint 是按请求时区日历日统计的新建评论数量。
+// CommentTrendPoint 按请求时区日历日统计的新建评论数量。
 type CommentTrendPoint struct {
 	Date  string
 	Count int64
 }
 
-// CommentTrend 是管理概览使用的连续评论趋势数据。
+// CommentTrend 管理概览使用的连续评论趋势数据。
 type CommentTrend struct {
 	Days     int
 	Timezone string
 	Points   []CommentTrendPoint
 }
 
-// BatchResult 是管理端批量命令的统一计数结果。
-// RequestedCount 始终等于请求中的唯一 ID 数量；ChangedCount 与
-// UnchangedCount 之和等于 RequestedCount。
+// BatchResult 管理端批量命令的统一计数结果。
 type BatchResult struct {
 	Action         string
 	RequestedCount int
@@ -393,14 +369,13 @@ type BatchResult struct {
 	UnchangedCount int
 }
 
-// ResourceError 标识批量命令中导致整批回滚的资源。
-// Unwrap 保留底层领域 sentinel，使 HTTP 层仍可沿用统一错误翻译。
+// ResourceError 表示关联资源标识与底层错误的组合。
 type ResourceError struct {
 	ResourceID int64
 	Err        error
 }
 
-// Error 返回底层资源错误的文本，不包含资源 ID。
+// Error 返回底层资源错误的文本。
 func (e *ResourceError) Error() string {
 	if e == nil {
 		return "domain: resource error"
@@ -419,9 +394,6 @@ func (e *ResourceError) Unwrap() error {
 	return e.Err
 }
 
-// BatchItemError 是 ResourceError 的语义别名，便于调用方按批量语境命名。
-type BatchItemError = ResourceError
-
 // OwnerFilter 收窄当前用户本人的评论列表。nil 字段表示"不过滤"。
 type OwnerFilter struct {
 	SiteID *int64
@@ -430,8 +402,7 @@ type OwnerFilter struct {
 	Limit  int
 }
 
-// OwnerComment 是当前用户本人评论与站点/线程/作者公开资料的连接结果。
-// AuthorEmailNormalized 只存在于 domain/service 边界，用于派生头像 URL，绝不进入 HTTP DTO。
+// OwnerComment 当前用户本人评论与站点/线程/作者的公开资料。
 type OwnerComment struct {
 	Comment
 	AuthorNickname        string
@@ -445,43 +416,41 @@ type OwnerComment struct {
 	PageTitle             *string
 }
 
-// OwnerSite 是当前用户发表过评论的站点。
+// OwnerSite 当前用户发表过评论的站点。
 type OwnerSite struct {
 	ID   int64
 	Name string
 }
 
-// CommentPolicy 是评论用例所需的动态实例策略数据。
+// CommentPolicy 评论用例所需的动态实例策略数据。
 type CommentPolicy struct {
-	Mode                 string
-	Epoch                int64
-	Moderation           string
-	UserDeleteMode       string
-	MaxReplyDepth        int
-	PublicRegistration   bool
-	CaptchaPolicy        map[string]bool
-	Privacy              PrivacyPolicy
-	EmailDomainWhitelist []string
-	EmailDomainBlacklist []string
-	GravatarBaseURL      string
-	CommentSort          string
-	// EmojiCatalogURL 是可选的 widget 远程表情目录地址；空串表示不配置。
+	Mode               string
+	Epoch              int64
+	Moderation         string
+	UserDeleteMode     string
+	MaxReplyDepth      int
+	PublicRegistration bool
+	CaptchaPolicy      map[string]bool
+	Privacy            PrivacyPolicy
+	GravatarBaseURL    string
+	CommentSort        string
+	// EmojiCatalogURL 可选的 widget 远程表情目录地址；空串表示不配置。
 	EmojiCatalogURL string
 }
 
-// PrivacyPolicy 是评论隐私捕获所需的模式数据。
+// PrivacyPolicy 评论隐私捕获所需的模式数据。
 type PrivacyPolicy struct {
 	IPMode string
 	UAMode string
 }
 
-// Origin 是站点允许来源的业务记录，携带稳定 ID 供管理端引用。
+// Origin 站点允许来源的业务记录，携带稳定 ID 供管理端引用。
 type Origin struct {
 	ID     int64
 	Origin string
 }
 
-// Site 是站点的业务表示。
+// Site 站点的业务表示。
 type Site struct {
 	ID           int64
 	Name         string
@@ -492,7 +461,7 @@ type Site struct {
 	UpdatedAt    time.Time
 }
 
-// Settings 是类型化的动态实例配置，由 dynamic_settings 行的值构建。
+// Settings 类型化的动态实例配置，由 dynamic_settings 行的值构建。
 type Settings struct {
 	CommentMode        string               `json:"comment_mode"`
 	Moderation         string               `json:"moderation"`
@@ -502,41 +471,41 @@ type Settings struct {
 	Privacy            PrivacySettings      `json:"privacy"`
 	CaptchaPolicy      map[string]bool      `json:"captcha_policy"`
 	Notifications      NotificationSettings `json:"notifications"`
-	// CaptchaProvider 是当前选择的 CAPTCHA provider key；空串表示未选择。
+	// CaptchaProvider 当前选择的 CAPTCHA provider key；空串表示未选择。
 	CaptchaProvider string `json:"captcha_provider"`
 	// EmailDomainWhitelist 非空时仅精确命中的域名允许创建新用户。
 	EmailDomainWhitelist []string `json:"email_domain_whitelist"`
 	// EmailDomainBlacklist 在白名单为空时精确命中的域名拒绝创建新用户。
 	EmailDomainBlacklist []string `json:"email_domain_blacklist"`
-	// GravatarBaseURL 是头像 URL 的基址，默认 Gravatar 官方地址。
+	// GravatarBaseURL 头像 URL 的基址，默认 Gravatar 官方地址。
 	GravatarBaseURL string `json:"gravatar_base_url"`
-	// CommentSort 是 widget 公开评论列表的默认排序，允许 asc/desc/hot。
+	// CommentSort  widget 公开评论列表的默认排序，允许 asc/desc/hot。
 	CommentSort string `json:"comment_sort"`
-	// EmojiCatalogURL 是 widget 远程表情目录地址；空串表示不配置自定义目录。
+	// EmojiCatalogURL  widget 远程表情目录地址；空串表示不配置自定义目录。
 	EmojiCatalogURL string `json:"emoji_catalog_url"`
-	// UserAgreementURL 是登录页展示的用户协议地址；空串表示不配置。
+	// UserAgreementURL 登录页展示的用户协议地址；空串表示不配置。
 	UserAgreementURL string `json:"user_agreement_url"`
-	// PrivacyPolicyURL 是登录页展示的隐私政策地址；空串表示不配置。
+	// PrivacyPolicyURL 登录页展示的隐私政策地址；空串表示不配置。
 	PrivacyPolicyURL string `json:"privacy_policy_url"`
-	// LegalConsentVersion 是管理员主动要求重新同意时递增的协议版本。
+	// LegalConsentVersion 管理员主动要求重新同意时递增的协议版本。
 	LegalConsentVersion int64 `json:"legal_consent_version"`
-	// BrandPrimaryColor 是 Web 界面派生主题使用的标准 HEX 品牌主色。
+	// BrandPrimaryColor  Web 界面派生主题使用的标准 HEX 品牌主色。
 	BrandPrimaryColor string `json:"brand_primary_color"`
 }
 
-// PrivacySettings 是隐私相关的动态设置：IP 与 UA 的存储粒度。
+// PrivacySettings 隐私相关的动态设置：IP 与 UA 的存储粒度。
 type PrivacySettings struct {
 	IPMode string `json:"ip_mode"`
 	UAMode string `json:"ua_mode"`
 }
 
-// NotificationSettings 是邮件通知开关的动态设置。
+// NotificationSettings 邮件通知开关的动态设置。
 type NotificationSettings struct {
 	Moderation bool `json:"moderation"`
 	Replies    bool `json:"replies"`
 }
 
-// CommentEvent 是净化后的评论通知负载，不携带邮箱、IP 或原始用户数据。
+// CommentEvent 净化后的评论通知负载，不携带邮箱、IP 或原始用户数据。
 type CommentEvent struct {
 	Type      CommentEventType
 	SiteID    int64
@@ -547,8 +516,7 @@ type CommentEvent struct {
 	Mode      string
 }
 
-// PasskeyCredential 是 passkey 凭证的业务数据。
-// Transports 是 JSON 编码的 transport 提示列表。
+// PasskeyCredential  passkey 凭证的业务数据。
 type PasskeyCredential struct {
 	ID              int64
 	UserID          int64
@@ -564,7 +532,7 @@ type PasskeyCredential struct {
 	LastUsedAt      *time.Time
 }
 
-// ExternalIdentity 是外部身份（OAuth/OIDC 绑定）的业务数据。
+// ExternalIdentity 外部身份（OAuth/OIDC 绑定）的业务数据。
 type ExternalIdentity struct {
 	ID              int64
 	UserID          int64

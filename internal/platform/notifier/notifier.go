@@ -1,10 +1,10 @@
 // Package notifier 提供业务无关的多通道通知出站基础设施。
-// 它只依赖标准库，承载平台枚举、解密后的类型化配置、规范化消息、
+// 它承载平台枚举、解密后的类型化配置、规范化消息、
 // 8 个 HTTP 协议映射与有界 HTTP client；不读取数据库、不导入任何业务层。
 //
 // 本包负责把规范化管理员消息按各平台协议编码为一次有界的 HTTP 出站请求，
 // 并在响应侧做平台级成功判定。投递策略（哪些评论、是否启用、并发扇出、
-// 失败日志）属于上层 notification 服务，不在这里。
+// 失败日志）属于上层 notification 服务。
 package notifier
 
 import (
@@ -39,7 +39,6 @@ const (
 )
 
 // ParsePlatform 把通知 provider key 的平台段解析为平台枚举。
-// 例如 "notification.telegram" 返回 PlatformTelegram；未知平台返回错误。
 func ParsePlatform(providerKey string) (Platform, error) {
 	const prefix = "notification."
 	if len(providerKey) <= len(prefix) || providerKey[:len(prefix)] != prefix {
@@ -83,7 +82,7 @@ type Message struct {
 	// Title 是通知类型标签（例如 新评论 / 评论待审核）。
 	Title string
 	// Text 是已组装的正文文本，包含站点、作者、状态、时间与正文；
-	// 页面 URL 单独放在 PageURL，避免打断 mention 防护时破坏链接。
+	// 页面 URL 单独放在 PageURL，保持 mention 防护与链接完整性。
 	Text string
 	// PageURL 是页面 URL（可选），以明文追加，不做 @ 打断。
 	PageURL string
@@ -109,7 +108,7 @@ var (
 )
 
 // DeliveryError 携带脱敏的失败类别与有界平台细节，便于日志诊断。
-// 绝不包含请求 URL、凭据、目标 ID 或原始响应正文。
+// 消息字段不包含请求 URL、凭据、目标 ID 或原始响应正文。
 type DeliveryError struct {
 	// Class 是失败类别：network / timeout / http / platform / response。
 	Class string
@@ -161,7 +160,6 @@ func (d *Dispatcher) setTransport(rt http.RoundTripper) {
 }
 
 // Send 把规范化消息按配置的平台协议投递一次。
-// 配置无效返回 ErrConfig；网络或平台失败返回 ErrDelivery（可 errors.As 到 *DeliveryError）。
 func (d *Dispatcher) Send(ctx context.Context, cfg Config, msg Message) error {
 	if err := cfg.Validate(); err != nil {
 		return err

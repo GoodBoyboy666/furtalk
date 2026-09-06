@@ -16,11 +16,11 @@ import (
 	"time"
 )
 
-// AlibabaConfig 是阿里云内容安全检测器的配置。
+// AlibabaConfig 阿里云内容安全检测器的配置。
 type AlibabaConfig struct {
-	// Region 是文档支持的区域，例如 cn-shanghai。
+	// Region 文档支持的区域，例如 cn-shanghai。
 	Region string
-	// AccessKeyID 与 AccessKeySecret 是阿里云凭据。
+	// 阿里云凭据。
 	AccessKeyID     string
 	AccessKeySecret string
 	// BizType 是可选的业务策略编号。
@@ -34,7 +34,6 @@ type Alibaba struct {
 }
 
 // NewAlibaba 构建阿里云内容安全检测器。
-// client 为 nil 时使用携带有界超时的默认客户端。
 func NewAlibaba(client *http.Client, cfg AlibabaConfig) *Alibaba {
 	if client == nil {
 		client = defaultClient()
@@ -43,7 +42,6 @@ func NewAlibaba(client *http.Client, cfg AlibabaConfig) *Alibaba {
 }
 
 // Check 提交正文并按 suggestion 判定：
-// pass 继续、review 映射可疑、block 映射垃圾；task/API 非成功或建议未知为 unknown。
 func (a *Alibaba) Check(ctx context.Context, input Input) (Result, error) {
 	payload, err := a.buildRequest(input.Body)
 	if err != nil {

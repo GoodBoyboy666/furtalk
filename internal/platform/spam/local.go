@@ -12,26 +12,26 @@ import (
 	"unicode/utf8"
 
 	"furtalk/internal/platform/logging"
+
 	"golang.org/x/text/cases"
 	"golang.org/x/text/unicode/norm"
 )
 
 // 词库文件与单行的大小限制。
 const (
-	// keywordFilePath is the only production keyword-file location. The
-	// application is expected to run from its project/container root.
+	// keywordFilePath 生产环境唯一的词库路径，应用从项目或容器根目录运行。
 	keywordFilePath    = "configs/spam/keywords.txt"
 	maxKeywordFileSize = 64 << 20 // 64 MiB
 	maxKeywordLineLen  = 4000     // 与评论正文最大长度一致
 )
 
-// LocalConfig 是本地词库检测器的配置。
+// LocalConfig 本地词库检测器的配置。
 type LocalConfig struct {
 	// CheckNickname 开启时昵称也参与匹配；关闭时只检测正文。
 	CheckNickname bool
 }
 
-// LocalMatcher 是按文件快照热重载的本地关键词检测器。
+// LocalMatcher 按文件快照热重载的本地关键词检测器。
 // 每次 Check 只比较修改时间与文件大小，变化时才重新解析并原子替换。
 type LocalMatcher struct {
 	cfg     LocalConfig
@@ -41,13 +41,13 @@ type LocalMatcher struct {
 	current *snapshot
 }
 
-// fileSignature 是词库文件的稳定性签名。
+// fileSignature 词库文件的稳定性签名。
 type fileSignature struct {
 	size    int64
 	mtimeNS int64
 }
 
-// snapshot 是一次成功加载的词库快照。
+// snapshot 词库快照。
 type snapshot struct {
 	path    string
 	size    int64
@@ -60,15 +60,12 @@ func NewLocal(cfg LocalConfig, logger *slog.Logger) *LocalMatcher {
 	return newLocal(keywordFilePath, cfg, logger)
 }
 
-// newLocal constructs a matcher for a path. It is intentionally private: the
-// production constructor above always passes the fixed keywordFilePath. Tests
-// use it to isolate file-system fixtures without changing the process cwd.
+// newLocal 创建指定词库路径的本地检测器。
 func newLocal(path string, cfg LocalConfig, logger *slog.Logger) *LocalMatcher {
 	return &LocalMatcher{cfg: cfg, log: logging.Normalize(logger), path: path}
 }
 
-// Check 检测正文（开启昵称检测时还包括昵称）是否命中词库。
-// 无任何成功快照且文件不可读时返回错误，调用方按 unknown 降级。
+// Check 使用本地词库检测正文与昵称。
 func (m *LocalMatcher) Check(ctx context.Context, input Input) (Result, error) {
 	snap, err := m.reloadIfChanged()
 	if err != nil {
@@ -87,7 +84,6 @@ func (m *LocalMatcher) Check(ctx context.Context, input Input) (Result, error) {
 }
 
 // reloadIfChanged 按文件签名决定是否重建词库快照。
-// 热重载失败时继续使用最近一次成功快照；从未成功加载时返回错误。
 func (m *LocalMatcher) reloadIfChanged() (*snapshot, error) {
 	info, err := os.Stat(m.path)
 	if err != nil {
@@ -126,7 +122,6 @@ func (m *LocalMatcher) reloadIfChanged() (*snapshot, error) {
 }
 
 // loadKeywordFile 在大小与单行限制内读取并解析词库文件。
-// 读取前后再次核对签名，避免把写到一半的文件发布为新快照。
 func loadKeywordFile(path string, before fileSignature) ([]string, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -185,16 +180,16 @@ func parseKeywordLines(content []byte) ([]string, error) {
 	return out, nil
 }
 
-// normalizeKeyword 用 NFKC 兼容规范化加 Unicode 大小写折叠归一化关键词或候选文本。
+// normalizeKeyword 用 NFKC 兼容格式化加 Unicode 大小写折叠归一化关键词或候选文本。
 func normalizeKeyword(raw string) string {
 	return foldCaser.String(norm.NFKC.String(raw))
 }
 
-// foldCaser 是复用的大小写折叠转换器。
+// foldCaser 大小写折叠转换器。
 var foldCaser = cases.Fold()
 
 // acMachine 是 rune 级的 Aho-Corasick 多模式自动机。
-// 命中检测为候选文本长度的线性扫描，不为每个关键词逐一 Contains。
+// 命中检测为候选文本长度的线性扫描。
 type acMachine struct {
 	root         *acNode
 	patternCount int

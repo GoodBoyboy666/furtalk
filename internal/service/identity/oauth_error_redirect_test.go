@@ -96,6 +96,7 @@ func TestCreateAndConsumeOAuthHandoff(t *testing.T) {
 	ctx := context.Background()
 	store := cache.NewMemory(10000)
 	svc := NewService(Dependencies{Cache: store})
+	seedOAuthState(t, store, "state-1", OAuthState{Provider: "apple", Purpose: oauthPurposeLogin})
 
 	token, err := svc.CreateOAuthHandoff(ctx, "apple", "state-1", "code-1", "")
 	if err != nil {
@@ -116,6 +117,34 @@ func TestCreateAndConsumeOAuthHandoff(t *testing.T) {
 	// handoff 只能消费一次；重放返回回调无效。
 	if _, err := svc.ConsumeOAuthHandoff(ctx, token); !errors.Is(err, domain.ErrOAuthCallbackInvalid) {
 		t.Fatalf("replay err = %v, want ErrOAuthCallbackInvalid", err)
+	}
+}
+
+// TestCreateOAuthHandoffRequiresLiveAppleState verifies that the bridge cannot
+// allocate handoff records for another provider or an unknown/invalid state.
+func TestCreateOAuthHandoffRequiresLiveAppleState(t *testing.T) {
+	ctx := context.Background()
+	store := cache.NewMemory(10000)
+	svc := NewService(Dependencies{Cache: store})
+
+	for _, tc := range []struct {
+		name     string
+		provider string
+		state    string
+		record   *OAuthState
+	}{
+		{name: "unknown state", provider: "apple", state: "missing"},
+		{name: "non apple provider", provider: "github", state: "state-github", record: &OAuthState{Provider: "github"}},
+		{name: "mismatched provider", provider: "apple", state: "state-github-callback", record: &OAuthState{Provider: "github"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.record != nil {
+				seedOAuthState(t, store, tc.state, *tc.record)
+			}
+			if _, err := svc.CreateOAuthHandoff(ctx, tc.provider, tc.state, "code", ""); !errors.Is(err, domain.ErrOAuthCallbackInvalid) {
+				t.Fatalf("err = %v, want ErrOAuthCallbackInvalid", err)
+			}
+		})
 	}
 }
 

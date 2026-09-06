@@ -1,5 +1,5 @@
 // Package passkey 封装 go-webauthn SDK。
-// RP ID、RP origins 与 display name 为静态配置，challenge 由使用方存储并只消费一次。
+// RP ID、RP origins 与 display name 为静态配置
 package passkey
 
 import (
@@ -11,8 +11,7 @@ import (
 	"github.com/go-webauthn/webauthn/webauthn"
 )
 
-// Config 是 WebAuthn 依赖方（RP）的静态配置。
-// RPID 与 RPOrigins 必填；LoginTimeout 与 RegistrationTimeout 是登录与注册的强制超时。
+// Config WebAuthn 依赖方（RP）的静态配置。
 type Config struct {
 	RPID                string
 	RPOrigins           []string
@@ -21,8 +20,8 @@ type Config struct {
 	RegistrationTimeout time.Duration
 }
 
-// Credential 是面向服务层暴露的已存储 WebAuthn credential。
-// Transports 是可 JSON 序列化的 transport 提示列表。
+// Credential 面向服务层暴露的已存储 WebAuthn credential。
+// Transports 可 JSON 序列化的 transport 提示列表。
 type Credential struct {
 	ID              []byte   `json:"id"`
 	PublicKey       []byte   `json:"public_key"`
@@ -33,8 +32,8 @@ type Credential struct {
 	BackupState     bool     `json:"backup_state"`
 }
 
-// User 是面向服务层的 WebAuthn user。
-// ID 是稳定的 user handle，不得包含可识别身份的邮箱。
+// User 面向服务层的 WebAuthn user。
+// ID 稳定的 user handle，不可包含可识别身份的邮箱。
 type User struct {
 	ID          []byte
 	Name        string
@@ -71,7 +70,6 @@ func New(cfg Config) (*Adapter, error) {
 }
 
 // BeginRegistration 返回 credential 创建选项的 JSON 与不透明 session 载荷。
-// session 载荷由使用方存储，例如以内嵌的 challenge 作为 key。
 func (a *Adapter) BeginRegistration(user User) (json.RawMessage, []byte, error) {
 	session, err := a.beginRegistration(user)
 	if err != nil {
@@ -85,7 +83,6 @@ func (a *Adapter) BeginRegistration(user User) (json.RawMessage, []byte, error) 
 }
 
 // FinishRegistration 验证 attestation 响应并返回持久化的 credential 记录。
-// 任何验证失败都返回通用错误。
 func (a *Adapter) FinishRegistration(user User, sessionJSON, responseJSON []byte) (*Credential, error) {
 	session, err := decodeSession(sessionJSON)
 	if err != nil {
@@ -103,7 +100,6 @@ func (a *Adapter) FinishRegistration(user User, sessionJSON, responseJSON []byte
 }
 
 // BeginLogin 返回 discoverable 断言选项 JSON 与不透明 session 载荷。
-// 登录始终使用客户端可发现的 passkey，不接受用户标识或 credential allow-list。
 func (a *Adapter) BeginLogin() (json.RawMessage, []byte, error) {
 	options, session, err := a.wa.BeginDiscoverableLogin()
 	if err != nil {
@@ -121,8 +117,6 @@ func (a *Adapter) BeginLogin() (json.RawMessage, []byte, error) {
 }
 
 // FinishLogin 根据 discoverable session 验证断言。
-// lookup 根据 credential ID 与 authenticator 返回的 user handle 解析用户；
-// 返回的断言计数器供使用方校验 sign_count，防止回滚攻击。
 func (a *Adapter) FinishLogin(sessionJSON, responseJSON []byte, lookup func(rawID, userHandle []byte) (*User, error)) (*Credential, uint32, error) {
 	session, err := decodeSession(sessionJSON)
 	if err != nil {
@@ -152,6 +146,7 @@ type ceremonySession struct {
 	raw     []byte
 }
 
+// beginRegistration 创建 WebAuthn 注册选项与会话数据。
 func (a *Adapter) beginRegistration(user User) (*ceremonySession, error) {
 	options, session, err := a.wa.BeginRegistration(
 		user.toSDK(),
@@ -167,6 +162,7 @@ func (a *Adapter) beginRegistration(user User) (*ceremonySession, error) {
 	return &ceremonySession{options: options, raw: encoded}, nil
 }
 
+// encodeSession 编码 WebAuthn 会话数据。
 func encodeSession(session *webauthn.SessionData) ([]byte, error) {
 	raw, err := json.Marshal(session)
 	if err != nil {
@@ -175,6 +171,7 @@ func encodeSession(session *webauthn.SessionData) ([]byte, error) {
 	return raw, nil
 }
 
+// decodeSession 解码 WebAuthn 会话数据。
 func decodeSession(raw []byte) (webauthn.SessionData, error) {
 	var session webauthn.SessionData
 	if err := json.Unmarshal(raw, &session); err != nil {
@@ -183,7 +180,7 @@ func decodeSession(raw []byte) (webauthn.SessionData, error) {
 	return session, nil
 }
 
-// toSDK 把面向服务层的 user 转成 go-webauthn 的 User 接口。
+// toSDK 将服务层用户转换为 go-webauthn 用户。
 func (u User) toSDK() webauthn.User {
 	return sdkUser{user: u}
 }
@@ -216,6 +213,7 @@ func (u sdkUser) WebAuthnCredentials() []webauthn.Credential {
 	return out
 }
 
+// toSDK 将服务层凭证转换为 go-webauthn 凭证。
 func (c Credential) toSDK() webauthn.Credential {
 	transports := make([]protocol.AuthenticatorTransport, 0, len(c.Transports))
 	for _, t := range c.Transports {
@@ -236,6 +234,7 @@ func (c Credential) toSDK() webauthn.Credential {
 	}
 }
 
+// fromSDK 将 go-webauthn 凭证转换为服务层凭证。
 func fromSDK(c *webauthn.Credential) *Credential {
 	transports := make([]string, 0, len(c.Transport))
 	for _, t := range c.Transport {

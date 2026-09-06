@@ -99,7 +99,7 @@ func mePasswordRouter(t *testing.T, svc *identity.Service, userID int64) *gin.En
 	router := gin.New()
 	router.Use(httpx.ErrorWriter(translator))
 	api := router.Group("/api/v1", userPrincipal(userID))
-	RegisterMe(api, svc, svc, middleware.CSRFProtection())
+	RegisterMeWithAdmission(api, svc, svc, nil, middleware.CSRFProtection())
 	return router
 }
 

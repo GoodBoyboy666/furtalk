@@ -1,0 +1,91 @@
+package oauth
+
+import (
+	"bytes"
+	"errors"
+	"io"
+	"net/http"
+	"strings"
+	"time"
+)
+
+// maxOAuthResponseBytes 所有 OAuth/OIDC 响应共用的字节上限。
+const maxOAuthResponseBytes int64 = 1 << 20
+
+// defaultOAuthClientTimeout 默认OAuth客户端超时时间。
+const defaultOAuthClientTimeout = 10 * time.Second
+
+// ErrResponseTooLarge OAuth/OIDC provider 响应超过 maxOAuthResponseBytes。
+var ErrResponseTooLarge = errors.New("oauth: provider response too large")
+
+// isResponseTooLarge 即使依赖使用 %v 格式化而非包装 sentinel，也能识别该类别。
+func isResponseTooLarge(err error) bool {
+	return err != nil && (errors.Is(err, ErrResponseTooLarge) || strings.Contains(err.Error(), ErrResponseTooLarge.Error()))
+}
+
+// IsResponseTooLarge 判断适配器或依赖是否传播了响应超限类别。
+func IsResponseTooLarge(err error) bool {
+	return isResponseTooLarge(err)
+}
+
+// preserveProviderError 保留响应超限类别，其余 provider 错误归为身份错误。
+func preserveProviderError(err error) error {
+	if isResponseTooLarge(err) {
+		return ErrResponseTooLarge
+	}
+	return ErrIdentity
+}
+
+// boundedTransport 预读并缓存未超限响应，使直接 decoder 与第三方 OIDC 代码获得相同且可重放的 body；
+// 超大 body 在到达这些消费者前即被拒绝。
+type boundedTransport struct {
+	base http.RoundTripper
+}
+
+// RoundTrip 执行并缓存受响应大小限制的 HTTP 请求。
+func (t *boundedTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	resp, err := t.base.RoundTrip(req)
+	if err != nil || resp == nil {
+		return resp, err
+	}
+	if resp.ContentLength > maxOAuthResponseBytes {
+		if resp.Body != nil {
+			_ = resp.Body.Close()
+		}
+		return nil, ErrResponseTooLarge
+	}
+	if resp.Body == nil {
+		return resp, nil
+	}
+
+	body, readErr := io.ReadAll(io.LimitReader(resp.Body, maxOAuthResponseBytes+1))
+	_ = resp.Body.Close()
+	if readErr != nil {
+		return nil, readErr
+	}
+	if int64(len(body)) > maxOAuthResponseBytes {
+		return nil, ErrResponseTooLarge
+	}
+	resp.Body = io.NopCloser(bytes.NewReader(body))
+	resp.ContentLength = int64(len(body))
+	resp.TransferEncoding = nil
+	return resp, nil
+}
+
+// boundedClient 克隆 HTTP client 并应用统一响应大小与超时限制。
+func boundedClient(base *http.Client, timeout time.Duration) *http.Client {
+	if base == nil {
+		base = http.DefaultClient
+	}
+	client := *base
+	if timeout <= 0 {
+		timeout = defaultOAuthClientTimeout
+	}
+	client.Timeout = timeout
+	transport := client.Transport
+	if transport == nil {
+		transport = http.DefaultTransport
+	}
+	client.Transport = &boundedTransport{base: transport}
+	return &client
+}

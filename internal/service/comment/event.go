@@ -7,7 +7,7 @@ import (
 	"furtalk/internal/platform/logging"
 )
 
-// publishCommentCreated 在提交后发出创建通知。
+// publishCommentCreated 提交后发出创建通知。
 func (s *Service) publishCommentCreated(ctx context.Context, comment *domain.Comment, mode string) {
 	ev := domain.CommentEvent{
 		Type:      domain.TypeCommentCreated,
@@ -21,7 +21,7 @@ func (s *Service) publishCommentCreated(ctx context.Context, comment *domain.Com
 	s.publish(ctx, ev)
 }
 
-// publishCommentPublished 在提交后发出发布通知。
+// publishCommentPublished 提交后发出发布通知。
 func (s *Service) publishCommentPublished(ctx context.Context, comment *domain.Comment, mode string) {
 	ev := domain.CommentEvent{
 		Type:      domain.TypeCommentPublished,
@@ -35,6 +35,7 @@ func (s *Service) publishCommentPublished(ctx context.Context, comment *domain.C
 	s.publish(ctx, ev)
 }
 
+// publish 发布评论事件。
 func (s *Service) publish(ctx context.Context, ev domain.CommentEvent) {
 	if s.bus == nil {
 		return

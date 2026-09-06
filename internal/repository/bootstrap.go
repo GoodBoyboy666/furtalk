@@ -12,12 +12,12 @@ import (
 	"gorm.io/gorm"
 )
 
-// BootstrapRepo 持久化 bootstrap 单例行。
+// BootstrapRepo 提供应用初始化状态的持久化操作。
 type BootstrapRepo struct {
 	db *gorm.DB
 }
 
-// NewBootstrapRepo 构建 bootstrap 仓储。
+// NewBootstrapRepo 构建 bootstrap repository。
 func NewBootstrapRepo(db *gorm.DB) *BootstrapRepo {
 	return &BootstrapRepo{db: db}
 }
@@ -35,8 +35,7 @@ func (r *BootstrapRepo) IsInitialized(ctx context.Context) (bool, error) {
 	return count > 0, nil
 }
 
-// Create 插入 bootstrap 单例。
-// 重复的 singleton_key 冲突报告为 domain.ErrConflict。
+// Create 创建应用初始化状态记录。
 func (r *BootstrapRepo) Create(ctx context.Context, initializedAt time.Time, adminUserID int64) error {
 	state := &model.BootstrapState{
 		SingletonKey:  1,

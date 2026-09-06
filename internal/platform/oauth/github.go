@@ -8,6 +8,8 @@ import (
 	"strconv"
 
 	"golang.org/x/oauth2"
+
+	"furtalk/internal/platform/urlx"
 )
 
 // githubScopes 是 GitHub OAuth 授权申请的范围。
@@ -25,10 +27,16 @@ type githubProvider struct {
 	httpClient   *http.Client
 }
 
+// newGitHubProvider 创建 GitHub OAuth2 适配器。
 func newGitHubProvider(cfg Config, client *http.Client) *githubProvider {
 	apiURL := cfg.APIURL
 	if apiURL == "" {
 		apiURL = "https://api.github.com"
+	}
+	if base, err := urlx.ParseHTTPBase(apiURL); err == nil {
+		apiURL = base.String()
+	} else {
+		apiURL = ""
 	}
 	return &githubProvider{
 		key:          cfg.ProviderKey,
@@ -46,6 +54,7 @@ func (p *githubProvider) Name() string {
 	return "GitHub"
 }
 
+// oauthConfig 构建 GitHub OAuth 配置。
 func (p *githubProvider) oauthConfig(redirectURI string) *oauth2.Config {
 	return &oauth2.Config{
 		ClientID:     p.clientID,
@@ -60,7 +69,6 @@ func (p *githubProvider) oauthConfig(redirectURI string) *oauth2.Config {
 }
 
 // BuildAuthURL 为新的 state 与可选 PKCE verifier 生成 GitHub 授权 URL。
-// GitHub 不发送 nonce；即使请求中带 nonce 也会忽略。
 func (p *githubProvider) BuildAuthURL(ctx context.Context, req AuthorizationRequest) (string, error) {
 	opts := make([]oauth2.AuthCodeOption, 0, 1)
 	if req.Verifier != "" {
@@ -69,8 +77,7 @@ func (p *githubProvider) BuildAuthURL(ctx context.Context, req AuthorizationRequ
 	return p.oauthConfig(req.RedirectURI).AuthCodeURL(req.State, opts...), nil
 }
 
-// httpContext 返回注入共享 HTTP client 的上下文，使 oauth2 库在统一有界超时的
-// 基础 transport 上叠加 Bearer 注入，而不覆盖其认证 transport。
+// httpContext 返回注入共享 HTTP client 的上下文。
 func (p *githubProvider) httpContext(ctx context.Context) context.Context {
 	if p.httpClient == nil {
 		return ctx
@@ -86,15 +93,15 @@ func (p *githubProvider) Exchange(ctx context.Context, req ExchangeRequest) (*Id
 	}
 	token, err := p.oauthConfig(req.RedirectURI).Exchange(p.httpContext(ctx), req.Code, opts...)
 	if err != nil {
-		return nil, ErrIdentity
+		return nil, preserveProviderError(err)
 	}
 	user, err := p.fetchUser(ctx, token)
 	if err != nil {
-		return nil, ErrIdentity
+		return nil, preserveProviderError(err)
 	}
 	email, err := p.fetchVerifiedEmail(ctx, token)
 	if err != nil {
-		return nil, ErrIdentity
+		return nil, preserveProviderError(err)
 	}
 	if user.subject() == "" || email == "" {
 		return nil, ErrIdentity
@@ -106,6 +113,7 @@ type githubUser struct {
 	ID int64 `json:"id"`
 }
 
+// subject 返回 GitHub 用户的稳定主题标识。
 func (u githubUser) subject() string {
 	return strconv.FormatInt(u.ID, 10)
 }
@@ -116,9 +124,14 @@ type githubEmail struct {
 	Primary  bool   `json:"primary"`
 }
 
+// fetchUser 使用访问令牌获取 GitHub 用户信息。
 func (p *githubProvider) fetchUser(ctx context.Context, token *oauth2.Token) (*githubUser, error) {
 	client := p.oauthConfig("").Client(p.httpContext(ctx), token)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.apiURL+"/user", nil)
+	base, err := urlx.ParseHTTPBase(p.apiURL)
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, urlx.JoinPathSegments(base, "user").String(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -138,9 +151,14 @@ func (p *githubProvider) fetchUser(ctx context.Context, token *oauth2.Token) (*g
 	return &user, nil
 }
 
+// fetchVerifiedEmail 获取 GitHub 已验证的主邮箱。
 func (p *githubProvider) fetchVerifiedEmail(ctx context.Context, token *oauth2.Token) (string, error) {
 	client := p.oauthConfig("").Client(p.httpContext(ctx), token)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.apiURL+"/user/emails", nil)
+	base, err := urlx.ParseHTTPBase(p.apiURL)
+	if err != nil {
+		return "", err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, urlx.JoinPathSegments(base, "user", "emails").String(), nil)
 	if err != nil {
 		return "", err
 	}

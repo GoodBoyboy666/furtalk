@@ -1,4 +1,4 @@
-// Package cryptox 提供保护静态存储的提供方密钥的低层加密方案：
+// Package cryptox 提供低层加密方案：
 // AES-256-GCM 信封，格式为
 //
 //	envelope = key_version(1 byte) || nonce(12 bytes) || ciphertext
@@ -9,13 +9,13 @@ package cryptox
 import (
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/hkdf"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"io"
 )
 
 // 信封格式的固定长度与 AES-256 的最小密钥长度。
@@ -23,15 +23,40 @@ const (
 	envelopeKeyVersionLength = 1
 	gcmNonceLength           = 12
 	gcmOverheadLength        = 16
-	minimumKeyLength         = 32
+	derivedKeyLength         = 32
+	minimumSourceKeyLength   = 32
+
+	// ProviderEnvelopeVersion 是当前 provider secret 信封格式版本。
+	ProviderEnvelopeVersion byte = 2
+	// ProviderKeyDerivationInfo 是 provider secret 派生密钥的用途隔离标签。
+	ProviderKeyDerivationInfo = "furtalk/provider-secrets/aes-256-gcm/v2"
 )
 
 var (
-	// ErrBadEnvelope 在信封无法解析，或嵌入的 key version 与当前主密钥版本不匹配时返回。
+	// ErrBadEnvelope 信封无法解析，或嵌入的 key version 与当前主密钥版本不匹配。
 	ErrBadEnvelope = errors.New("cryptox: invalid secret envelope")
-	// ErrKeyLength 在密钥长度不足 32 字节时返回。
-	ErrKeyLength = errors.New("cryptox: key must be at least 32 bytes")
+	// ErrKeyLength AES-256 密钥不为 32 字节。
+	ErrKeyLength = errors.New("cryptox: AES-256 key must be exactly 32 bytes")
+	// ErrSourceKeyLength KDF 输入不足 32 字节。
+	ErrSourceKeyLength = errors.New("cryptox: source key must be at least 32 bytes")
 )
+
+// DeriveKey 使用 HKDF-SHA-256 从 raw 派生固定长度密钥。
+func DeriveKey(raw []byte, info string) ([]byte, error) {
+	if len(raw) < minimumSourceKeyLength {
+		return nil, ErrSourceKeyLength
+	}
+	key, err := hkdf.Key(sha256.New, raw, nil, info, derivedKeyLength)
+	if err != nil {
+		return nil, fmt.Errorf("cryptox: derive key: %w", err)
+	}
+	return key, nil
+}
+
+// DeriveProviderKey 派生 provider secret 信封使用的 AES-256 密钥。
+func DeriveProviderKey(raw []byte) ([]byte, error) {
+	return DeriveKey(raw, ProviderKeyDerivationInfo)
+}
 
 // RandomBytes 返回 n 个密码学安全的随机字节。
 func RandomBytes(n int) ([]byte, error) {
@@ -57,8 +82,7 @@ func SHA256Hex(raw []byte) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// Encrypt 使用新的随机 nonce 以 AES-256-GCM 密封明文，并返回首字节携带给定 key version 的信封。
-// 密钥必须至少 32 字节。
+// Encrypt 使用随机 nonce 以 AES-256-GCM 密封明文并写入 key version。
 func Encrypt(key []byte, keyVersion byte, plaintext []byte) ([]byte, error) {
 	block, err := newBlock(key)
 	if err != nil {
@@ -68,19 +92,18 @@ func Encrypt(key []byte, keyVersion byte, plaintext []byte) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("cryptox: new gcm: %w", err)
 	}
-	nonce := make([]byte, gcmNonceLength)
-	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+	nonce, err := RandomBytes(gcmNonceLength)
+	if err != nil {
 		return nil, fmt.Errorf("cryptox: generate nonce: %w", err)
 	}
 	envelope := make([]byte, envelopeKeyVersionLength+gcmNonceLength)
 	envelope[0] = keyVersion
 	copy(envelope[envelopeKeyVersionLength:], nonce)
+	// 加密并追加
 	return aead.Seal(envelope, nonce, plaintext, nil), nil
 }
 
 // Decrypt 打开信封并返回明文。
-// 结构性或认证失败，以及嵌入的 key version 与提供值不匹配时都安全失败；
-// 轮换后的密钥不会静默解密旧密钥写入的记录。
 func Decrypt(key []byte, keyVersion byte, envelope []byte) ([]byte, error) {
 	block, err := newBlock(key)
 	if err != nil {
@@ -105,8 +128,9 @@ func Decrypt(key []byte, keyVersion byte, envelope []byte) ([]byte, error) {
 	return plaintext, nil
 }
 
+// newBlock 校验密钥长度并创建 AES 分组密码。
 func newBlock(key []byte) (cipher.Block, error) {
-	if len(key) < minimumKeyLength {
+	if len(key) != derivedKeyLength {
 		return nil, ErrKeyLength
 	}
 	block, err := aes.NewCipher(key)

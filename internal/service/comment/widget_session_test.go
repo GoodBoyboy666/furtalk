@@ -54,6 +54,7 @@ func TestCreateAnonymousRejectsClosedRegistrationWithoutSideEffects(t *testing.T
 	userW := identity.NewService(identity.Dependencies{
 		TxRunner: gormtx.NewRunner(db),
 		Users:    repository.NewUserRepo(db),
+		Policy:   widgetDomainIdentityPolicy{},
 	})
 	svc := NewService(Dependencies{
 		TxRunner: gormtx.NewRunner(db),
@@ -129,6 +130,7 @@ func TestCreateAnonymousAdminEmailRequiresAuthCode(t *testing.T) {
 	userW := identity.NewService(identity.Dependencies{
 		TxRunner: gormtx.NewRunner(db),
 		Users:    repository.NewUserRepo(db),
+		Policy:   widgetDomainIdentityPolicy{},
 	})
 	svc := NewService(Dependencies{
 		TxRunner: gormtx.NewRunner(db),

@@ -5,9 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 
 	"golang.org/x/oauth2"
+
+	"furtalk/internal/platform/urlx"
 )
 
 // Discord OAuth2 授权请求所需的固定 scopes。
@@ -24,10 +25,10 @@ const (
 	discordAPIURL       = "https://discord.com/api/v10"
 )
 
-// discordProvider 是 Discord 的固定端点 OAuth2 API 适配器。
-// 普通网页登录流程未文档化 PKCE，因此不发送 code_challenge/code_verifier，
-// 也不发送 nonce。confidential client 的 token 请求固定使用 HTTP Basic
-// （AuthStyleInHeader；Discord 同时支持 body 方式，固定 Basic 不触发探测重试）。
+// discordProvider Discord 的 OAuth2 API 适配器。
+// 普通网页登录流程未文档化 PKCE，因此不会发送 code_challenge/code_verifier与nonce。
+// confidential client 的 token 请求固定使用 HTTP Basic
+// （AuthStyleInHeader；Discord 同时支持 body 方式，固定 Basic 不会触发探测重试）。
 // subject 是 User snowflake id；VerifiedEmail 只在 email 非空且 verified=true 时填充。
 type discordProvider struct {
 	key          string
@@ -39,6 +40,7 @@ type discordProvider struct {
 	httpClient   *http.Client
 }
 
+// newDiscordProvider 创建 Discord OAuth2 适配器。
 func newDiscordProvider(cfg Config, client *http.Client) *discordProvider {
 	authURL := cfg.AuthURL
 	if authURL == "" {
@@ -52,13 +54,17 @@ func newDiscordProvider(cfg Config, client *http.Client) *discordProvider {
 	if apiURL == "" {
 		apiURL = discordAPIURL
 	}
+	userInfoURL := ""
+	if base, err := urlx.ParseHTTPBase(apiURL); err == nil {
+		userInfoURL = urlx.JoinPathSegments(base, "users", "@me").String()
+	}
 	return &discordProvider{
 		key:          cfg.ProviderKey,
 		clientID:     cfg.ClientID,
 		clientSecret: cfg.ClientSecret,
 		authURL:      authURL,
 		tokenURL:     tokenURL,
-		userInfoURL:  strings.TrimRight(apiURL, "/") + "/users/@me",
+		userInfoURL:  userInfoURL,
 		httpClient:   client,
 	}
 }
@@ -68,8 +74,7 @@ func (p *discordProvider) Name() string {
 	return "Discord"
 }
 
-// clientContext 返回注入共享 HTTP client 的上下文，
-// 使 token/userinfo 的全部网络请求走同一 client（含超时）。
+// clientContext 返回注入共享 HTTP client 的上下文。
 func (p *discordProvider) clientContext(ctx context.Context) context.Context {
 	if p.httpClient == nil {
 		return ctx
@@ -77,6 +82,7 @@ func (p *discordProvider) clientContext(ctx context.Context) context.Context {
 	return context.WithValue(ctx, oauth2.HTTPClient, p.httpClient)
 }
 
+// oauthConfig 构建 Discord OAuth 配置。
 func (p *discordProvider) oauthConfig(redirectURI string) *oauth2.Config {
 	return &oauth2.Config{
 		ClientID:     p.clientID,
@@ -92,24 +98,19 @@ func (p *discordProvider) oauthConfig(redirectURI string) *oauth2.Config {
 }
 
 // BuildAuthURL 为新的 state 生成 Discord 授权 URL。
-// Discord 普通网页登录未定义 PKCE，即使请求中带 verifier 也不附加 code_challenge；
-// 同样不发送 nonce。
 func (p *discordProvider) BuildAuthURL(ctx context.Context, req AuthorizationRequest) (string, error) {
 	return p.oauthConfig(req.RedirectURI).AuthCodeURL(req.State), nil
 }
 
 // Exchange 用 code 换取 token，通过 Bearer 拉取 /users/@me 并返回标准化后的 Identity。
-// subject 是 User 的 snowflake id；VerifiedEmail 只在 email 非空且 verified=true 时填充，
-// 否则保留空字符串（缺失/未验证邮箱不否定 subject）。
-// 任何失败映射为 ErrIdentity，错误文本不包含 code/token/secret。
 func (p *discordProvider) Exchange(ctx context.Context, req ExchangeRequest) (*Identity, error) {
 	token, err := p.oauthConfig(req.RedirectURI).Exchange(p.clientContext(ctx), req.Code)
 	if err != nil {
-		return nil, ErrIdentity
+		return nil, preserveProviderError(err)
 	}
 	user, err := p.fetchUserInfo(ctx, token)
 	if err != nil {
-		return nil, ErrIdentity
+		return nil, preserveProviderError(err)
 	}
 	if user.ID == "" {
 		return nil, ErrIdentity
@@ -129,7 +130,6 @@ type discordUser struct {
 }
 
 // fetchUserInfo 用 Bearer token 请求 /users/@me。
-// 非 200 或 JSON 解析失败返回错误（由 Exchange 统一映射为 ErrIdentity）。
 func (p *discordProvider) fetchUserInfo(ctx context.Context, token *oauth2.Token) (*discordUser, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.userInfoURL, nil)
 	if err != nil {

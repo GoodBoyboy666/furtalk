@@ -1,6 +1,5 @@
 // Package spam 提供垃圾检测的基础协议与固定渠道适配：
 // 本地关键词库匹配器、Akismet、阿里云内容安全与腾讯云内容安全。
-// 该包与业务无关，不依赖 domain、repository、service 或 Gin。
 package spam
 
 import (
@@ -49,26 +48,24 @@ const (
 // Detector 是对单个垃圾检测渠道的检查边界。
 type Detector interface {
 	// Check 返回渠道判定结果；渠道故障或响应未知时返回非 nil 错误，
-	// 调用方应把该错误视为 unknown 并继续后续渠道。
+	// 使用方应把该错误视为 unknown 并继续后续渠道。
 	Check(ctx context.Context, input Input) (Result, error)
 }
 
 // 错误 sentinel。
 var (
-	// ErrUnavailable 在渠道故障、超时或返回未知结果时返回，调用方记 unknown 并继续。
+	// ErrUnavailable 在渠道故障、超时或返回未知结果时返回，使用方记 unknown 并继续。
 	ErrUnavailable = errors.New("spam: detector unavailable")
 	// ErrInvalidFile 在词库文件缺失、不可读、非普通文件、非法 UTF-8 或超出限制时返回。
 	ErrInvalidFile = errors.New("spam: invalid keyword file")
 )
 
-// ValidateKeywordFile 校验固定词库文件是服务端可读的普通 UTF-8 文件，
-// 并在大小与行数限制内完整解析。供保存配置时的首次加载验证使用。
+// ValidateKeywordFile 校验固定词库文件的可读性与大小限制。
 func ValidateKeywordFile() error {
 	return validateKeywordFile(keywordFilePath)
 }
 
-// validateKeywordFile validates a path for focused package tests. Production
-// callers must use ValidateKeywordFile, which is bound to keywordFilePath.
+// validateKeywordFile 校验指定词库文件的格式、编码与大小限制。
 func validateKeywordFile(path string) error {
 	info, err := os.Stat(path)
 	if err != nil {

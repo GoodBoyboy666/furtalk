@@ -9,16 +9,16 @@ import (
 	"strings"
 )
 
-// akismetEndpointHost 是 Akismet comment-check 的固定端点主机。
+// akismetEndpointHost Akismet comment-check 的 Endpoint。
 const akismetEndpointHost = "rest.akismet.com"
 
-// AkismetConfig 是 Akismet 检测器的配置。
+// AkismetConfig Akismet 检测器的配置。
 type AkismetConfig struct {
-	// APIKey 是 Akismet API key。
+	// APIKey Akismet API key。
 	APIKey string
 }
 
-// Akismet 调用 Akismet comment-check 端点，响应严格按 true/false 解析。
+// Akismet 调用 Akismet comment-check Endpoint。
 // 站点 URL 取自每次送检的 Input.BlogURL。
 type Akismet struct {
 	client *http.Client
@@ -26,7 +26,6 @@ type Akismet struct {
 }
 
 // NewAkismet 构建 Akismet 检测器。
-// client 必须携带有界超时。
 func NewAkismet(client *http.Client, cfg AkismetConfig) *Akismet {
 	if client == nil {
 		client = defaultClient()
@@ -35,7 +34,6 @@ func NewAkismet(client *http.Client, cfg AkismetConfig) *Akismet {
 }
 
 // Check 送检完整评论上下文并按响应判定：
-// true 表示垃圾（Block），false 表示通过（Pass）；其他响应、非成功状态或网络错误为 unknown。
 func (a *Akismet) Check(ctx context.Context, input Input) (Result, error) {
 	form := url.Values{}
 	form.Set("blog", input.BlogURL)
@@ -50,12 +48,13 @@ func (a *Akismet) Check(ctx context.Context, input Input) (Result, error) {
 	form.Set("comment_content", input.Body)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, a.endpoint(), strings.NewReader(form.Encode()))
 	if err != nil {
-		return ResultPass, fmt.Errorf("%w: build request: %v", ErrUnavailable, err)
+		return ResultPass, fmt.Errorf("%w: request construction failed", ErrUnavailable)
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	resp, err := a.client.Do(req)
 	if err != nil {
-		return ResultPass, fmt.Errorf("%w: %v", ErrUnavailable, err)
+		// 请求 URL 的主机包含 API key，错误仅暴露固定类别。
+		return ResultPass, fmt.Errorf("%w: transport failure", ErrUnavailable)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
@@ -63,7 +62,7 @@ func (a *Akismet) Check(ctx context.Context, input Input) (Result, error) {
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 64))
 	if err != nil {
-		return ResultPass, fmt.Errorf("%w: read response: %v", ErrUnavailable, err)
+		return ResultPass, fmt.Errorf("%w: response read failed", ErrUnavailable)
 	}
 	switch strings.TrimSpace(string(body)) {
 	case "true":
@@ -75,7 +74,7 @@ func (a *Akismet) Check(ctx context.Context, input Input) (Result, error) {
 	}
 }
 
-// endpoint 返回带 API key 的 comment-check HTTPS 端点。
+// endpoint 返回带 API key 的 comment-check HTTPS Endpoint。
 func (a *Akismet) endpoint() string {
 	return "https://" + strings.TrimSpace(a.cfg.APIKey) + "." + akismetEndpointHost + "/1.1/comment-check"
 }

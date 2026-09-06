@@ -22,7 +22,7 @@ func TestProvideRouterRejectsWebWithoutEmbedResources(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = provideRouter(
+	_, err = provideRouterWithAdmission(
 		newReadiness(),
 		config.HTTPConfig{},
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
@@ -32,8 +32,9 @@ func TestProvideRouterRejectsWebWithoutEmbedResources(t *testing.T) {
 		[]router.Register{func(*gin.RouterGroup) {}},
 		(*identity.Service)(nil),
 		webRuntimeOptions{Enabled: true},
+		nil,
 	)
 	if !errors.Is(err, webui.ErrUnavailable) {
-		t.Fatalf("provideRouter() error = %v, want webui.ErrUnavailable", err)
+		t.Fatalf("provideRouterWithAdmission() error = %v, want webui.ErrUnavailable", err)
 	}
 }

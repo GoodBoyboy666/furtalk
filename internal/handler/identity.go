@@ -12,8 +12,13 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// RegisterAuth 挂载认证端点。
-func RegisterAuth(api *gin.RouterGroup, service *identity.Service, csrf ...gin.HandlerFunc) {
+// RegisterAuthWithAdmission 注册 HTTP 路由。
+func RegisterAuthWithAdmission(api *gin.RouterGroup, service *identity.Service, admission FlowAdmission, csrf ...gin.HandlerFunc) {
+	registerAuth(api, service, admission, csrf...)
+}
+
+// registerAuth 注册 HTTP 路由。
+func registerAuth(api *gin.RouterGroup, service *identity.Service, admission FlowAdmission, csrf ...gin.HandlerFunc) {
 	auth := api.Group("/auth")
 	auth.POST("/email-codes", sendEmailCode(service))
 	auth.POST("/email-code/login", emailCodeLogin(service))
@@ -21,15 +26,20 @@ func RegisterAuth(api *gin.RouterGroup, service *identity.Service, csrf ...gin.H
 	auth.POST("/password/reset-codes", passwordResetCode(service))
 	auth.POST("/password/reset", passwordResetConfirm(service))
 	auth.POST("/logout", append(csrf, logout(service))...)
-	auth.POST("/passkeys/login/options", passkeyLoginOptions(service))
+	auth.POST("/passkeys/login/options", flowAdmission(admission, PolicyPasskeyLoginOptions, clientIPSubject), passkeyLoginOptions(service))
 	auth.POST("/passkeys/login/verify", passkeyLoginVerify(service))
 	auth.GET("/providers", listProviders(service))
-	auth.GET("/oauth/:provider/start", oauthStart(service))
+	auth.GET("/oauth/:provider/start", flowAdmission(admission, PolicyOAuthStart, clientIPSubject), oauthStart(service))
 	auth.POST("/oauth/:provider/complete", oauthComplete(service))
 }
 
-// RegisterMe 挂载 /me 子路由，并挂载用户门禁。
-func RegisterMe(api *gin.RouterGroup, service *identity.Service, userGate middleware.UserGate, csrf ...gin.HandlerFunc) {
+// RegisterMeWithAdmission 为会创建 Passkey 注册挑战的用户流程安装专用准入预算。
+func RegisterMeWithAdmission(api *gin.RouterGroup, service *identity.Service, userGate middleware.UserGate, admission FlowAdmission, csrf ...gin.HandlerFunc) {
+	registerMe(api, service, userGate, admission, csrf...)
+}
+
+// registerMe 注册 HTTP 路由。
+func registerMe(api *gin.RouterGroup, service *identity.Service, userGate middleware.UserGate, admission FlowAdmission, csrf ...gin.HandlerFunc) {
 	middlewares := append([]gin.HandlerFunc{middleware.RequireUser(userGate)}, csrf...)
 	me := api.Group("/me", middlewares...)
 	me.GET("", meGet(service))
@@ -37,7 +47,7 @@ func RegisterMe(api *gin.RouterGroup, service *identity.Service, userGate middle
 	me.PATCH("/notification-preferences", meUpdateNotificationPreferences(service))
 	me.POST("/password", meSetPassword(service))
 	me.POST("/sessions/revoke", meRevokeAllSessions(service))
-	me.POST("/passkeys/options", mePasskeyRegistrationOptions(service))
+	me.POST("/passkeys/options", flowAdmission(admission, PolicyPasskeyRegistrationOptions, principalSubject), mePasskeyRegistrationOptions(service))
 	me.POST("/passkeys", meFinishPasskeyRegistration(service))
 	me.PATCH("/passkeys/:passkey_id", meRenamePasskey(service))
 	me.DELETE("/passkeys/:passkey_id", meDeletePasskey(service))
@@ -58,6 +68,7 @@ func RegisterAdminUsers(admin *gin.RouterGroup, service *identity.Service) {
 	admin.POST("/users/:user_id/restore", adminUsersRestore(service))
 }
 
+// sendEmailCode 处理发送邮箱验证码请求。
 // @Summary 请求发送邮箱验证码
 // @Tags auth
 // @Accept json
@@ -84,6 +95,7 @@ func sendEmailCode(service *identity.Service) gin.HandlerFunc {
 	}
 }
 
+// emailCodeLogin 处理邮箱验证码登录请求。
 // @Summary 使用邮箱验证码登录
 // @Tags auth
 // @Accept json
@@ -117,6 +129,7 @@ func emailCodeLogin(service *identity.Service) gin.HandlerFunc {
 	}
 }
 
+// passwordLogin 处理密码登录请求。
 // @Summary 使用邮箱密码登录
 // @Tags auth
 // @Accept json
@@ -136,7 +149,10 @@ func passwordLogin(service *identity.Service) gin.HandlerFunc {
 			writeError(c, err)
 			return
 		}
-		session, err := service.LoginWithPassword(c.Request.Context(), req.Email, req.Password, req.CaptchaToken)
+		session, err := service.LoginWithPasswordFromInput(c.Request.Context(), identity.PasswordLoginInput{
+			Email: req.Email, Password: req.Password, CaptchaToken: req.CaptchaToken,
+			ClientIP: c.GetString(httpx.ClientIPKey),
+		})
 		if err != nil {
 			writeError(c, err)
 			return
@@ -146,6 +162,7 @@ func passwordLogin(service *identity.Service) gin.HandlerFunc {
 	}
 }
 
+// passwordResetCode 处理密码重置验证码请求。
 // @Summary 请求发送密码重置验证码
 // @Tags auth
 // @Accept json
@@ -172,6 +189,7 @@ func passwordResetCode(service *identity.Service) gin.HandlerFunc {
 	}
 }
 
+// passwordResetConfirm 处理密码重置确认请求。
 // @Summary 使用验证码与新密码完成密码重置
 // @Tags auth
 // @Accept json
@@ -197,6 +215,7 @@ func passwordResetConfirm(service *identity.Service) gin.HandlerFunc {
 	}
 }
 
+// logout 处理用户退出登录请求。
 // @Summary 退出登录
 // @Tags auth
 // @Success 204 "已清除会话 Cookie"
@@ -215,6 +234,7 @@ func logout(service *identity.Service) gin.HandlerFunc {
 	}
 }
 
+// passkeyLoginOptions 返回 Passkey 登录选项。
 // @Summary 开始 passkey 登录仪式
 // @Tags auth
 // @Accept json
@@ -240,6 +260,7 @@ func passkeyLoginOptions(service *identity.Service) gin.HandlerFunc {
 	}
 }
 
+// passkeyLoginVerify 处理 Passkey 登录验证请求。
 // @Summary 校验 passkey 断言并登录
 // @Tags auth
 // @Accept json
@@ -266,6 +287,7 @@ func passkeyLoginVerify(service *identity.Service) gin.HandlerFunc {
 	}
 }
 
+// listProviders 返回可用的登录提供商。
 // @Summary 列出可用的 OAuth/OIDC 提供商
 // @Tags auth
 // @Produce json
@@ -286,6 +308,7 @@ func listProviders(service *identity.Service) gin.HandlerFunc {
 	}
 }
 
+// oauthStart 处理 OAuth 登录开始请求。
 // @Summary 开始 OAuth 授权流程
 // @Tags auth
 // @Produce json
@@ -320,6 +343,7 @@ func oauthStart(service *identity.Service) gin.HandlerFunc {
 	}
 }
 
+// oauthComplete 处理 OAuth 登录完成请求。
 // @Summary 完成 OAuth 登录
 // @Tags auth
 // @Accept json
@@ -339,7 +363,7 @@ func oauthComplete(service *identity.Service) gin.HandlerFunc {
 			return
 		}
 		if req.Handoff != "" {
-			// handoff 与直接回调参数互斥；Apple 授权码绝不在 URL 中出现。
+			// handoff 与直接回调参数互斥；Apple 授权码不会放入 URL。
 			if req.State != "" || req.Code != "" || req.Error != "" {
 				c.JSON(http.StatusBadRequest, errorResponse(c, "invalid_request", "cannot mix handoff with direct callback parameters"))
 				return
@@ -398,8 +422,7 @@ func completeOAuthError(c *gin.Context, service *identity.Service, providerKey, 
 	writeOAuthError(c, err, redirect)
 }
 
-// writeOAuthError 以标准错误信封写出 OAuth 回调错误，并在 state 有效时
-// 于 details.redirect 携带已净化的站内回跳地址，供前端提供返回操作。
+// writeOAuthError 返回 OAuth 错误响应。
 func writeOAuthError(c *gin.Context, err error, redirect string) {
 	details := map[string]any{}
 	if redirect != "" {
@@ -419,6 +442,7 @@ func setSessionCookie(c *gin.Context, session *identity.Session) {
 	middleware.SetCSRFCookie(c, session.CSRFToken, lifetime)
 }
 
+// meGet 处理当前用户 HTTP 请求。
 // @Summary 获取当前用户资料
 // @Tags me
 // @Produce json
@@ -440,6 +464,7 @@ func meGet(service *identity.Service) gin.HandlerFunc {
 	}
 }
 
+// meUpdate 处理当前用户 HTTP 请求。
 // @Summary 更新当前用户资料
 // @Tags me
 // @Accept json
@@ -475,6 +500,7 @@ func meUpdate(service *identity.Service) gin.HandlerFunc {
 	}
 }
 
+// meUpdateNotificationPreferences 处理当前用户 HTTP 请求。
 // @Summary 更新当前用户通知偏好
 // @Tags me
 // @Accept json
@@ -508,6 +534,7 @@ func meUpdateNotificationPreferences(service *identity.Service) gin.HandlerFunc 
 	}
 }
 
+// meSetPassword 处理当前用户 HTTP 请求。
 // @Summary 设置或修改当前用户密码
 // @Tags me
 // @Accept json
@@ -540,6 +567,7 @@ func meSetPassword(service *identity.Service) gin.HandlerFunc {
 	}
 }
 
+// meRevokeAllSessions 处理当前用户 HTTP 请求。
 // @Summary 注销当前用户全部设备
 // @Tags me
 // @Success 204 "全部会话已失效，当前设备已退出"
@@ -562,6 +590,7 @@ func meRevokeAllSessions(service *identity.Service) gin.HandlerFunc {
 	}
 }
 
+// mePasskeyRegistrationOptions 处理当前用户 HTTP 请求。
 // @Summary 获取 passkey 注册选项
 // @Tags me
 // @Produce json
@@ -585,6 +614,7 @@ func mePasskeyRegistrationOptions(service *identity.Service) gin.HandlerFunc {
 	}
 }
 
+// meFinishPasskeyRegistration 处理当前用户 HTTP 请求。
 // @Summary 完成 passkey 注册
 // @Tags me
 // @Accept json
@@ -615,6 +645,7 @@ func meFinishPasskeyRegistration(service *identity.Service) gin.HandlerFunc {
 	}
 }
 
+// meRenamePasskey 处理当前用户 HTTP 请求。
 // @Summary 重命名自己的 passkey
 // @Tags me
 // @Accept json
@@ -651,6 +682,7 @@ func meRenamePasskey(service *identity.Service) gin.HandlerFunc {
 	}
 }
 
+// meDeletePasskey 处理当前用户 HTTP 请求。
 // @Summary 删除自己的 passkey
 // @Tags me
 // @Param passkey_id path integer true "passkey ID（十进制字符串）"
@@ -680,6 +712,7 @@ func meDeletePasskey(service *identity.Service) gin.HandlerFunc {
 	}
 }
 
+// meListIdentities 处理当前用户 HTTP 请求。
 // @Summary 列出当前用户的登录方式
 // @Tags me
 // @Produce json
@@ -715,6 +748,7 @@ func meListIdentities(service *identity.Service) gin.HandlerFunc {
 	}
 }
 
+// meDeleteIdentity 处理当前用户 HTTP 请求。
 // @Summary 解绑外部登录方式
 // @Tags me
 // @Param identity_id path integer true "登录方式 ID（十进制字符串）"
@@ -744,6 +778,7 @@ func meDeleteIdentity(service *identity.Service) gin.HandlerFunc {
 	}
 }
 
+// adminUsersBatch 处理管理端用户 HTTP 请求。
 // @Summary 批量管理用户
 // @Tags admin-users
 // @Accept json
@@ -778,6 +813,7 @@ func adminUsersBatch(service *identity.Service) gin.HandlerFunc {
 	}
 }
 
+// adminUsersList 处理管理端用户 HTTP 请求。
 // @Summary 按关键字分页列出用户
 // @Tags admin-users
 // @Produce json
@@ -824,6 +860,7 @@ func adminUsersList(service *identity.Service) gin.HandlerFunc {
 	}
 }
 
+// adminUsersCreate 处理管理端用户 HTTP 请求。
 // @Summary 预创建用户
 // @Tags admin-users
 // @Accept json
@@ -860,6 +897,7 @@ func adminUsersCreate(service *identity.Service) gin.HandlerFunc {
 	}
 }
 
+// adminUsersGet 处理管理端用户 HTTP 请求。
 // @Summary 获取用户资料
 // @Tags admin-users
 // @Produce json
@@ -886,6 +924,7 @@ func adminUsersGet(service *identity.Service) gin.HandlerFunc {
 	}
 }
 
+// adminUsersUpdate 处理管理端用户 HTTP 请求。
 // @Summary 修改用户资料与状态
 // @Tags admin-users
 // @Accept json
@@ -939,6 +978,7 @@ func adminUsersUpdate(service *identity.Service) gin.HandlerFunc {
 	}
 }
 
+// adminUsersResetPassword 处理管理端用户 HTTP 请求。
 // @Summary 重置目标用户密码
 // @Tags admin-users
 // @Accept json
@@ -972,6 +1012,7 @@ func adminUsersResetPassword(service *identity.Service) gin.HandlerFunc {
 	}
 }
 
+// adminUsersDelete 处理管理端用户 HTTP 请求。
 // @Summary 软删除或硬删除用户
 // @Tags admin-users
 // @Param user_id path integer true "用户 ID（十进制字符串）"
@@ -1007,6 +1048,7 @@ func adminUsersDelete(service *identity.Service) gin.HandlerFunc {
 	}
 }
 
+// adminUsersRestore 处理管理端用户 HTTP 请求。
 // @Summary 恢复被软删除的用户
 // @Tags admin-users
 // @Produce json

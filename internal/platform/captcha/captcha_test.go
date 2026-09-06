@@ -124,6 +124,34 @@ func TestCAPMissingEndpoint(t *testing.T) {
 	}
 }
 
+func TestCAPRejectsAmbiguousEndpointComponents(t *testing.T) {
+	for _, raw := range []string{
+		"https://cap.example.com?tenant=one",
+		"https://cap.example.com#siteverify",
+		"https://user:pass@cap.example.com",
+	} {
+		t.Run(raw, func(t *testing.T) {
+			if _, err := New(Config{Provider: "cap", SiteKey: "s", SecretKey: "k", Endpoint: raw}, nil); err == nil {
+				t.Fatalf("New accepted ambiguous endpoint %q", raw)
+			}
+		})
+	}
+}
+
+func TestCustomCaptchaEndpointRejectsAmbiguousComponents(t *testing.T) {
+	for _, raw := range []string{
+		"https://proxy.example.com/siteverify?tenant=one",
+		"https://proxy.example.com/siteverify#fragment",
+		"https://user:pass@proxy.example.com/siteverify",
+	} {
+		t.Run(raw, func(t *testing.T) {
+			if _, err := New(Config{Provider: "turnstile", SiteKey: "s", SecretKey: "k", Endpoint: raw}, nil); err == nil {
+				t.Fatalf("New accepted ambiguous custom endpoint %q", raw)
+			}
+		})
+	}
+}
+
 // TestCAPMalformedResponse 验证 CAP 返回畸形响应时映射为不可用。
 func TestCAPMalformedResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

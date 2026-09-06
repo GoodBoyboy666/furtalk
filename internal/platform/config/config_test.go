@@ -60,6 +60,44 @@ func TestExplicitPasskeyRPIDRejectsPort(t *testing.T) {
 	}
 }
 
+func TestValidateWebURLContracts(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		mutate func(*Config)
+	}{
+		{name: "public base non-http scheme", mutate: func(c *Config) { c.HTTP.PublicBaseURL = "ftp://furtalk.example.com" }},
+		{name: "jwt issuer userinfo", mutate: func(c *Config) { c.Tokens.JWTIssuer = "https://user:pass@furtalk.example.com" }},
+		{name: "webauthn external http", mutate: func(c *Config) { c.WebAuthn.RPOrigins = []string{"http://furtalk.example.com"} }},
+		{name: "webauthn wildcard", mutate: func(c *Config) { c.WebAuthn.RPOrigins = []string{"https://*.furtalk.example.com"} }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := validTestConfig("https://furtalk.example.com")
+			tt.mutate(&cfg)
+			if err := cfg.Validate(); err == nil {
+				t.Fatal("Validate() accepted an invalid web URL")
+			}
+		})
+	}
+}
+
+func TestNormalizeWebURLsCanonicalizesOrigins(t *testing.T) {
+	cfg := validTestConfig("https://Example.COM:443")
+	cfg.Tokens.JWTIssuer = "https://Issuer.Example:443"
+	cfg.WebAuthn.RPOrigins = []string{"https://Passkeys.Example:443"}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("Validate() returned %v", err)
+	}
+	if err := cfg.normalizeWebURLs(); err != nil {
+		t.Fatalf("normalizeWebURLs() returned %v", err)
+	}
+	if cfg.HTTP.PublicBaseURL != "https://example.com" || cfg.Tokens.JWTIssuer != "https://issuer.example" || cfg.WebAuthn.RPOrigins[0] != "https://passkeys.example" {
+		t.Fatalf("normalized web URLs = %q, %q, %q", cfg.HTTP.PublicBaseURL, cfg.Tokens.JWTIssuer, cfg.WebAuthn.RPOrigins[0])
+	}
+}
+
 func TestValidateRejectsNonPositiveHTTPServerLimits(t *testing.T) {
 	t.Parallel()
 
@@ -80,6 +118,36 @@ func TestValidateRejectsNonPositiveHTTPServerLimits(t *testing.T) {
 			tt.mutate(&cfg.HTTP)
 			if err := cfg.Validate(); err == nil {
 				t.Fatal("Validate() accepted a non-positive HTTP server limit")
+			}
+		})
+	}
+}
+
+func TestValidateOAuthClientTimeoutBounds(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		value time.Duration
+		want  bool
+	}{
+		{name: "zero", value: 0, want: false},
+		{name: "negative", value: -time.Second, want: false},
+		{name: "default", value: defaultOAuthTimeout, want: true},
+		{name: "maximum", value: maxOAuthClientTimeout, want: true},
+		{name: "over maximum", value: maxOAuthClientTimeout + time.Nanosecond, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := validTestConfig("https://furtalk.example.com")
+			cfg.OAuth.ClientTimeout = tt.value
+			err := cfg.Validate()
+			if tt.want && err != nil {
+				t.Fatalf("Validate() returned %v for %s", err, tt.name)
+			}
+			if !tt.want && err == nil {
+				t.Fatalf("Validate() accepted %s timeout %s", tt.name, tt.value)
 			}
 		})
 	}
@@ -114,6 +182,7 @@ func validTestConfig(baseURL string) Config {
 			RPOrigins: []string{"https://furtalk.example.com"},
 			RPName:    "Furtalk",
 		},
+		OAuth: OAuthConfig{ClientTimeout: defaultOAuthTimeout},
 	}
 }
 

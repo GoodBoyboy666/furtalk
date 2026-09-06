@@ -8,6 +8,7 @@ type readinessState struct {
 	ready atomic.Bool
 }
 
+// newReadiness 创建未就绪的应用状态。
 func newReadiness() *readinessState { return &readinessState{} }
 
 // MarkReady 标记进程已就绪，仅在 HTTP 监听器绑定成功后调用。

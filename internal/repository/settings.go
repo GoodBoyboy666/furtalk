@@ -15,7 +15,7 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// DynamicSettingRow 是 dynamic_settings 行的仓储边界表示。
+// DynamicSettingRow 表示动态设置的持久化数据行。
 type DynamicSettingRow struct {
 	Key       string
 	Type      string
@@ -23,7 +23,7 @@ type DynamicSettingRow struct {
 	UpdatedBy int64
 }
 
-// SettingsRepo 持久化按 key 存取的动态设置项。
+// SettingsRepo 提供动态设置和提供商配置的持久化操作。
 type SettingsRepo struct {
 	db *gorm.DB
 }
@@ -60,9 +60,7 @@ func (r *SettingsRepo) Get(ctx context.Context, key string) (*DynamicSettingRow,
 	return &out, nil
 }
 
-// LockRows 锁定并返回指定 key 的设置行，供事务内先读后写使用。
-// 仅 PostgreSQL 生成 FOR UPDATE；SQLite 不支持该子句，单进程写事务由
-// busy timeout 兜底，返回行仍按当前事务可见性读取。
+// LockRows 在写事务中读取并锁定指定动态设置行。
 func (r *SettingsRepo) LockRows(ctx context.Context, keys []string) ([]DynamicSettingRow, error) {
 	query := gormtx.DB(ctx, r.db).Where("key IN ?", keys)
 	if r.db.Dialector.Name() != "sqlite" {
@@ -79,8 +77,7 @@ func (r *SettingsRepo) LockRows(ctx context.Context, keys []string) ([]DynamicSe
 	return out, nil
 }
 
-// SeedMissing 批量插入缺失的设置项;已存在的 key 保持不变(ON CONFLICT DO NOTHING)。
-// 并发首次播种时各写入方互不覆盖。
+// SeedMissing 批量插入缺失的设置项;已存在的 key 保持不变。
 func (r *SettingsRepo) SeedMissing(ctx context.Context, rows []DynamicSettingRow) error {
 	if len(rows) == 0 {
 		return nil
@@ -96,8 +93,7 @@ func (r *SettingsRepo) SeedMissing(ctx context.Context, rows []DynamicSettingRow
 	return nil
 }
 
-// Upsert 批量写入设置项;同 key 已存在时直接覆盖(ON CONFLICT DO UPDATE),
-// 未提交的 key 保持原值。批次在单个事务内全部成功或全部失败。
+// Upsert 批量写入动态设置行。
 func (r *SettingsRepo) Upsert(ctx context.Context, rows []DynamicSettingRow) error {
 	if len(rows) == 0 {
 		return nil
@@ -116,7 +112,7 @@ func (r *SettingsRepo) Upsert(ctx context.Context, rows []DynamicSettingRow) err
 	return nil
 }
 
-// toDynamicSettingRow 把 GORM 行转为仓储边界 DynamicSettingRow。
+// toDynamicSettingRow 将持久化设置模型转换为设置数据行。
 func toDynamicSettingRow(row model.DynamicSetting) DynamicSettingRow {
 	return DynamicSettingRow{
 		Key:       row.Key,
@@ -126,7 +122,7 @@ func toDynamicSettingRow(row model.DynamicSetting) DynamicSettingRow {
 	}
 }
 
-// toDynamicSettingModel 把仓储边界行转为 GORM 模型。
+// toDynamicSettingModel 将设置数据行转换为持久化模型。
 func toDynamicSettingModel(s DynamicSettingRow) model.DynamicSetting {
 	return model.DynamicSetting{
 		Key:       s.Key,
@@ -136,11 +132,9 @@ func toDynamicSettingModel(s DynamicSettingRow) model.DynamicSetting {
 	}
 }
 
-// CaptchaProviderSettingKey 是 CAPTCHA 选择设置 key。
-// 它以公开设置行保存当前选中的 CAPTCHA provider key，不是 provider 配置行。
+// CaptchaProviderSettingKey 是当前 CAPTCHA 提供商选择设置的键名。
 const CaptchaProviderSettingKey = "captcha_provider"
 
-// providerSettingSuffix 是 provider 配置动态设置 key 的后缀。
 const providerSettingSuffix = "_provider"
 
 // providerSettingKey 把 provider key 映射为动态设置 key。
@@ -153,14 +147,12 @@ func ProviderSettingKey(providerKey string) string {
 	return providerSettingKey(providerKey)
 }
 
-// IsProviderSettingKey 报告 key 是否属于 provider 配置动态设置行。
-// provider 行是内部设置，通用设置读写须将其过滤，不得进入公开设置；
-// captcha_provider 是公开选择设置而非 provider 配置行，明确排除。
+// IsProviderSettingKey 判断键名是否为提供商设置键。
 func IsProviderSettingKey(key string) bool {
 	return key != CaptchaProviderSettingKey && strings.HasSuffix(key, providerSettingSuffix)
 }
 
-// CaptchaProviderRow 是 CAPTCHA provider 配置行的仓储边界表示，含密文字段。
+// CaptchaProviderRow CAPTCHA provider 配置行。
 // CAPTCHA 行没有 kind 之外的启用语义，不保存 enabled。
 type CaptchaProviderRow struct {
 	ProviderKey      string
@@ -170,7 +162,7 @@ type CaptchaProviderRow struct {
 	SecretCiphertext []byte
 }
 
-// AuthProviderRow 是 OAuth/OIDC provider 配置行的仓储边界表示，含密文字段。
+// AuthProviderRow OAuth/OIDC provider 配置行。
 type AuthProviderRow struct {
 	ProviderKey      string
 	Kind             domain.ProviderKind
@@ -181,8 +173,7 @@ type AuthProviderRow struct {
 	SecretCiphertext []byte
 }
 
-// SpamProviderRow 是垃圾检测 provider 配置行的仓储边界表示，含密文字段。
-// 垃圾检测 provider 与 OAuth/OIDC 一样携带 enabled，允许多个渠道同时启用。
+// SpamProviderRow 垃圾检测 provider 配置行。
 type SpamProviderRow struct {
 	ProviderKey      string
 	Enabled          bool
@@ -192,8 +183,7 @@ type SpamProviderRow struct {
 	SecretCiphertext []byte
 }
 
-// NotificationProviderRow 是通知通道 provider 配置行的仓储边界表示，含密文字段。
-// 通知通道与 OAuth/OIDC 一样携带 enabled，每平台实例级最多一个目标。
+// NotificationProviderRow 通知通道 provider 配置行。
 type NotificationProviderRow struct {
 	ProviderKey      string
 	Enabled          bool
@@ -203,8 +193,8 @@ type NotificationProviderRow struct {
 	SecretCiphertext []byte
 }
 
-// captchaProviderEnvelope 是 CAPTCHA provider 存入 dynamic_settings 的 JSON value。
-// 只含 kind 判别符与公开/密文块，绝不包含 enabled。
+// captchaProviderEnvelope CAPTCHA provider 存入 dynamic_settings 的 JSON value。
+// 只含 kind 判别符与公开/密文块。
 type captchaProviderEnvelope struct {
 	Kind             domain.ProviderKind `json:"kind"`
 	PublicConfig     json.RawMessage     `json:"public_config,omitempty"`
@@ -213,7 +203,7 @@ type captchaProviderEnvelope struct {
 	SecretCiphertext []byte              `json:"secret_ciphertext,omitempty"`
 }
 
-// authProviderEnvelope 是 OAuth/OIDC provider 存入 dynamic_settings 的 JSON value。
+// authProviderEnvelope OAuth/OIDC provider 存入 dynamic_settings 的 JSON value。
 type authProviderEnvelope struct {
 	Kind             domain.ProviderKind `json:"kind"`
 	Enabled          bool                `json:"enabled"`
@@ -223,8 +213,7 @@ type authProviderEnvelope struct {
 	SecretCiphertext []byte              `json:"secret_ciphertext,omitempty"`
 }
 
-// spamProviderEnvelope 是垃圾检测 provider 存入 dynamic_settings 的 JSON value。
-// 与 OAuth/OIDC 一样携带 enabled；本地词库渠道允许无 Secret 信封。
+// spamProviderEnvelope 垃圾检测 provider 存入 dynamic_settings 的 JSON value。
 type spamProviderEnvelope struct {
 	Kind             domain.ProviderKind `json:"kind"`
 	Enabled          bool                `json:"enabled"`
@@ -234,8 +223,7 @@ type spamProviderEnvelope struct {
 	SecretCiphertext []byte              `json:"secret_ciphertext,omitempty"`
 }
 
-// notificationProviderEnvelope 是通知通道 provider 存入 dynamic_settings 的 JSON value。
-// 与 OAuth/OIDC 一样携带 enabled；每平台实例级最多一个目标。
+// notificationProviderEnvelope 通知通道 provider 存入 dynamic_settings 的 JSON value。
 type notificationProviderEnvelope struct {
 	Kind             domain.ProviderKind `json:"kind"`
 	Enabled          bool                `json:"enabled"`
@@ -245,7 +233,7 @@ type notificationProviderEnvelope struct {
 	SecretCiphertext []byte              `json:"secret_ciphertext,omitempty"`
 }
 
-// decodedProviderRow 是 provider 动态设置行解码后的中间表示，供类型化方法过滤。
+// decodedProviderRow provider 动态设置行解码后的中间表示，供类型化方法过滤。
 type decodedProviderRow struct {
 	providerKey      string
 	kind             domain.ProviderKind
@@ -272,8 +260,7 @@ func (r *SettingsRepo) ListCaptchaProviders(ctx context.Context) ([]CaptchaProvi
 	return out, nil
 }
 
-// GetCaptchaProvider 按 provider key 查询 CAPTCHA 配置行；
-// 行缺失或类型不是 CAPTCHA 时返回 domain.ErrNotFound。
+// GetCaptchaProvider 查询 CAPTCHA 提供商配置。
 func (r *SettingsRepo) GetCaptchaProvider(ctx context.Context, providerKey string) (*CaptchaProviderRow, error) {
 	row, err := r.getProviderDecoded(ctx, providerKey)
 	if err != nil {
@@ -324,8 +311,7 @@ func (r *SettingsRepo) ListAuthProviders(ctx context.Context) ([]AuthProviderRow
 	return out, nil
 }
 
-// GetAuthProvider 按 provider key 查询 OAuth/OIDC 配置行；
-// 行缺失或类型不是 OAuth/OIDC 时返回 domain.ErrNotFound。
+// GetAuthProvider 查询 OAuth/OIDC 提供商配置。
 func (r *SettingsRepo) GetAuthProvider(ctx context.Context, providerKey string) (*AuthProviderRow, error) {
 	row, err := r.getProviderDecoded(ctx, providerKey)
 	if err != nil {
@@ -377,8 +363,7 @@ func (r *SettingsRepo) ListSpamProviders(ctx context.Context) ([]SpamProviderRow
 	return out, nil
 }
 
-// GetSpamProvider 按 provider key 查询垃圾检测配置行；
-// 行缺失或类型不是 spam 时返回 domain.ErrNotFound。
+// GetSpamProvider 查询垃圾检测提供商配置。
 func (r *SettingsRepo) GetSpamProvider(ctx context.Context, providerKey string) (*SpamProviderRow, error) {
 	row, err := r.getProviderDecoded(ctx, providerKey)
 	if err != nil {
@@ -430,8 +415,7 @@ func (r *SettingsRepo) ListNotificationProviders(ctx context.Context) ([]Notific
 	return out, nil
 }
 
-// GetNotificationProvider 按 provider key 查询通知通道配置行；
-// 行缺失或类型不是 notification 时返回 domain.ErrNotFound。
+// GetNotificationProvider 查询通知提供商配置。
 func (r *SettingsRepo) GetNotificationProvider(ctx context.Context, providerKey string) (*NotificationProviderRow, error) {
 	row, err := r.getProviderDecoded(ctx, providerKey)
 	if err != nil {
@@ -515,8 +499,7 @@ func (d decodedProviderRow) toNotificationRow() NotificationProviderRow {
 	}
 }
 
-// listProviderDecoded 返回全部 provider 配置行解码后的中间表示，按 key 升序；
-// 排除公开选择设置 captcha_provider 行。
+// listProviderDecoded 列出解码后的提供商配置。
 func (r *SettingsRepo) listProviderDecoded(ctx context.Context) ([]decodedProviderRow, error) {
 	var rows []model.DynamicSetting
 	if err := gormtx.DB(ctx, r.db).

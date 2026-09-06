@@ -11,16 +11,14 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+
+	"furtalk/internal/platform/urlx"
 )
 
-// dingtalkMaxRunes 是钉钉自定义机器人文本的保守字符上限，
-// 使完整 JSON 请求体远低于平台约 20KB 的上限。
+// dingtalkMaxRunes 是钉钉自定义机器人文本的字符预算。
 const dingtalkMaxRunes = 4000
 
 // dingtalkSign 计算钉钉自定义机器人签名：
-// string_to_sign = timestamp + "\n" + secret；
-// 以 secret 为 HMAC 密钥对 string_to_sign 计算 SHA-256，Base64 后再 URL 编码。
-// 与飞书的 HMAC 操作数顺序和 timestamp 单位不同，不能共享签名 helper。
 func dingtalkSign(secret string, timestamp int64) string {
 	stringToSign := fmt.Sprintf("%d\n%s", timestamp, secret)
 	mac := hmac.New(sha256.New, []byte(secret))
@@ -29,10 +27,8 @@ func dingtalkSign(secret string, timestamp int64) string {
 }
 
 // sendDingTalk 向钉钉自定义机器人 webhook 投递文本消息。
-// 配置签名密钥时把 timestamp（Unix 毫秒）与 sign 作为查询参数追加；
-// 强制空 mention 列表与 isAtAll=false；成功判定为 HTTP 2xx 且 errcode==0。
 func (d *Dispatcher) sendDingTalk(ctx context.Context, cfg Config, msg Message) error {
-	endpoint, err := url.Parse(cfg.WebhookURL)
+	endpoint, err := urlx.ParseHTTPS(cfg.WebhookURL)
 	if err != nil {
 		return &DeliveryError{Class: "network", Detail: "request_failed"}
 	}

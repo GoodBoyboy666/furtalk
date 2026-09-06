@@ -1,5 +1,4 @@
-// Package setting 是动态实例配置与提供商配置管理的业务层。
-// 只依赖 domain 与 repository；provider 密钥的加密/解密是本层的业务逻辑。
+// Package setting 动态实例配置与提供商配置管理的业务层。
 package setting
 
 import (
@@ -13,11 +12,11 @@ import (
 	"sync"
 
 	"furtalk/internal/domain"
-	"furtalk/internal/platform/value"
+	"furtalk/internal/platform/gravatar"
 	"furtalk/internal/repository"
 )
 
-// maxReplyDepthLimit 是最大回复深度的上限。
+// maxReplyDepthLimit 最大回复深度的上限。
 const maxReplyDepthLimit = 50
 
 // 已知设置 key 的稳定常量。
@@ -30,28 +29,28 @@ const (
 	SettingKeyPrivacy            = "privacy"
 	SettingKeyCaptchaPolicy      = "captcha_policy"
 	SettingKeyNotifications      = "notifications"
-	// SettingKeyCaptchaProvider 是当前选择的 CAPTCHA provider key 设置。
+	// SettingKeyCaptchaProvider 当前选择的 CAPTCHA provider key 设置。
 	// 它是公开 string 设置；值为 provider key，空串表示未选择。
 	SettingKeyCaptchaProvider = repository.CaptchaProviderSettingKey
 
-	// SettingKeyEmailDomainWhitelist 是公开 json 设置：非空时仅精确命中的域名允许注册。
+	// SettingKeyEmailDomainWhitelist 公开 json 设置：非空时仅精确命中的域名允许注册。
 	SettingKeyEmailDomainWhitelist = "email_domain_whitelist"
-	// SettingKeyEmailDomainBlacklist 是公开 json 设置：白名单为空时精确命中的域名拒绝注册。
+	// SettingKeyEmailDomainBlacklist 公开 json 设置：白名单为空时精确命中的域名拒绝注册。
 	SettingKeyEmailDomainBlacklist = "email_domain_blacklist"
-	// SettingKeyGravatarBaseURL 是公开 string 设置：头像 URL 基址。
+	// SettingKeyGravatarBaseURL 公开 string 设置：头像 URL 基址。
 	SettingKeyGravatarBaseURL = "gravatar_base_url"
-	// SettingKeyCommentSort 是公开 string 设置：widget 默认排序，允许 asc/desc/hot。
+	// SettingKeyCommentSort 公开 string 设置：widget 默认排序，允许 asc/desc/hot。
 	SettingKeyCommentSort = "comment_sort"
-	// SettingKeyEmojiCatalogURL 是公开 string 设置：widget 远程表情目录的绝对 HTTPS URL。
+	// SettingKeyEmojiCatalogURL 公开 string 设置：widget 远程表情目录的绝对 HTTPS URL。
 	// 空串表示不配置；query 允许，userinfo 与 fragment 不允许。
 	SettingKeyEmojiCatalogURL = "emoji_catalog_url"
-	// SettingKeyUserAgreementURL 是可选的用户协议绝对 HTTPS 地址。
+	// SettingKeyUserAgreementURL 可选的用户协议绝对 HTTPS 地址。
 	SettingKeyUserAgreementURL = "user_agreement_url"
-	// SettingKeyPrivacyPolicyURL 是可选的隐私政策绝对 HTTPS 地址。
+	// SettingKeyPrivacyPolicyURL 可选的隐私政策绝对 HTTPS 地址。
 	SettingKeyPrivacyPolicyURL = "privacy_policy_url"
-	// SettingKeyLegalConsentVersion 是管理员命令维护的协议同意版本。
+	// SettingKeyLegalConsentVersion 管理员命令维护的协议同意版本。
 	SettingKeyLegalConsentVersion = "legal_consent_version"
-	// SettingKeyBrandPrimaryColor 是 Web 界面品牌主色。
+	// SettingKeyBrandPrimaryColor  Web 界面品牌主色。
 	SettingKeyBrandPrimaryColor = "brand_primary_color"
 
 	// SettingKeyInternalEpoch 持久化 Widget 凭证代次的保留内部 key。
@@ -59,13 +58,13 @@ const (
 	SettingKeyInternalEpoch = "internal.widget_credential_epoch"
 )
 
-// internalKeyPrefix 是保留的内部设置 key 前缀。
+// internalKeyPrefix 保留的内部设置 key 前缀。
 const internalKeyPrefix = "internal."
 
-// settingKeyPattern 是公开设置 key 的格式：小写字母开头，可含小写字母、数字、下划线与点。
+// settingKeyPattern 公开设置 key 的格式：小写字母开头，可含小写字母、数字、下划线与点。
 var settingKeyPattern = regexp.MustCompile(`^[a-z][a-z0-9_.]*$`)
 
-// SettingType 是设置项的公开类型。
+// SettingType 设置项的公开类型。
 type SettingType string
 
 // 支持的公开设置类型。
@@ -76,7 +75,7 @@ const (
 	SettingTypeJSON    SettingType = "json"
 )
 
-// SettingItem 是一个公开设置项：唯一 key、声明类型与合法 JSON 值。
+// SettingItem 一个公开设置项：唯一 key、声明类型与合法 JSON 值。
 // 同一类型下 value 的 JSON 形态必须匹配，所有类型拒绝 null。
 type SettingItem struct {
 	Key   string      `json:"key"`
@@ -90,7 +89,7 @@ type knownSetting struct {
 	typ SettingType
 }
 
-// knownSettings 是已知顶层 key 与其固定类型的注册表。
+// knownSettings 已知顶层 key 与其固定类型的注册表。
 var knownSettings = []knownSetting{
 	{key: SettingKeyCommentMode, typ: SettingTypeString},
 	{key: SettingKeyModeration, typ: SettingTypeString},
@@ -112,13 +111,13 @@ var knownSettings = []knownSetting{
 	{key: SettingKeyBrandPrimaryColor, typ: SettingTypeString},
 }
 
-// View 是一次 Get 的原子快照：类型化设置与凭证 epoch。
+// View 一次 Get 的原子快照：类型化设置与凭证 epoch。
 type View struct {
 	Settings domain.Settings
 	Epoch    int64
 }
 
-// TxRunner 是设置用例依赖的事务边界，由 platform/gormtx.Runner 实现。
+// TxRunner 设置用例依赖的事务边界，由 platform/gormtx.Runner 实现。
 type TxRunner interface {
 	RunInTx(ctx context.Context, fn func(ctx context.Context) error) error
 }
@@ -144,8 +143,7 @@ type view struct {
 	epoch    int64
 }
 
-// NewService 构建设置服务，注入事务运行器与设置仓储。
-// CAPTCHA 选择校验器可通过 SetCaptchaValidator 安装。
+// NewService 构建设置服务。
 func NewService(txRunner TxRunner, settingsRepo *repository.SettingsRepo) *Service {
 	return &Service{txRunner: txRunner, settingsRepo: settingsRepo}
 }
@@ -170,7 +168,7 @@ func DefaultSettings() domain.Settings {
 		CaptchaProvider:      "",
 		EmailDomainWhitelist: []string{},
 		EmailDomainBlacklist: []string{},
-		GravatarBaseURL:      value.DefaultGravatarBaseURL,
+		GravatarBaseURL:      defaultGravatarBaseURL,
 		CommentSort:          string(domain.CommentSortAsc),
 		EmojiCatalogURL:      "",
 		UserAgreementURL:     "",
@@ -180,7 +178,7 @@ func DefaultSettings() domain.Settings {
 	}
 }
 
-// Validate 检查跨字段不变量和枚举/限制合法性。
+// Validate 校验设置快照。
 func Validate(s domain.Settings) error {
 	if s.CommentMode != domain.CommentModeAnonymous && s.CommentMode != domain.CommentModeAuthenticated {
 		return fmt.Errorf("%w: comment mode must be anonymous or authenticated", domain.ErrValidation)
@@ -205,36 +203,37 @@ func Validate(s domain.Settings) error {
 			return fmt.Errorf("%w: captcha action keys must not be empty", domain.ErrValidation)
 		}
 	}
-	if _, err := value.NormalizeEmailDomains(s.EmailDomainWhitelist); err != nil {
+	if _, err := normalizeEmailDomains(s.EmailDomainWhitelist); err != nil {
 		return fmt.Errorf("%w: %v", domain.ErrValidation, err)
 	}
-	if _, err := value.NormalizeEmailDomains(s.EmailDomainBlacklist); err != nil {
+	if _, err := normalizeEmailDomains(s.EmailDomainBlacklist); err != nil {
 		return fmt.Errorf("%w: %v", domain.ErrValidation, err)
 	}
-	if err := value.ValidateGravatarBaseURL(s.GravatarBaseURL); err != nil {
+	if err := gravatar.ValidateBaseURL(s.GravatarBaseURL); err != nil {
 		return fmt.Errorf("%w: %v", domain.ErrValidation, err)
 	}
 	if !domain.ValidPublicCommentSort(s.CommentSort) {
 		return fmt.Errorf("%w: comment sort must be asc, desc or hot", domain.ErrValidation)
 	}
-	if err := value.ValidateEmojiCatalogURL(s.EmojiCatalogURL); err != nil {
+	if err := validateEmojiCatalogURL(s.EmojiCatalogURL); err != nil {
 		return fmt.Errorf("%w: %v", domain.ErrValidation, err)
 	}
-	if err := value.ValidateHTTPSURL(s.UserAgreementURL); err != nil {
+	if err := validatePublicHTTPSURL(s.UserAgreementURL); err != nil {
 		return fmt.Errorf("%w: user agreement url: %v", domain.ErrValidation, err)
 	}
-	if err := value.ValidateHTTPSURL(s.PrivacyPolicyURL); err != nil {
+	if err := validatePublicHTTPSURL(s.PrivacyPolicyURL); err != nil {
 		return fmt.Errorf("%w: privacy policy url: %v", domain.ErrValidation, err)
 	}
 	if s.LegalConsentVersion <= 0 {
 		return fmt.Errorf("%w: legal consent version must be positive", domain.ErrValidation)
 	}
-	if err := value.ValidateHexColor(s.BrandPrimaryColor); err != nil {
+	if err := validateHexColor(s.BrandPrimaryColor); err != nil {
 		return fmt.Errorf("%w: brand primary color: %v", domain.ErrValidation, err)
 	}
 	return nil
 }
 
+// validPrivacyMode 校验隐私模式。
 func validPrivacyMode(mode string) bool {
 	return mode == "none" || mode == "coarse" || mode == "full"
 }
@@ -285,7 +284,6 @@ func validPublicKey(key string) bool {
 }
 
 // validateItemType 校验单个设置项的 type 支持且 value 形态匹配。
-// json 类型只接受 object/array，标量必须使用对应的 string/integer/boolean。
 func validateItemType(item SettingItem) error {
 	switch item.Type {
 	case SettingTypeString:
@@ -314,7 +312,6 @@ func validateItemType(item SettingItem) error {
 }
 
 // validatePatch 校验 PATCH 请求的结构：非空、key 格式、无重复、无保留前缀、
-// type 受支持、value 形态匹配，已知 key 的 type 必须与注册表一致。
 func validatePatch(items []SettingItem) error {
 	if len(items) == 0 {
 		return fmt.Errorf("%w: settings must not be empty", domain.ErrValidation)
@@ -400,7 +397,7 @@ func applyItems(s *domain.Settings, items []SettingItem) error {
 			if err := decodeInto(item.Value, &raw); err != nil {
 				return fmt.Errorf("setting: decode email domain whitelist: %w", err)
 			}
-			domains, err := value.NormalizeEmailDomains(raw)
+			domains, err := normalizeEmailDomains(raw)
 			if err != nil {
 				return fmt.Errorf("%w: %v", domain.ErrValidation, err)
 			}
@@ -410,7 +407,7 @@ func applyItems(s *domain.Settings, items []SettingItem) error {
 			if err := decodeInto(item.Value, &raw); err != nil {
 				return fmt.Errorf("setting: decode email domain blacklist: %w", err)
 			}
-			domains, err := value.NormalizeEmailDomains(raw)
+			domains, err := normalizeEmailDomains(raw)
 			if err != nil {
 				return fmt.Errorf("%w: %v", domain.ErrValidation, err)
 			}
@@ -422,13 +419,13 @@ func applyItems(s *domain.Settings, items []SettingItem) error {
 		case SettingKeyEmojiCatalogURL:
 			s.EmojiCatalogURL = strings.TrimSpace(item.Value.(string))
 		case SettingKeyUserAgreementURL:
-			url, err := value.NormalizeHTTPSURL(item.Value.(string))
+			url, err := normalizePublicHTTPSURL(item.Value.(string))
 			if err != nil {
 				return fmt.Errorf("%w: user agreement url: %v", domain.ErrValidation, err)
 			}
 			s.UserAgreementURL = url
 		case SettingKeyPrivacyPolicyURL:
-			url, err := value.NormalizeHTTPSURL(item.Value.(string))
+			url, err := normalizePublicHTTPSURL(item.Value.(string))
 			if err != nil {
 				return fmt.Errorf("%w: privacy policy url: %v", domain.ErrValidation, err)
 			}
@@ -440,7 +437,7 @@ func applyItems(s *domain.Settings, items []SettingItem) error {
 			}
 			s.LegalConsentVersion = int64(number)
 		case SettingKeyBrandPrimaryColor:
-			color, err := value.NormalizeHexColor(item.Value.(string))
+			color, err := normalizeHexColor(item.Value.(string))
 			if err != nil {
 				return fmt.Errorf("%w: brand primary color: %v", domain.ErrValidation, err)
 			}
@@ -550,8 +547,7 @@ func (s *Service) SetCaptchaValidator(v CaptchaSelectionValidator) {
 	}
 }
 
-// Get 返回类型化设置与凭证 epoch 的原子快照，
-// 首次访问时在短事务内播种缺失的默认项与内部 epoch 行。
+// Get 读取设置快照。
 func (s *Service) Get(ctx context.Context) (View, error) {
 	s.mu.RLock()
 	cached := s.cached
@@ -588,7 +584,7 @@ func (s *Service) Get(ctx context.Context) (View, error) {
 	return View{Settings: v.settings, Epoch: v.epoch}, nil
 }
 
-// seedDefaults 在短事务内播种全部缺失的默认项，重复播种由 ON CONFLICT DO NOTHING 兜底。
+// seedDefaults 初始化缺失的默认设置项。
 func (s *Service) seedDefaults(ctx context.Context) error {
 	missing := missingRows(nil)
 	if len(missing) == 0 {
@@ -600,8 +596,6 @@ func (s *Service) seedDefaults(ctx context.Context) error {
 }
 
 // Patch 校验局部输入后把变更合并到当前完整快照验证，再在单个事务内
-// upsert 提交项；comment_mode 实际变化时锁定读取并递增内部凭证代次。
-// 成功后返回完整的公开设置项列表，响应按 key 升序。
 func (s *Service) Patch(ctx context.Context, items []SettingItem, updatedBy int64) ([]SettingItem, error) {
 	if err := validatePatch(items); err != nil {
 		return nil, err
@@ -675,9 +669,7 @@ func (s *Service) Patch(ctx context.Context, items []SettingItem, updatedBy int6
 	return s.PublicItems(ctx)
 }
 
-// ResetLegalConsent atomically increments the administrator-owned consent
-// version. URL settings are not touched; cache invalidation happens only after
-// the transaction commits.
+// ResetLegalConsent 原子递增管理员维护的法律同意版本。
 func (s *Service) ResetLegalConsent(ctx context.Context, updatedBy int64) (int64, error) {
 	var next int64
 	err := s.txRunner.RunInTx(ctx, func(ctx context.Context) error {
@@ -747,6 +739,7 @@ func modeOf(rows []repository.DynamicSettingRow) string {
 	return ""
 }
 
+// invalidate 清除设置服务缓存。
 func (s *Service) invalidate() {
 	s.Invalidate()
 }

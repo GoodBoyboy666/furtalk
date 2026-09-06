@@ -1,74 +1,102 @@
-// Package identity 是身份与授权用例的业务层。
+// Package identity 身份与授权用例的业务层。
 // 数据经 repository 读写；设置策略与 OAuth provider 解密由 setting 层提供；
-// 本包不触碰 GORM，也不依赖任何 HTTP 框架。
 package identity
 
 import (
 	"context"
+	"errors"
 	"log/slog"
+	"sync"
 	"time"
 
 	"furtalk/internal/domain"
 	"furtalk/internal/platform/cache"
 	"furtalk/internal/platform/logging"
 	"furtalk/internal/platform/mailer"
+	"furtalk/internal/platform/onetime"
 	"furtalk/internal/repository"
-	"furtalk/internal/service/setting"
 )
+
+// mapEphemeralError 将临时缓存容量错误映射为领域错误。
+func (s *Service) mapEphemeralError(ctx context.Context, namespace string, err error) error {
+	if errors.Is(err, cache.ErrCapacity) {
+		s.logEphemeralCapacity(ctx, namespace)
+		return domain.ErrUnavailable
+	}
+	return err
+}
+
+// logEphemeralCapacity 记录临时缓存容量不足。
+func (s *Service) logEphemeralCapacity(ctx context.Context, namespace string) {
+	logging.FromContext(ctx, s.log).WarnContext(ctx, "ephemeral namespace capacity exhausted", "namespace", namespace)
+}
 
 // 邮箱验证码与密码策略的进程常量。
 const (
-	emailCodeTTL         = 5 * time.Minute
-	emailCodeMaxAttempts = 3
-	emailCodeLength      = 6
-	minPasswordLength    = 8
-	emailCodePurpose     = "login"
-	// passwordResetPurpose 是密码重置验证码的用途键，与登录验证码隔离。
-	passwordResetPurpose = "password_reset"
-	// passwordResetCodeTTL 是密码重置验证码的有效期。
+	emailCodeTTL            = 5 * time.Minute
+	emailCodeMaxAttempts    = 3
+	emailCodeLength         = 6
+	minPasswordLength       = 8
+	emailCodePurpose        = "login"
+	emailCodeLoginNamespace = "email_code_login"
+	emailCodeLoginPrefix    = "email-code:login:"
+	emailCodeLoginLimit     = 2000
+	// passwordResetPurpose 密码重置验证码的用途键，与登录验证码隔离。
+	passwordResetPurpose   = "password_reset"
+	passwordResetNamespace = "password_reset_code"
+	passwordResetPrefix    = "email-code:password_reset:"
+	passwordResetLimit     = 500
+	// passwordResetCodeTTL 密码重置验证码的有效期。
 	passwordResetCodeTTL = 10 * time.Minute
-	// passwordResetMaxAttempts 是密码重置验证码允许的最大失败次数。
+	// passwordResetMaxAttempts 密码重置验证码允许的最大失败次数。
 	passwordResetMaxAttempts = 5
-	// EmailCodeAction 是邮箱验证码发送的 CAPTCHA 策略操作键。
+	// EmailCodeAction 邮箱验证码发送的 CAPTCHA 策略操作键。
 	EmailCodeAction = "email_code"
-	// EmailCodeLoginAction 是邮箱验证码登录的 CAPTCHA 策略操作键。
+	// EmailCodeLoginAction 邮箱验证码登录的 CAPTCHA 策略操作键。
 	EmailCodeLoginAction = "email_code_login"
-	// PasswordLoginAction 是邮箱密码登录的 CAPTCHA 策略操作键。
+	// PasswordLoginAction 邮箱密码登录的 CAPTCHA 策略操作键。
 	PasswordLoginAction = "password_login"
-	// PasswordResetAction 是匿名请求密码重置验证码的 CAPTCHA 策略操作键。
+	// PasswordResetAction 匿名请求密码重置验证码的 CAPTCHA 策略操作键。
 	// 默认关闭；开启时只门禁请求验证码阶段，提交验证码与新密码不重复要求。
 	PasswordResetAction = "password_reset"
 )
 
 // Service 实现身份用例，是模块的门面。
 type Service struct {
-	txRunner       TxRunner
-	users          *repository.UserRepo
-	passkeys       *repository.PasskeyRepo
-	identities     *repository.ExternalIdentityRepo
-	prefs          *repository.PreferenceRepo
-	emailCodes     EmailCodeStore
-	ephemeral      EphemeralStore
-	cache          cache.Store
-	policy         PolicyReader
-	captchaPolicy  CaptchaPolicyReader
-	captcha        CaptchaVerifier
-	providers      OAuthProviderReader
-	signer         TokenSigner
-	mailer         mailer.Mailer
-	templates      mailer.TemplateRenderer
-	log            *slog.Logger
-	now            func() time.Time
-	codeTTL        time.Duration
-	maxAttempts    int
-	passkeyAdapter PasskeyAdapter
-	oauth          OAuthProviderFactory
-	baseURL        string
-	failFast       func(error)
-	commentDeleter domain.CommentDeleter
+	txRunner        TxRunner
+	users           *repository.UserRepo
+	passkeys        *repository.PasskeyRepo
+	identities      *repository.ExternalIdentityRepo
+	prefs           *repository.PreferenceRepo
+	emailCodes      EmailCodeStore
+	passkeyStore    *cache.Namespace
+	oauthState      *cache.Namespace
+	oauthHandoff    *cache.Namespace
+	cache           cache.Store
+	policy          PolicyReader
+	captchaPolicy   CaptchaPolicyReader
+	captcha         CaptchaVerifier
+	providers       OAuthProviderReader
+	signer          TokenSigner
+	mailer          mailer.Mailer
+	templates       mailer.TemplateRenderer
+	log             *slog.Logger
+	now             func() time.Time
+	codeTTL         time.Duration
+	maxAttempts     int
+	passkeyAdapter  PasskeyAdapter
+	oauth           OAuthProviderFactory
+	baseURL         string
+	failFast        func(error)
+	commentDeleter  domain.CommentDeleter
+	authzLocks      authzLockRegistry
+	adminMutation   sync.Mutex
+	credentialLocks userLockRegistry
+	admission       PasswordLoginAdmission
+	passwordBudget  *argon2Budget
 }
 
-// Dependencies 是 identity 模块构建函数的装配输入。
+// Dependencies  identity 模块构建函数的装配输入。
 type Dependencies struct {
 	TxRunner       TxRunner
 	Users          *repository.UserRepo
@@ -76,6 +104,7 @@ type Dependencies struct {
 	Identities     *repository.ExternalIdentityRepo
 	Prefs          *repository.PreferenceRepo
 	Cache          cache.Store
+	EmailCodes     EmailCodeStore
 	Policy         PolicyReader
 	CaptchaPolicy  CaptchaPolicyReader
 	Captcha        CaptchaVerifier
@@ -88,7 +117,14 @@ type Dependencies struct {
 	BaseURL        string
 	FailFast       func(error)
 	CommentDeleter domain.CommentDeleter
+	Admission      PasswordLoginAdmission
 	Logger         *slog.Logger
+}
+
+// PasswordLoginAdmission 公开密码登录使用的窄流程预算端口。
+// 生产实现由 app 注入共享的 ratelimit.PolicyRegistry。
+type PasswordLoginAdmission interface {
+	Allow(policy, subject string) bool
 }
 
 // NewService 构建身份服务。
@@ -97,14 +133,25 @@ func NewService(deps Dependencies) *Service {
 	if deps.FailFast == nil {
 		deps.FailFast = func(error) {}
 	}
+	emailCodes := deps.EmailCodes
+	if emailCodes == nil {
+		// 定向测试可能只提供精简缓存替身；生产装配提供有界适配器。
+		if _, ok := deps.Cache.(onetime.Backend); ok {
+			emailCodes, _ = NewEmailCodeStore(deps.Cache)
+		} else {
+			emailCodes = cacheEmailCodeStore{store: deps.Cache}
+		}
+	}
 	return &Service{
 		txRunner:       deps.TxRunner,
 		users:          deps.Users,
 		passkeys:       deps.Passkeys,
 		identities:     deps.Identities,
 		prefs:          deps.Prefs,
-		emailCodes:     cacheEmailCodeStore{store: deps.Cache},
-		ephemeral:      deps.Cache,
+		emailCodes:     emailCodes,
+		passkeyStore:   cache.NewNamespace(deps.Cache, "passkey", passkeyKeyPrefix, 2000),
+		oauthState:     cache.NewNamespace(deps.Cache, "oauth_state", oauthStatePrefix, 2000),
+		oauthHandoff:   cache.NewNamespace(deps.Cache, "oauth_handoff", oauthHandoffPrefix, 500),
 		cache:          deps.Cache,
 		policy:         deps.Policy,
 		captchaPolicy:  deps.CaptchaPolicy,
@@ -122,11 +169,34 @@ func NewService(deps Dependencies) *Service {
 		baseURL:        deps.BaseURL,
 		failFast:       deps.FailFast,
 		commentDeleter: deps.CommentDeleter,
+		admission:      deps.Admission,
+		passwordBudget: newArgon2Budget(publicPasswordLoginConcurrency),
 	}
 }
 
+// runAdminMutation 在进程内串行化管理员变更并锁定活跃管理员集合。
+func (s *Service) runAdminMutation(ctx context.Context, fn func(context.Context) error) error {
+	// 管理员互斥锁覆盖事务提交或回滚，提交前保持检查与写入的串行化。
+	return s.runAdminMutationWithActiveAdminCount(ctx, func(txCtx context.Context, _ int64) error {
+		return fn(txCtx)
+	})
+}
+
+// runAdminMutationWithActiveAdminCount 串行化破坏性管理员变更并返回活跃管理员数量。
+func (s *Service) runAdminMutationWithActiveAdminCount(ctx context.Context, fn func(context.Context, int64) error) error {
+	// 按稳定顺序锁定集合，使用方可据此执行多次移除。
+	s.adminMutation.Lock()
+	defer s.adminMutation.Unlock()
+	return s.txRunner.RunInTx(ctx, func(txCtx context.Context) error {
+		activeAdmins, err := s.users.LockActiveAdmins(txCtx)
+		if err != nil {
+			return err
+		}
+		return fn(txCtx, activeAdmins)
+	})
+}
+
 // SetCommentDeleter 安装评论清理写接口。
-// comment.Service 与 identity.Service 相互引用，组合根构造两侧后调用本方法接线。
 func (s *Service) SetCommentDeleter(w domain.CommentDeleter) {
 	s.commentDeleter = w
 }
@@ -145,7 +215,7 @@ type CaptchaPolicyReader interface {
 	CaptchaPolicy(ctx context.Context) (map[string]bool, error)
 }
 
-// CaptchaVerifier 是邮箱验证码发送前的 CAPTCHA 校验边界。
+// CaptchaVerifier 邮箱验证码发送前的 CAPTCHA 校验边界。
 // 只返回 nil 或 domain 的 CAPTCHA 错误（必要时包装这些 sentinel）。
 type CaptchaVerifier interface {
 	Verify(ctx context.Context, action, token string) error
@@ -157,10 +227,25 @@ type OAuthProviderReader interface {
 	OAuthProvider(ctx context.Context, providerKey string) (*AuthProvider, error)
 }
 
-// AuthProvider 是解密后的 OAuth/OIDC 提供商配置，由 setting 层提供。
-type AuthProvider = setting.AuthProvider
+// AuthProvider 是 identity 使用的 OAuth/OIDC 提供商映射。
+// 具体 setting DTO 由依赖组装入口逐字段转换，隔离不同 feature 的类型。
+type AuthProvider struct {
+	ProviderKey     string
+	Kind            domain.ProviderKind
+	Enabled         bool
+	Configured      bool
+	ClientID        string
+	ClientSecret    string
+	AuthURL         string
+	TokenURL        string
+	IssuerURL       string
+	InstanceURL     string
+	AppleTeamID     string
+	AppleKeyID      string
+	ApplePrivateKey string
+}
 
-// TxRunner 是身份用例使用的事务边界。
+// TxRunner 身份用例使用的事务边界。
 type TxRunner interface {
 	RunInTx(ctx context.Context, fn func(ctx context.Context) error) error
 }

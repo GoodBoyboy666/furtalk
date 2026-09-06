@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"furtalk/internal/domain"
-	"furtalk/internal/platform/value"
 )
 
 // TestDefaultsIncludeEmailAndAvatarSettings 验证默认设置携带空名单与默认 Gravatar 基址，
@@ -26,8 +25,8 @@ func TestDefaultsIncludeEmailAndAvatarSettings(t *testing.T) {
 	if len(view.Settings.EmailDomainBlacklist) != 0 {
 		t.Fatalf("blacklist = %v, want empty", view.Settings.EmailDomainBlacklist)
 	}
-	if view.Settings.GravatarBaseURL != value.DefaultGravatarBaseURL {
-		t.Fatalf("gravatar base = %q, want %q", view.Settings.GravatarBaseURL, value.DefaultGravatarBaseURL)
+	if view.Settings.GravatarBaseURL != defaultGravatarBaseURL {
+		t.Fatalf("gravatar base = %q, want %q", view.Settings.GravatarBaseURL, defaultGravatarBaseURL)
 	}
 
 	items, err := svc.PublicItems(ctx)
@@ -162,7 +161,7 @@ func TestPatchEmailDomainBatchAtomicity(t *testing.T) {
 	if len(view.Settings.EmailDomainWhitelist) != 0 {
 		t.Fatalf("whitelist must not be written by failed batch: %v", view.Settings.EmailDomainWhitelist)
 	}
-	if view.Settings.GravatarBaseURL != value.DefaultGravatarBaseURL {
+	if view.Settings.GravatarBaseURL != defaultGravatarBaseURL {
 		t.Fatalf("gravatar base must stay default: %q", view.Settings.GravatarBaseURL)
 	}
 }

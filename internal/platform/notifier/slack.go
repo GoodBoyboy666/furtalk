@@ -12,8 +12,6 @@ import (
 const slackMaxRunes = 4000
 
 // sendSlack 向 Slack incoming webhook 投递。
-// 顶层 text 且 mrkdwn/unfurl 全部关闭，阻止评论内容被解释为 mention 或触发外链抓取；
-// 成功判定为 HTTP 200 且响应正文恰为 "ok"。
 func (d *Dispatcher) sendSlack(ctx context.Context, cfg Config, msg Message) error {
 	text := composeText(msg.Title, msg.Text, msg.PageURL, slackMaxRunes)
 	payload := map[string]any{
@@ -43,6 +41,7 @@ func (d *Dispatcher) sendSlack(ctx context.Context, cfg Config, msg Message) err
 	if resp.StatusCode != http.StatusOK {
 		return httpStatusError(resp.StatusCode)
 	}
+	// Slack 成功响应允许首尾空白，正文必须为 ok。
 	if strings.TrimSpace(string(raw)) != "ok" {
 		return &DeliveryError{Class: "platform", Detail: "unexpected_body"}
 	}

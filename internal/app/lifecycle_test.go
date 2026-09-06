@@ -311,7 +311,7 @@ func TestJobSupervisorNoJobs(t *testing.T) {
 	}
 }
 
-// TestRateLimitCleanupJobContributed 证明限流清理任务由组合根贡献，
+// TestRateLimitCleanupJobContributed 证明限流清理任务由依赖组装入口贡献，
 // 可通过后台任务 supervisor 启动与停止。
 func TestRateLimitCleanupJobContributed(t *testing.T) {
 	limiter := ratelimit.New(10, 100)
