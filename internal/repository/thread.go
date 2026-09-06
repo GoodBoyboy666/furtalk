@@ -18,6 +18,13 @@ type ThreadRepo struct {
 	db *gorm.DB
 }
 
+// ThreadBatchTarget 标识站点内的评论区目标。
+// 即使 ID 全局唯一，目标仍保留 SiteID，确保批量写入显式执行站点隔离。
+type ThreadBatchTarget struct {
+	SiteID int64
+	ID     int64
+}
+
 // NewThreadRepo 构建Thread repository。
 func NewThreadRepo(db *gorm.DB) *ThreadRepo {
 	return &ThreadRepo{db: db}
@@ -78,6 +85,27 @@ func (r *ThreadRepo) GetBySiteAndID(ctx context.Context, siteID, threadID int64)
 	}
 	thread := row.ToThread()
 	return &thread, nil
+}
+
+// GetBySiteAndIDsLocked 按稳定 ID 顺序批量读取并锁定站点内的评论区。
+func (r *ThreadRepo) GetBySiteAndIDsLocked(ctx context.Context, siteID int64, ids []int64) ([]domain.Thread, error) {
+	// PostgreSQL 使用行锁；SQLite 分支省略 FOR UPDATE，沿用外层写事务的串行语义。
+	if len(ids) == 0 {
+		return []domain.Thread{}, nil
+	}
+	db := gormtx.DB(ctx, r.db)
+	if db.Dialector.Name() != "sqlite" {
+		db = db.Clauses(clause.Locking{Strength: "UPDATE"})
+	}
+	var rows []model.Thread
+	if err := db.Where("site_id = ? AND id IN ?", siteID, ids).Order("id ASC").Find(&rows).Error; err != nil {
+		return nil, fmt.Errorf("get threads locked by ids: %w", err)
+	}
+	out := make([]domain.Thread, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, row.ToThread())
+	}
+	return out, nil
 }
 
 // GetBySiteAndKeyLocked 在写事务内按 (site_id, page_key) 读取 thread，
@@ -221,6 +249,21 @@ func (r *ThreadRepo) UpdateCommentsEnabled(ctx context.Context, siteID, threadID
 	return r.UpdateThread(ctx, siteID, threadID, domain.ThreadPatch{CommentsEnabled: &enabled})
 }
 
+// UpdateCommentsEnabledMany 更新显式站点范围内的目标集合并返回影响行数。
+func (r *ThreadRepo) UpdateCommentsEnabledMany(ctx context.Context, siteID int64, ids []int64, enabled bool) (int64, error) {
+	// 调用前目标必须已由 service 加锁、校验并过滤 no-op。
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	result := gormtx.DB(ctx, r.db).Model(&model.Thread{}).
+		Where("site_id = ? AND id IN ?", siteID, ids).
+		Update("comments_enabled", enabled)
+	if result.Error != nil {
+		return 0, fmt.Errorf("update thread comments enabled: %w", result.Error)
+	}
+	return result.RowsAffected, nil
+}
+
 // DeleteThread 硬删除一条 thread。
 // 依赖数据库复合外键 ON DELETE CASCADE 移除该线程下全部评论，
 // 作者用户、站点与其他线程不受影响；跨站点或缺失的 thread 返回 domain.ErrNotFound。
@@ -235,4 +278,19 @@ func (r *ThreadRepo) DeleteThread(ctx context.Context, siteID, threadID int64) e
 		return domain.ErrNotFound
 	}
 	return nil
+}
+
+// DeleteThreads 删除显式站点范围内的目标集合并返回影响行数。
+func (r *ThreadRepo) DeleteThreads(ctx context.Context, siteID int64, ids []int64) (int64, error) {
+	// 调用方必须已锁定并完整校验目标。
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	result := gormtx.DB(ctx, r.db).
+		Where("site_id = ? AND id IN ?", siteID, ids).
+		Delete(&model.Thread{})
+	if result.Error != nil {
+		return 0, fmt.Errorf("delete threads: %w", result.Error)
+	}
+	return result.RowsAffected, nil
 }

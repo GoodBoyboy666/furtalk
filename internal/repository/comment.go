@@ -19,6 +19,24 @@ type CommentRepo struct {
 	db *gorm.DB
 }
 
+// CommentBatchTarget 标识带所属站点的评论目标。
+// 即使评论 ID 全局唯一，批量写入仍要求同时传入站点，确保每次写入都显式保留站点边界。
+type CommentBatchTarget struct {
+	SiteID int64
+	ID     int64
+}
+
+// CommentStatusBatchTarget 表示一组同构状态变更目标。
+// 调用方应先按相同字段值分组，再调用 UpdateStatusMany。
+type CommentStatusBatchTarget struct {
+	CommentBatchTarget
+	Status              domain.CommentStatus
+	StatusBeforeDelete  *domain.CommentStatus
+	PublishedAt         *time.Time
+	DeletedAt           *time.Time
+	PreservePublishedAt bool
+}
+
 // NewCommentRepo 构建评论repository。
 func NewCommentRepo(db *gorm.DB) *CommentRepo {
 	return &CommentRepo{db: db}
@@ -85,6 +103,27 @@ func (r *CommentRepo) FindGlobalByID(ctx context.Context, id int64) (*domain.Com
 	}
 	out := row.ToComment()
 	return &out, nil
+}
+
+// FindGlobalByIDsLocked 在写事务内按稳定 ID 顺序批量读取评论。
+func (r *CommentRepo) FindGlobalByIDsLocked(ctx context.Context, ids []int64) ([]domain.Comment, error) {
+	// PostgreSQL 分支对目标行加锁；SQLite 分支省略 FOR UPDATE，沿用事务写入锁语义。
+	if len(ids) == 0 {
+		return []domain.Comment{}, nil
+	}
+	db := gormtx.DB(ctx, r.db)
+	if db.Dialector.Name() != "sqlite" {
+		db = db.Clauses(clause.Locking{Strength: "UPDATE"})
+	}
+	var rows []model.Comment
+	if err := db.Where("id IN ?", ids).Order("id ASC").Find(&rows).Error; err != nil {
+		return nil, fmt.Errorf("find comments locked by ids: %w", err)
+	}
+	out := make([]domain.Comment, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, row.ToComment())
+	}
+	return out, nil
 }
 
 // CountCreatedByRanges 按多个 UTC 半开区间统计物理存在的评论行。
@@ -472,6 +511,30 @@ func (r *CommentRepo) UpdateStatus(ctx context.Context, siteID, id int64, status
 	return nil
 }
 
+// UpdateStatusMany 对显式站点范围内的一组同构目标更新状态并返回影响行数。
+func (r *CommentRepo) UpdateStatusMany(ctx context.Context, targets []CommentStatusBatchTarget) (int64, error) {
+	// 目标存在性已由同一事务中的锁定快照校验，本方法直接执行复数更新。
+	if len(targets) == 0 {
+		return 0, nil
+	}
+	db := gormtx.DB(ctx, r.db).Model(&model.Comment{})
+	db = whereCommentBatchTargets(db, targetsToCommentTargets(targets))
+	first := targets[0]
+	updates := map[string]any{
+		"status":               first.Status,
+		"status_before_delete": first.StatusBeforeDelete,
+		"deleted_at":           first.DeletedAt,
+	}
+	if !first.PreservePublishedAt {
+		updates["published_at"] = first.PublishedAt
+	}
+	result := db.Updates(updates)
+	if result.Error != nil {
+		return 0, fmt.Errorf("update comment statuses: %w", result.Error)
+	}
+	return result.RowsAffected, nil
+}
+
 // SetPinned 只更新站点范围内评论的置顶位并返回权威行。
 // 先读后写使 SQLite 在同值更新 RowsAffected 为零时仍保持幂等。
 func (r *CommentRepo) SetPinned(ctx context.Context, siteID, id int64, pinned bool) (*domain.Comment, error) {
@@ -503,6 +566,23 @@ func (r *CommentRepo) SetPinned(ctx context.Context, siteID, id int64, pinned bo
 	return &out, nil
 }
 
+// SetPinnedMany 对已校验的一组同构目标更新置顶标记并返回影响行数。
+func (r *CommentRepo) SetPinnedMany(ctx context.Context, targets []CommentBatchTarget, pinned bool) (int64, error) {
+	// 调用方已过滤 no-op，因此 RowsAffected 必须等于目标数量。
+	if len(targets) == 0 {
+		return 0, nil
+	}
+	result := whereCommentBatchTargets(gormtx.DB(ctx, r.db).Model(&model.Comment{}), targets).
+		Update("is_pinned", pinned)
+	if result.Error != nil {
+		if strings.Contains(strings.ToLower(result.Error.Error()), "check constraint") || strings.Contains(strings.ToLower(result.Error.Error()), "ck_comments_pinned_root") {
+			return 0, fmt.Errorf("set comments pinned: %w", domain.ErrConflict)
+		}
+		return 0, fmt.Errorf("set comments pinned: %w", result.Error)
+	}
+	return result.RowsAffected, nil
+}
+
 // DetachCommentChildren 解除保留评论对待删除评论的 parent_id / root_id 引用。
 // 必须在删除目标行前执行，复合外键 ON DELETE CASCADE 否则会误删回复；
 // 保留评论自身保持原状态与正文。同一事务内与 HardDelete 一起提交。
@@ -516,6 +596,22 @@ func (r *CommentRepo) DetachCommentChildren(ctx context.Context, siteID, id int6
 	if err := db.Model(&model.Comment{}).
 		Where("site_id = ? AND root_id = ?", siteID, id).
 		Update("root_id", nil).Error; err != nil {
+		return fmt.Errorf("detach comment root refs: %w", err)
+	}
+	return nil
+}
+
+// DetachCommentChildrenMany 用两次有界更新解除所有选中评论的 parent/root 引用。
+func (r *CommentRepo) DetachCommentChildrenMany(ctx context.Context, targets []CommentBatchTarget) error {
+	// 未选中的回复保持不变；调用方随后可安全删除目标行。
+	if len(targets) == 0 {
+		return nil
+	}
+	db := gormtx.DB(ctx, r.db)
+	if err := whereCommentReferenceTargets(db.Model(&model.Comment{}), targets, "parent_id").Update("parent_id", nil).Error; err != nil {
+		return fmt.Errorf("detach comment parent refs: %w", err)
+	}
+	if err := whereCommentReferenceTargets(db.Model(&model.Comment{}), targets, "root_id").Update("root_id", nil).Error; err != nil {
 		return fmt.Errorf("detach comment root refs: %w", err)
 	}
 	return nil
@@ -536,6 +632,19 @@ func (r *CommentRepo) HardDelete(ctx context.Context, siteID, id int64) error {
 	return nil
 }
 
+// HardDeleteMany 删除已校验的目标集合并返回影响行数。
+func (r *CommentRepo) HardDeleteMany(ctx context.Context, targets []CommentBatchTarget) (int64, error) {
+	// 调用方必须先解除需要保留的回复引用，并校验目标已加锁。
+	if len(targets) == 0 {
+		return 0, nil
+	}
+	result := whereCommentBatchTargets(gormtx.DB(ctx, r.db).Model(&model.Comment{}), targets).Delete(&model.Comment{})
+	if result.Error != nil {
+		return 0, fmt.Errorf("hard delete comments: %w", result.Error)
+	}
+	return result.RowsAffected, nil
+}
+
 // SoftDeleteByUser 单行软删除某用户自己发表的全部评论。
 // 只更新 comments.user_id 命中的行，其他用户的回复保持原状态；
 // 已删除的节点保持不变。
@@ -554,6 +663,26 @@ func (r *CommentRepo) SoftDeleteByUser(ctx context.Context, userID int64, now ti
 	return nil
 }
 
+// SoftDeleteByUsers 用一条语句软删除多个用户拥有的全部未删除评论。
+func (r *CommentRepo) SoftDeleteByUsers(ctx context.Context, userIDs []int64, now time.Time) (int64, error) {
+	// 返回物理影响行数仅供参考，因为用户可能没有评论。
+	if len(userIDs) == 0 {
+		return 0, nil
+	}
+	result := gormtx.DB(ctx, r.db).
+		Model(&model.Comment{}).
+		Where("user_id IN ? AND status <> ?", userIDs, domain.CommentStatusDeleted).
+		Updates(map[string]any{
+			"status_before_delete": gorm.Expr("status"),
+			"status":               domain.CommentStatusDeleted,
+			"deleted_at":           now,
+		})
+	if result.Error != nil {
+		return 0, fmt.Errorf("soft delete user comments: %w", result.Error)
+	}
+	return result.RowsAffected, nil
+}
+
 // DetachUserCommentChildren 在物理删除用户前解除保留评论对该用户评论的
 // parent_id / root_id 引用。非目标用户的评论引用目标用户评论时，清空引用，
 // 使删除用户只级联删除其本人评论，其他用户的回复保留。
@@ -570,6 +699,60 @@ func (r *CommentRepo) DetachUserCommentChildren(ctx context.Context, userID int6
 		return fmt.Errorf("detach user root refs: %w", err)
 	}
 	return nil
+}
+
+// DetachUserCommentChildrenMany 解除保留评论对多个目标用户评论的引用。
+func (r *CommentRepo) DetachUserCommentChildrenMany(ctx context.Context, userIDs []int64) error {
+	// 每个外键列只执行一次有界更新，删除用户后其他用户的回复仍保留。
+	if len(userIDs) == 0 {
+		return nil
+	}
+	db := gormtx.DB(ctx, r.db)
+	if err := db.Model(&model.Comment{}).
+		Where("user_id NOT IN ? AND parent_id IN (SELECT id FROM comments WHERE user_id IN ?)", userIDs, userIDs).
+		Update("parent_id", nil).Error; err != nil {
+		return fmt.Errorf("detach user parent refs: %w", err)
+	}
+	if err := db.Model(&model.Comment{}).
+		Where("user_id NOT IN ? AND root_id IN (SELECT id FROM comments WHERE user_id IN ?)", userIDs, userIDs).
+		Update("root_id", nil).Error; err != nil {
+		return fmt.Errorf("detach user root refs: %w", err)
+	}
+	return nil
+}
+
+// targetsToCommentTargets 提取状态变更目标的站点与 ID。
+func targetsToCommentTargets(targets []CommentStatusBatchTarget) []CommentBatchTarget {
+	out := make([]CommentBatchTarget, len(targets))
+	for i, target := range targets {
+		out[i] = target.CommentBatchTarget
+	}
+	return out
+}
+
+// whereCommentBatchTargets 为评论目标构造显式站点与 ID 谓词。
+func whereCommentBatchTargets(db *gorm.DB, targets []CommentBatchTarget) *gorm.DB {
+	if len(targets) == 0 {
+		return db.Where("1 = 0")
+	}
+	parts := make([]string, 0, len(targets))
+	args := make([]any, 0, len(targets)*2)
+	for _, target := range targets {
+		parts = append(parts, "(site_id = ? AND id = ?)")
+		args = append(args, target.SiteID, target.ID)
+	}
+	return db.Where("("+strings.Join(parts, " OR ")+")", args...)
+}
+
+// whereCommentReferenceTargets 为回复引用目标构造显式站点与 ID 谓词。
+func whereCommentReferenceTargets(db *gorm.DB, targets []CommentBatchTarget, refColumn string) *gorm.DB {
+	parts := make([]string, 0, len(targets))
+	args := make([]any, 0, len(targets)*2)
+	for _, target := range targets {
+		parts = append(parts, "(site_id = ? AND "+refColumn+" = ?)")
+		args = append(args, target.SiteID, target.ID)
+	}
+	return db.Where("("+strings.Join(parts, " OR ")+")", args...)
 }
 
 // applyCursor 向查询追加 (created_at, id) keyset 谓词。

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -12,7 +13,9 @@ import (
 	"furtalk/internal/platform/database"
 	"furtalk/internal/repository/model"
 
+	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 // newThreadTestDB 打开临时 SQLite 数据库并迁移线程相关表。
@@ -90,6 +93,29 @@ func TestThreadRepoUpdateCommentsEnabledRoundTrip(t *testing.T) {
 
 	if _, err := repo.UpdateCommentsEnabled(ctx, site.ID+999, thread.ID, false); !errors.Is(err, domain.ErrNotFound) {
 		t.Fatalf("cross-site update error = %v, want ErrNotFound", err)
+	}
+}
+
+// TestThreadRepoGetBySiteAndIDsLockedPostgresSQL verifies batch lock SQL.
+func TestThreadRepoGetBySiteAndIDsLockedPostgresSQL(t *testing.T) {
+	sqliteDB := newThreadTestDB(t)
+	sqlDB, err := sqliteDB.DB()
+	if err != nil {
+		t.Fatalf("get sql.DB: %v", err)
+	}
+	capture := &publicSQLCapture{Interface: logger.Default}
+	postgresDB, err := gorm.Open(postgres.New(postgres.Config{
+		Conn: sqlDB, PreferSimpleProtocol: true,
+	}), &gorm.Config{DryRun: true, Logger: capture})
+	if err != nil {
+		t.Fatalf("init postgres dry run db: %v", err)
+	}
+	if _, err := NewThreadRepo(postgresDB).GetBySiteAndIDsLocked(context.Background(), 7, []int64{9, 3}); err != nil {
+		t.Fatalf("batch locked thread read: %v", err)
+	}
+	sql := strings.ToUpper(capture.sql)
+	if !strings.Contains(sql, "SITE_ID") || !strings.Contains(sql, " IN ") || !strings.Contains(sql, "ORDER BY ID ASC") || !strings.Contains(sql, "FOR UPDATE") {
+		t.Fatalf("batch thread lock SQL = %q, want site/IN/order/lock", capture.sql)
 	}
 }
 

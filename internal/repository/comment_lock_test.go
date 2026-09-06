@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -13,6 +14,17 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
+
+type countingSQLLogger struct {
+	logger.Interface
+	count atomic.Int64
+}
+
+// Trace counts SQL statements emitted by a repository operation.
+func (l *countingSQLLogger) Trace(ctx context.Context, begin time.Time, fc func() (string, int64), err error) {
+	l.count.Add(1)
+	l.Interface.Trace(ctx, begin, fc, err)
+}
 
 // TestCommentRepoFindBySiteAndIDLockedPostgresSQL verifies the parent read uses
 // FOR UPDATE under PostgreSQL while retaining the site boundary.
@@ -74,5 +86,45 @@ func TestCommentRepoFindBySiteAndIDLockedSQLite(t *testing.T) {
 		return nil
 	}); err != nil {
 		t.Fatalf("locked SQLite read: %v", err)
+	}
+}
+
+// TestCommentRepoFindGlobalByIDsLockedPostgresSQL verifies batch lock SQL.
+func TestCommentRepoFindGlobalByIDsLockedPostgresSQL(t *testing.T) {
+	sqliteDB := newCommentFKTestDB(t)
+	sqlDB, err := sqliteDB.DB()
+	if err != nil {
+		t.Fatalf("get sql.DB: %v", err)
+	}
+	capture := &publicSQLCapture{Interface: logger.Default}
+	postgresDB, err := gorm.Open(postgres.New(postgres.Config{
+		Conn: sqlDB, PreferSimpleProtocol: true,
+	}), &gorm.Config{DryRun: true, Logger: capture})
+	if err != nil {
+		t.Fatalf("init postgres dry run db: %v", err)
+	}
+	if _, err := NewCommentRepo(postgresDB).FindGlobalByIDsLocked(context.Background(), []int64{9, 3}); err != nil {
+		t.Fatalf("batch locked comment read: %v", err)
+	}
+	sql := strings.ToUpper(capture.sql)
+	if !strings.Contains(sql, " IN ") || !strings.Contains(sql, "ORDER BY ID ASC") || !strings.Contains(sql, "FOR UPDATE") {
+		t.Fatalf("batch comment lock SQL = %q, want IN/order/lock", capture.sql)
+	}
+}
+
+// TestCommentRepoFindGlobalByIDsLockedUsesOneSelectForManyIDs verifies one read for many ids.
+func TestCommentRepoFindGlobalByIDsLockedUsesOneSelectForManyIDs(t *testing.T) {
+	db := newCommentFKTestDB(t)
+	counter := &countingSQLLogger{Interface: logger.Discard}
+	db.Logger = counter
+	ids := make([]int64, 100)
+	for i := range ids {
+		ids[i] = int64(i + 1)
+	}
+	if _, err := NewCommentRepo(db).FindGlobalByIDsLocked(context.Background(), ids); err != nil {
+		t.Fatalf("batch comment read: %v", err)
+	}
+	if got := counter.count.Load(); got != 1 {
+		t.Fatalf("batch comment read issued %d SQL statements, want one SELECT", got)
 	}
 }

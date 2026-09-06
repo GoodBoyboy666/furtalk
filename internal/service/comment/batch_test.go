@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"furtalk/internal/domain"
 	"furtalk/internal/repository"
@@ -95,5 +96,65 @@ func TestAdminBatchRequiresConfirmationAndRejectsDuplicates(t *testing.T) {
 		IDs: []int64{fx.Published, fx.Published}, Action: AdminBatchPending,
 	}); !errors.Is(err, domain.ErrValidation) {
 		t.Fatalf("duplicate ids = %v", err)
+	}
+}
+
+// TestAdminBatchPreservesMixedStatusFields verifies mixed state fields stay per target.
+func TestAdminBatchPreservesMixedStatusFields(t *testing.T) {
+	db := ownerTestDB(t)
+	fx := seedOwnerComments(t, db)
+	svc := ownerService(db, domain.UserDeleteModeSoft)
+	ctx := context.Background()
+
+	result, err := svc.AdminBatch(ctx, AdminBatchInput{
+		IDs: []int64{fx.Spam, fx.Published, fx.Pending}, Action: AdminBatchSoftDelete, Confirm: true,
+	})
+	if err != nil || result.ChangedCount != 3 {
+		t.Fatalf("mixed soft-delete result = %+v, err=%v", result, err)
+	}
+	repo := repository.NewCommentRepo(db)
+	for id, wantBefore := range map[int64]domain.CommentStatus{
+		fx.Published: domain.CommentStatusPublished,
+		fx.Pending:   domain.CommentStatusPending,
+		fx.Spam:      domain.CommentStatusSpam,
+	} {
+		row, findErr := repo.FindGlobalByID(ctx, id)
+		if findErr != nil {
+			t.Fatalf("find soft-deleted comment %d: %v", id, findErr)
+		}
+		if row.Status != domain.CommentStatusDeleted || row.StatusBeforeDelete == nil || *row.StatusBeforeDelete != wantBefore {
+			t.Fatalf("comment %d after soft delete = %+v, want history %s", id, row, wantBefore)
+		}
+	}
+	publishedBeforeRestore, err := repo.FindGlobalByID(ctx, fx.Published)
+	if err != nil || publishedBeforeRestore.PublishedAt == nil {
+		t.Fatalf("published source timestamp = %+v, err=%v", publishedBeforeRestore, err)
+	}
+
+	result, err = svc.AdminBatch(ctx, AdminBatchInput{
+		IDs: []int64{fx.Spam, fx.Published, fx.Pending}, Action: AdminBatchRestore,
+	})
+	if err != nil || result.ChangedCount != 3 {
+		t.Fatalf("mixed restore result = %+v, err=%v", result, err)
+	}
+	for id, wantStatus := range map[int64]domain.CommentStatus{
+		fx.Published: domain.CommentStatusPublished,
+		fx.Pending:   domain.CommentStatusPending,
+		fx.Spam:      domain.CommentStatusSpam,
+	} {
+		row, findErr := repo.FindGlobalByID(ctx, id)
+		if findErr != nil {
+			t.Fatalf("find restored comment %d: %v", id, findErr)
+		}
+		if row.Status != wantStatus || row.StatusBeforeDelete != nil || row.DeletedAt != nil {
+			t.Fatalf("comment %d after restore = %+v, want %s and cleared deletion fields", id, row, wantStatus)
+		}
+		if wantStatus == domain.CommentStatusPublished {
+			if row.PublishedAt == nil || !row.PublishedAt.After(publishedBeforeRestore.PublishedAt.Add(-time.Microsecond)) {
+				t.Fatalf("published comment timestamp = %v, want refreshed timestamp", row.PublishedAt)
+			}
+		} else if row.PublishedAt != nil {
+			t.Fatalf("non-published comment %d published_at = %v, want nil", id, row.PublishedAt)
+		}
 	}
 }

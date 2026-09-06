@@ -175,16 +175,25 @@ func NewService(deps Dependencies) *Service {
 	}
 }
 
-// runAdminMutation 在进程内串行化管理员变更，并在事务内锁定活跃管理员集合。
-// 管理员互斥锁覆盖事务提交或回滚，避免提交前释放造成新的检查竞态。
+// runAdminMutation 在进程内串行化管理员变更并锁定活跃管理员集合。
 func (s *Service) runAdminMutation(ctx context.Context, fn func(context.Context) error) error {
+	// 管理员互斥锁覆盖事务提交或回滚，避免提交前释放造成新的检查竞态。
+	return s.runAdminMutationWithActiveAdminCount(ctx, func(txCtx context.Context, _ int64) error {
+		return fn(txCtx)
+	})
+}
+
+// runAdminMutationWithActiveAdminCount 串行化破坏性管理员变更并返回活跃管理员数量。
+func (s *Service) runAdminMutationWithActiveAdminCount(ctx context.Context, fn func(context.Context, int64) error) error {
+	// 按稳定顺序锁定集合，调用方据此模拟多次移除。
 	s.adminMutation.Lock()
 	defer s.adminMutation.Unlock()
 	return s.txRunner.RunInTx(ctx, func(txCtx context.Context) error {
-		if _, err := s.users.LockActiveAdmins(txCtx); err != nil {
+		activeAdmins, err := s.users.LockActiveAdmins(txCtx)
+		if err != nil {
 			return err
 		}
-		return fn(txCtx)
+		return fn(txCtx, activeAdmins)
 	})
 }
 

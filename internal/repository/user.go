@@ -19,6 +19,27 @@ type UserRepo struct {
 	db *gorm.DB
 }
 
+// FindByIDsLocked 按稳定 ID 顺序批量读取用户并在 PostgreSQL 锁定目标行。
+func (r *UserRepo) FindByIDsLocked(ctx context.Context, ids []int64) ([]domain.User, error) {
+	// SQLite 分支省略 FOR UPDATE，依赖外层事务写锁；缺失 ID 由 service 确定性校验。
+	if len(ids) == 0 {
+		return []domain.User{}, nil
+	}
+	db := gormtx.DB(ctx, r.db)
+	if db.Dialector.Name() != "sqlite" {
+		db = db.Clauses(clause.Locking{Strength: "UPDATE"})
+	}
+	var rows []model.User
+	if err := db.Where("id IN ?", ids).Order("id ASC").Find(&rows).Error; err != nil {
+		return nil, fmt.Errorf("find users locked by ids: %w", err)
+	}
+	out := make([]domain.User, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, row.ToUser())
+	}
+	return out, nil
+}
+
 // NewUserRepo 构建用户仓储。
 func NewUserRepo(db *gorm.DB) *UserRepo {
 	return &UserRepo{db: db}
@@ -159,6 +180,102 @@ func (r *UserRepo) UpdateAdmin(ctx context.Context, id int64, fields map[string]
 		return fmt.Errorf("admin update user: %w", result.Error)
 	}
 	return nil
+}
+
+// UpdateStatusMany 将已校验目标集合更新为同一状态并返回影响行数。
+func (r *UserRepo) UpdateStatusMany(ctx context.Context, ids []int64, status domain.UserStatus) (int64, error) {
+	// 调用前由 service 过滤 no-op 目标。
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	result := gormtx.DB(ctx, r.db).Model(&model.User{}).
+		Where("id IN ?", ids).
+		Update("status", status)
+	if result.Error != nil {
+		return 0, fmt.Errorf("update user statuses: %w", result.Error)
+	}
+	return result.RowsAffected, nil
+}
+
+// MarkEmailVerifiedMany 为已校验目标集合设置邮箱验证时间。
+func (r *UserRepo) MarkEmailVerifiedMany(ctx context.Context, ids []int64, verifiedAt time.Time) (int64, error) {
+	// 目标已在同一事务内锁定并预校验，条件仅用于防止意外重复写入。
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	result := gormtx.DB(ctx, r.db).Model(&model.User{}).
+		Where("id IN ? AND email_verified_at IS NULL", ids).
+		Update("email_verified_at", verifiedAt)
+	if result.Error != nil {
+		return 0, fmt.Errorf("mark users email verified: %w", result.Error)
+	}
+	return result.RowsAffected, nil
+}
+
+// UnverifyEmailMany 清除已校验目标集合的邮箱验证时间。
+func (r *UserRepo) UnverifyEmailMany(ctx context.Context, ids []int64) (int64, error) {
+	// 目标已在同一事务内锁定并预校验，条件仅用于防止意外重复写入。
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	result := gormtx.DB(ctx, r.db).Model(&model.User{}).
+		Where("id IN ? AND email_verified_at IS NOT NULL", ids).
+		Update("email_verified_at", nil)
+	if result.Error != nil {
+		return 0, fmt.Errorf("unverify users email: %w", result.Error)
+	}
+	return result.RowsAffected, nil
+}
+
+// SoftDeleteMany 将已校验目标集合标记为删除。
+func (r *UserRepo) SoftDeleteMany(ctx context.Context, ids []int64, deletedAt time.Time) (int64, error) {
+	// 数据库表达式保留每行删除前的生命周期状态；调用前目标已锁定并预校验。
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	result := gormtx.DB(ctx, r.db).Model(&model.User{}).
+		Where("id IN ? AND status <> ?", ids, domain.UserStatusDeleted).
+		Updates(map[string]any{
+			"status":               domain.UserStatusDeleted,
+			"status_before_delete": gorm.Expr("status"),
+			"deleted_at":           deletedAt,
+		})
+	if result.Error != nil {
+		return 0, fmt.Errorf("soft delete users: %w", result.Error)
+	}
+	return result.RowsAffected, nil
+}
+
+// RestoreMany 将已校验的已删除目标恢复到记录的生命周期状态。
+func (r *UserRepo) RestoreMany(ctx context.Context, ids []int64) (int64, error) {
+	// 缺少或非法历史时回退为 active，与单用户恢复保持一致。
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	result := gormtx.DB(ctx, r.db).Model(&model.User{}).
+		Where("id IN ? AND status = ?", ids, domain.UserStatusDeleted).
+		Updates(map[string]any{
+			"status":               gorm.Expr("CASE WHEN status_before_delete IN (?, ?) THEN status_before_delete ELSE ? END", domain.UserStatusActive, domain.UserStatusDisabled, domain.UserStatusActive),
+			"status_before_delete": nil,
+			"deleted_at":           nil,
+		})
+	if result.Error != nil {
+		return 0, fmt.Errorf("restore users: %w", result.Error)
+	}
+	return result.RowsAffected, nil
+}
+
+// DeleteMany 物理删除已校验的用户目标集合。
+func (r *UserRepo) DeleteMany(ctx context.Context, ids []int64) (int64, error) {
+	// 调用前目标必须已在同一事务内锁定并完成业务校验。
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	result := gormtx.DB(ctx, r.db).Where("id IN ?", ids).Delete(&model.User{})
+	if result.Error != nil {
+		return 0, fmt.Errorf("delete users: %w", result.Error)
+	}
+	return result.RowsAffected, nil
 }
 
 // CountByRoleAndStatus 精确统计匹配某角色与状态的用户数。

@@ -12,11 +12,24 @@ func (s *Service) SoftDeleteUserComments(ctx context.Context, userID int64) erro
 	return s.comments.SoftDeleteByUser(ctx, userID, s.now())
 }
 
+// SoftDeleteUsersComments 批量软删除多个用户发表的全部评论。
+func (s *Service) SoftDeleteUsersComments(ctx context.Context, userIDs []int64) error {
+	// 供身份服务批量用户删除使用；评论仓储在单条 UPDATE 中处理整个用户集合。
+	_, err := s.comments.SoftDeleteByUsers(ctx, userIDs, s.now())
+	return err
+}
+
 // PrepareUserHardDelete 在物理删除用户前解除保留评论对该用户评论的
 // parent_id / root_id 引用，使删除只级联移除该用户自己的评论。
 // 供身份服务在硬删除用户时统一协调，须与用户行删除在同一事务内。
 func (s *Service) PrepareUserHardDelete(ctx context.Context, userID int64) error {
 	return s.comments.DetachUserCommentChildren(ctx, userID)
+}
+
+// PrepareUsersHardDelete 批量解除保留评论对多个目标用户评论的 parent/root 引用。
+func (s *Service) PrepareUsersHardDelete(ctx context.Context, userIDs []int64) error {
+	// 该操作必须与身份删除在同一个事务内提交。
+	return s.comments.DetachUserCommentChildrenMany(ctx, userIDs)
 }
 
 // DeleteByOwner 删除当前用户自己的某条评论，按 user_delete_mode 软删或硬删。

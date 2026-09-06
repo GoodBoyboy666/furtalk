@@ -21,7 +21,11 @@ type PreferenceWriter interface {
 type CommentDeleter interface {
 	// SoftDeleteUserComments 单行软删除用户发表的全部评论，不处理其他用户的回复。
 	SoftDeleteUserComments(ctx context.Context, userID int64) error
+	// SoftDeleteUsersComments 批量软删除多个用户发表的全部评论，不处理其他用户的回复。
+	SoftDeleteUsersComments(ctx context.Context, userIDs []int64) error
 	// PrepareUserHardDelete 在物理删除用户前解除保留评论对该用户评论的
 	// parent_id / root_id 引用，须与用户行删除在同一事务内提交。
 	PrepareUserHardDelete(ctx context.Context, userID int64) error
+	// PrepareUsersHardDelete 批量解除保留评论对多个目标用户评论的引用。
+	PrepareUsersHardDelete(ctx context.Context, userIDs []int64) error
 }

@@ -68,3 +68,26 @@ func TestUserRepoLockQueries(t *testing.T) {
 		t.Fatalf("locked user read in transaction: %v", err)
 	}
 }
+
+// TestUserRepoFindByIDsLockedPostgresSQL verifies batch lock SQL.
+func TestUserRepoFindByIDsLockedPostgresSQL(t *testing.T) {
+	sqliteDB := newUserTestDB(t)
+	sqlDB, err := sqliteDB.DB()
+	if err != nil {
+		t.Fatalf("get sql.DB: %v", err)
+	}
+	capture := &publicSQLCapture{Interface: logger.Default}
+	postgresDB, err := gorm.Open(postgres.New(postgres.Config{
+		Conn: sqlDB, PreferSimpleProtocol: true,
+	}), &gorm.Config{DryRun: true, Logger: capture})
+	if err != nil {
+		t.Fatalf("init postgres dry run db: %v", err)
+	}
+	if _, err := NewUserRepo(postgresDB).FindByIDsLocked(context.Background(), []int64{9, 3}); err != nil {
+		t.Fatalf("batch locked user read: %v", err)
+	}
+	sql := strings.ToUpper(capture.sql)
+	if !strings.Contains(sql, " IN ") || !strings.Contains(sql, "ORDER BY ID ASC") || !strings.Contains(sql, "FOR UPDATE") {
+		t.Fatalf("batch user lock SQL = %q, want IN/order/lock", capture.sql)
+	}
+}

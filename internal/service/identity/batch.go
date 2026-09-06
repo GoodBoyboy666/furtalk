@@ -2,6 +2,7 @@ package identity
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"time"
 
@@ -45,9 +46,8 @@ type AdminUserBatchInput struct {
 }
 
 // AdminBatchUsers 在一个数据库事务内执行用户批量命令。
-// 所有目标按稳定 ID 顺序校验和写入；任一目标失败都会回滚整批。
-// 授权缓存只在事务成功提交后失效。
 func (s *Service) AdminBatchUsers(ctx context.Context, input AdminUserBatchInput) (*domain.BatchResult, error) {
+	// 目标一次锁定读取，所有业务校验通过后按字段分组复数写入；授权缓存只在提交后失效。
 	if input.ActingID <= 0 || len(input.IDs) == 0 || len(input.IDs) > maxUserBatchLimit || !ValidAdminUserBatchAction(string(input.Action)) {
 		return nil, domain.ErrValidation
 	}
@@ -65,36 +65,25 @@ func (s *Service) AdminBatchUsers(ctx context.Context, input AdminUserBatchInput
 
 	result := &domain.BatchResult{Action: string(input.Action), RequestedCount: len(ids)}
 	changedAuthz := make([]int64, 0, len(ids))
-	runInTx := s.txRunner.RunInTx
-	switch input.Action {
-	case AdminUserBatchDisable, AdminUserBatchSoftDelete, AdminUserBatchHardDelete:
-		runInTx = s.runAdminMutation
-	}
-	err := runInTx(ctx, func(txCtx context.Context) error {
-		now := s.now().UTC().Truncate(time.Microsecond)
-		for _, id := range ids {
-			user, findErr := s.users.FindByID(txCtx, id)
-			if findErr != nil {
-				return &domain.ResourceError{ResourceID: id, Err: findErr}
-			}
-
-			changed, authzChanged, actionErr := s.applyAdminUserBatchAction(txCtx, input.ActingID, user, input.Action, now)
-			if actionErr != nil {
-				return &domain.ResourceError{ResourceID: id, Err: actionErr}
-			}
-			if changed {
-				result.ChangedCount++
-			} else {
-				result.UnchangedCount++
-			}
-			if authzChanged {
-				changedAuthz = append(changedAuthz, id)
-			}
+	changedIDs := make([]int64, 0, len(ids))
+	activeAdminCount := int64(0)
+	destructive := input.Action == AdminUserBatchDisable || input.Action == AdminUserBatchSoftDelete || input.Action == AdminUserBatchHardDelete
+	transaction := s.txRunner.RunInTx
+	if destructive {
+		err := s.runAdminMutationWithActiveAdminCount(ctx, func(txCtx context.Context, count int64) error {
+			activeAdminCount = count
+			return s.applyAdminUserBatchPlan(txCtx, input, ids, result, &changedAuthz, &changedIDs, &activeAdminCount)
+		})
+		if err != nil {
+			return nil, err
 		}
-		return nil
-	})
-	if err != nil {
-		return nil, err
+	} else {
+		err := transaction(ctx, func(txCtx context.Context) error {
+			return s.applyAdminUserBatchPlan(txCtx, input, ids, result, &changedAuthz, &changedIDs, &activeAdminCount)
+		})
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	for _, id := range changedAuthz {
@@ -105,81 +94,184 @@ func (s *Service) AdminBatchUsers(ctx context.Context, input AdminUserBatchInput
 	return result, nil
 }
 
-// applyAdminUserBatchAction 返回实际写入与是否需要失效授权缓存。
-func (s *Service) applyAdminUserBatchAction(ctx context.Context, actingID int64, user *domain.User, action AdminUserBatchAction, now time.Time) (changed, authzChanged bool, err error) {
+// applyAdminUserBatchPlan 锁定并加载目标集合，校验动作后执行有界分组写入。
+func (s *Service) applyAdminUserBatchPlan(ctx context.Context, input AdminUserBatchInput, ids []int64, result *domain.BatchResult, changedAuthz, changedIDs *[]int64, activeAdminCount *int64) error {
+	// destructive action 的活跃管理员数量由 runAdminMutation 提供，供计划阶段模拟递减。
+	users, err := s.users.FindByIDsLocked(ctx, ids)
+	if err != nil {
+		return err
+	}
+	byID := make(map[int64]*domain.User, len(users))
+	for i := range users {
+		user := users[i]
+		byID[user.ID] = &user
+	}
+
+	now := s.now().UTC().Truncate(time.Microsecond)
+	statusIDs := make([]int64, 0, len(ids))
+	verifyIDs := make([]int64, 0, len(ids))
+	unverifyIDs := make([]int64, 0, len(ids))
+	for _, id := range ids {
+		user := byID[id]
+		if user == nil {
+			return &domain.ResourceError{ResourceID: id, Err: domain.ErrNotFound}
+		}
+
+		changed, authzChanged, actionErr := planAdminUserBatchAction(input.ActingID, user, input.Action, activeAdminCount)
+		if actionErr != nil {
+			return &domain.ResourceError{ResourceID: id, Err: actionErr}
+		}
+		if !changed {
+			result.UnchangedCount++
+			continue
+		}
+		result.ChangedCount++
+		*changedIDs = append(*changedIDs, id)
+		if authzChanged {
+			*changedAuthz = append(*changedAuthz, id)
+		}
+		switch input.Action {
+		case AdminUserBatchEnable, AdminUserBatchDisable, AdminUserBatchSoftDelete, AdminUserBatchRestore:
+			statusIDs = append(statusIDs, id)
+		case AdminUserBatchVerifyEmail:
+			verifyIDs = append(verifyIDs, id)
+		case AdminUserBatchUnverifyEmail:
+			unverifyIDs = append(unverifyIDs, id)
+		}
+	}
+
+	switch input.Action {
+	case AdminUserBatchEnable:
+		affected, writeErr := s.users.UpdateStatusMany(ctx, statusIDs, domain.UserStatusActive)
+		if err := requireUserRows("enable users", affected, writeErr, len(statusIDs)); err != nil {
+			return err
+		}
+	case AdminUserBatchDisable:
+		affected, writeErr := s.users.UpdateStatusMany(ctx, statusIDs, domain.UserStatusDisabled)
+		if err := requireUserRows("disable users", affected, writeErr, len(statusIDs)); err != nil {
+			return err
+		}
+	case AdminUserBatchVerifyEmail:
+		affected, writeErr := s.users.MarkEmailVerifiedMany(ctx, verifyIDs, now)
+		if err := requireUserRows("verify users", affected, writeErr, len(verifyIDs)); err != nil {
+			return err
+		}
+	case AdminUserBatchUnverifyEmail:
+		affected, writeErr := s.users.UnverifyEmailMany(ctx, unverifyIDs)
+		if err := requireUserRows("unverify users", affected, writeErr, len(unverifyIDs)); err != nil {
+			return err
+		}
+	case AdminUserBatchSoftDelete:
+		affected, writeErr := s.users.SoftDeleteMany(ctx, *changedIDs, now)
+		if err := requireUserRows("soft delete users", affected, writeErr, len(*changedIDs)); err != nil {
+			return err
+		}
+		if s.commentDeleter != nil {
+			if err := s.commentDeleter.SoftDeleteUsersComments(ctx, *changedIDs); err != nil {
+				return err
+			}
+		}
+	case AdminUserBatchHardDelete:
+		if s.commentDeleter != nil {
+			if err := s.commentDeleter.PrepareUsersHardDelete(ctx, *changedIDs); err != nil {
+				return err
+			}
+		}
+		affected, writeErr := s.users.DeleteMany(ctx, *changedIDs)
+		if err := requireUserRows("hard delete users", affected, writeErr, len(*changedIDs)); err != nil {
+			return err
+		}
+	case AdminUserBatchRestore:
+		affected, writeErr := s.users.RestoreMany(ctx, statusIDs)
+		if err := requireUserRows("restore users", affected, writeErr, len(statusIDs)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// planAdminUserBatchAction 校验单个用户动作并生成变化标记。
+func planAdminUserBatchAction(actingID int64, user *domain.User, action AdminUserBatchAction, activeAdminCount *int64) (changed, authzChanged bool, err error) {
+	// destructive action 按排序目标递减 activeAdminCount，保持第一个失败 ID 的最后管理员语义。
 	if user == nil {
 		return false, false, domain.ErrNotFound
 	}
-
 	switch action {
-	case AdminUserBatchEnable, AdminUserBatchDisable,
-		AdminUserBatchVerifyEmail, AdminUserBatchUnverifyEmail:
+	case AdminUserBatchEnable, AdminUserBatchDisable, AdminUserBatchVerifyEmail, AdminUserBatchUnverifyEmail:
 		if user.Status == domain.UserStatusDeleted {
 			return false, false, domain.ErrConflict
 		}
 	}
-
 	switch action {
 	case AdminUserBatchEnable:
-		if user.Status == domain.UserStatusActive {
-			return false, false, nil
-		}
-		if err := s.ensureNotLastActiveAdmin(ctx, user, domain.UserStatusActive); err != nil {
-			return false, false, err
-		}
-		if err := s.users.UpdateAdmin(ctx, user.ID, map[string]any{"status": domain.UserStatusActive}); err != nil {
-			return false, false, err
-		}
-		return true, true, nil
-
+		return user.Status != domain.UserStatusActive, user.Status != domain.UserStatusActive, nil
 	case AdminUserBatchDisable:
 		if user.Status == domain.UserStatusDisabled {
 			return false, false, nil
 		}
-		if err := s.ensureNotLastActiveAdmin(ctx, user, domain.UserStatusDisabled); err != nil {
-			return false, false, err
-		}
-		if err := s.users.UpdateAdmin(ctx, user.ID, map[string]any{"status": domain.UserStatusDisabled}); err != nil {
+		if err := planAdminAdminRemoval(user, domain.UserStatusDisabled, activeAdminCount); err != nil {
 			return false, false, err
 		}
 		return true, true, nil
-
 	case AdminUserBatchVerifyEmail:
-		if user.EmailVerifiedAt != nil {
-			return false, false, nil
-		}
-		changed, err := s.users.MarkEmailVerified(ctx, user.ID, now)
-		return changed, false, err
-
+		return user.EmailVerifiedAt == nil, false, nil
 	case AdminUserBatchUnverifyEmail:
-		if user.EmailVerifiedAt == nil {
+		return user.EmailVerifiedAt != nil, false, nil
+	case AdminUserBatchSoftDelete:
+		if actingID == user.ID {
+			return false, false, domain.ErrForbidden
+		}
+		if user.Status == domain.UserStatusDeleted {
 			return false, false, nil
 		}
-		if err := s.users.UpdateAdmin(ctx, user.ID, map[string]any{"email_verified_at": nil}); err != nil {
+		if err := planAdminAdminRemoval(user, domain.UserStatusDeleted, activeAdminCount); err != nil {
 			return false, false, err
 		}
-		return true, false, nil
-
-	case AdminUserBatchSoftDelete:
-		changed, err := s.applyAdminUserDeleteInTx(ctx, actingID, user, domain.UserDeleteModeSoft, true, now)
-		return changed, changed, err
-
+		return true, true, nil
 	case AdminUserBatchHardDelete:
-		changed, err := s.applyAdminUserDeleteInTx(ctx, actingID, user, domain.UserDeleteModeHard, true, now)
-		return changed, changed, err
-
+		if actingID == user.ID {
+			return false, false, domain.ErrForbidden
+		}
+		if err := planAdminAdminRemoval(user, domain.UserStatusDeleted, activeAdminCount); err != nil {
+			return false, false, err
+		}
+		return true, true, nil
 	case AdminUserBatchRestore:
-		changed, err := s.restoreAdminUserInTx(ctx, user)
-		return changed, changed, err
-
+		return user.Status == domain.UserStatusDeleted, user.Status == domain.UserStatusDeleted, nil
 	default:
 		return false, false, domain.ErrValidation
 	}
 }
 
-// applyAdminUserDeleteInTx performs the shared account/comment deletion
-// transition. The caller must already be inside the database transaction.
+// planAdminAdminRemoval 模拟移除一个活跃管理员并检查最后管理员保护。
+func planAdminAdminRemoval(user *domain.User, nextStatus domain.UserStatus, activeAdminCount *int64) error {
+	if user.Role != domain.RoleAdmin || user.Status != domain.UserStatusActive || nextStatus == domain.UserStatusActive {
+		return nil
+	}
+	if activeAdminCount == nil {
+		return domain.ErrLastAdmin
+	}
+	if *activeAdminCount <= 1 {
+		return domain.ErrLastAdmin
+	}
+	*activeAdminCount = *activeAdminCount - 1
+	return nil
+}
+
+// requireUserRows 校验批量用户写入的实际影响行数。
+func requireUserRows(operation string, count int64, err error, expected int) error {
+	if err != nil {
+		return err
+	}
+	if count != int64(expected) {
+		return fmt.Errorf("%s affected %d rows, expected %d", operation, count, expected)
+	}
+	return nil
+}
+
+// applyAdminUserDeleteInTx 执行单用户账号与评论删除转换。
 func (s *Service) applyAdminUserDeleteInTx(ctx context.Context, actingID int64, user *domain.User, mode string, confirm bool, now time.Time) (bool, error) {
+	// 批量管理使用上面的复数 repository 原语；此 helper 保留单用户窄接口。
 	if user == nil {
 		return false, domain.ErrNotFound
 	}
@@ -220,10 +312,9 @@ func (s *Service) applyAdminUserDeleteInTx(ctx context.Context, actingID int64, 
 	return true, nil
 }
 
-// restoreAdminUserInTx restores only the account lifecycle. It returns false
-// for an already-live account so batch callers can count a no-op while the
-// single-user entry point can preserve its conflict response.
+// restoreAdminUserInTx 恢复单个用户账号生命周期并返回是否发生变化。
 func (s *Service) restoreAdminUserInTx(ctx context.Context, user *domain.User) (bool, error) {
+	// 已存活账号返回 false，批量入口计为 no-op，单用户入口再映射为冲突。
 	if user == nil {
 		return false, domain.ErrNotFound
 	}
@@ -236,10 +327,9 @@ func (s *Service) restoreAdminUserInTx(ctx context.Context, user *domain.User) (
 	return true, nil
 }
 
-// ensureNotLastActiveAdmin enforces the guard for transitions that remove an
-// active administrator. The desired status is passed explicitly so callers
-// cannot accidentally apply the guard to a no-op or a non-admin user.
+// ensureNotLastActiveAdmin 为单用户转换执行最后活跃管理员保护。
 func (s *Service) ensureNotLastActiveAdmin(ctx context.Context, user *domain.User, nextStatus domain.UserStatus) error {
+	// 批量转换使用锁定的活跃管理员数量和排序模拟。
 	if user.Role != domain.RoleAdmin || user.Status != domain.UserStatusActive || nextStatus == domain.UserStatusActive {
 		return nil
 	}
