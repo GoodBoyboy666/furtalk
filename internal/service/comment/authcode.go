@@ -16,13 +16,10 @@ const authCodeKeyPrefix = "authcode:"
 
 var errAuthCodeCapacity = errors.New("comment: widget authorization namespace capacity")
 
-// cacheAuthCodeStore 基于缓存存储实现一次性授权码存取。
-// 底层缓存负责 TTL 与原子消费（内存后端互斥，Redis 后端 GETDEL）。
 type cacheAuthCodeStore struct {
 	cache *cache.Namespace
 }
 
-// NewAuthCodeStore 在缓存存储之上构建授权码存取实现。
 func NewAuthCodeStore(store cache.Store) AuthCodeStore {
 	return cacheAuthCodeStore{cache: cache.NewNamespace(store, "widget_auth_code", authCodeKeyPrefix, 1000)}
 }

@@ -1,5 +1,4 @@
 // Package bootstrap 首次运行引导用例的业务层。
-// 创建首位管理员经 FirstAdminWriter 由 identity 代写用户；
 package bootstrap
 
 import (
@@ -26,7 +25,7 @@ const (
 	minNicknameLength = 1
 )
 
-// AdminInput 携带创建首位管理员所需的 setup token 与管理员凭据。
+// AdminInput 创建首位管理员所需的 setup token 与管理员凭据。
 type AdminInput struct {
 	SetupToken string
 	Email      string
@@ -34,7 +33,7 @@ type AdminInput struct {
 	Password   string
 }
 
-// TxRunner 提供 bootstrap 用例使用的事务边界。
+// TxRunner 提供 bootstrap 事务支持。
 type TxRunner interface {
 	RunInTx(ctx context.Context, fn func(ctx context.Context) error) error
 }
@@ -65,7 +64,7 @@ func newSetupToken(ttl time.Duration) (*setupToken, error) {
 	}, nil
 }
 
-// plaintext 返回用于控制台输出的活跃令牌。
+// plaintext 返回令牌。
 func (t *setupToken) plaintext(now time.Time) (string, bool) {
 	if t == nil {
 		return "", false
@@ -78,7 +77,7 @@ func (t *setupToken) plaintext(now time.Time) (string, bool) {
 	return t.raw, true
 }
 
-// verify 以常量时间原子地检查并消费令牌。
+// verify 以固定时间原子地检查并消费令牌。
 func (t *setupToken) verify(candidate string, now time.Time) bool {
 	if t == nil {
 		return false
@@ -95,7 +94,6 @@ func (t *setupToken) verify(candidate string, now time.Time) bool {
 	return true
 }
 
-// Service 实现首次运行引导用例。
 type Service struct {
 	txRunner  TxRunner
 	users     FirstAdminWriter
@@ -106,7 +104,6 @@ type Service struct {
 }
 
 // NewService 构建 bootstrap 服务。
-// 仅当实例尚未初始化且初始化状态读取成功时才生成并输出明文 setup token；
 func NewService(txRunner TxRunner, users FirstAdminWriter, bootstrap *repository.BootstrapRepo, log *slog.Logger) (*Service, error) {
 	log = logging.Normalize(log)
 	s := &Service{txRunner: txRunner, users: users, bootstrap: bootstrap, log: log, now: time.Now}
@@ -116,8 +113,7 @@ func NewService(txRunner TxRunner, users FirstAdminWriter, bootstrap *repository
 	}
 	initialized, err := s.bootstrap.IsInitialized(context.Background())
 	if err != nil {
-		// 状态读取失败时不得输出明文 token，仅记录错误，仍可继续提供
-		// status/bootstrap/admin 接口以暴露可用性。
+		// 状态读取失败时仅记录错误
 		log.WarnContext(context.Background(), "bootstrap state read failed", logging.Error(err))
 		return s, nil
 	}
