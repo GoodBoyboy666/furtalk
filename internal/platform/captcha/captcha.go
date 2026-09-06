@@ -211,19 +211,3 @@ func Probe(ctx context.Context, cfg Config, client *http.Client) error {
 	resp.Body.Close()
 	return nil
 }
-
-// PolicyCheck 对单个 action 执行策略检查。
-// 验证器缺失或不可用返回 ErrUnavailable，
-// 缺少令牌返回 ErrRequired，被拒绝的令牌返回 ErrFailed。
-func PolicyCheck(ctx context.Context, verifier Verifier, policy map[string]bool, action, token string) error {
-	if !policy[action] {
-		return nil
-	}
-	if verifier == nil {
-		return ErrUnavailable
-	}
-	if strings.TrimSpace(token) == "" {
-		return ErrRequired
-	}
-	return verifier.Verify(ctx, action, token)
-}

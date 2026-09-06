@@ -8,7 +8,6 @@ import (
 
 	"furtalk/internal/domain"
 	"furtalk/internal/middleware"
-	"furtalk/internal/platform/captcha"
 	"furtalk/internal/platform/httpx"
 	"furtalk/internal/service/comment"
 	"furtalk/internal/service/identity"
@@ -31,7 +30,7 @@ func (r replyCaptchaSettings) CommentPolicy(context.Context) (domain.CommentPoli
 	}, nil
 }
 
-// replyCaptchaVerifier 返回固定的 platform CAPTCHA 错误并记录 token。
+// replyCaptchaVerifier 返回固定的 domain CAPTCHA 错误并记录 token。
 type replyCaptchaVerifier struct {
 	err   error
 	token string
@@ -85,14 +84,14 @@ func TestFirstPartyReplyCaptchaHTTPMatrix(t *testing.T) {
 		{
 			name:     "verifier failure maps to 403 and token passes through",
 			policy:   map[string]bool{comment.CommentAction: true},
-			verifier: &replyCaptchaVerifier{err: captcha.ErrFailed},
+			verifier: &replyCaptchaVerifier{err: domain.ErrCaptchaFailed},
 			body:     `{"body":"a reply","captcha_token":"abc"}`,
 			wantCode: http.StatusForbidden,
 		},
 		{
 			name:     "provider unavailable maps to 503",
 			policy:   map[string]bool{comment.CommentAction: true},
-			verifier: &replyCaptchaVerifier{err: captcha.ErrUnavailable},
+			verifier: &replyCaptchaVerifier{err: domain.ErrCaptchaUnavailable},
 			body:     `{"body":"a reply","captcha_token":"abc"}`,
 			wantCode: http.StatusServiceUnavailable,
 		},

@@ -108,7 +108,7 @@ type CaptchaProviderReader interface {
 	SelectedCaptcha(ctx context.Context) (*CaptchaConfig, error)
 }
 
-// CaptchaVerifier 评论与 widget 会话用例消费的 CAPTCHA 接口。
+// CaptchaVerifier 评论与 widget 会话用例消费的 domain CAPTCHA 错误接口。
 type CaptchaVerifier interface {
 	Verify(ctx context.Context, action, token string) error
 }
