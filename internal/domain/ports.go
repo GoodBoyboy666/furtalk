@@ -3,7 +3,6 @@ package domain
 import "context"
 
 // UserWriter 由 identity.Service 实现，供其他 service 代写用户数据。
-// 写经拥有方 service 保证领域不变量（邮箱规范化、角色约束、加密）不被绕过。
 type UserWriter interface {
 	// CreateUser 由用户所有者校验当前注册策略后创建用户，邮箱冲突时返回 ErrConflict。
 	CreateUser(ctx context.Context, user *User) error
