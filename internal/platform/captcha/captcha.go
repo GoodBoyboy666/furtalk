@@ -1,4 +1,4 @@
-// Package captcha 实现 CAPTCHA Provider适配器（Turnstile、reCAPTCHA、hCaptcha 与 CAP），
+// Package captcha 实现 Turnstile、reCAPTCHA、hCaptcha 与 CAP 的 CAPTCHA 适配器。
 package captcha
 
 import (
@@ -35,7 +35,7 @@ type Verifier interface {
 	Verify(ctx context.Context, action, token string) error
 }
 
-// Config 配置。
+// Config 携带 CAPTCHA provider 的静态配置。
 type Config struct {
 	Provider  string
 	SiteKey   string
@@ -45,7 +45,7 @@ type Config struct {
 	Timeout   time.Duration
 }
 
-// New 构建适配器。
+// New 根据配置创建 CAPTCHA 验证器。
 func New(cfg Config, client *http.Client) (Verifier, error) {
 	endpoint, err := siteVerifyURL(cfg)
 	if err != nil {
@@ -87,6 +87,7 @@ func siteVerifyURL(cfg Config) (string, error) {
 	}
 }
 
+// validatedOverrideOrDefault 校验覆盖地址并在未设置时返回默认地址。
 func validatedOverrideOrDefault(override, fallback string) (string, error) {
 	if strings.TrimSpace(override) == "" {
 		return fallback, nil
@@ -126,9 +127,6 @@ type siteVerifyResponse struct {
 }
 
 // Verify 验证。
-// CAP 使用官方 JSON 协议；其余Provider沿用 form-urlencoded 协议。
-// 仅当Provider确认成功，且上报的 action 与 hostname 匹配时返回 nil，否则返回错误。
-// 网络错误、非 200 响应和解析失败都返回 ErrUnavailable。
 func (c *verifier) Verify(ctx context.Context, action, token string) error {
 	if strings.TrimSpace(token) == "" {
 		return fmt.Errorf("%w: empty token", ErrFailed)
@@ -179,7 +177,7 @@ func (c *verifier) Verify(ctx context.Context, action, token string) error {
 	if c.cfg.Hostname != "" && out.Hostname != "" && out.Hostname != c.cfg.Hostname {
 		return fmt.Errorf("%w: hostname mismatch", ErrFailed)
 	}
-	// 目前就Turnstile提供action验证
+	// 响应包含 action 时，非空的期望 action 必须匹配。
 	if action != "" && out.Action != "" && out.Action != action {
 		return fmt.Errorf("%w: action mismatch", ErrFailed)
 	}
@@ -187,7 +185,6 @@ func (c *verifier) Verify(ctx context.Context, action, token string) error {
 }
 
 // Probe 不提交 token 的情况下对Provider的 siteverify Endpoint执行连通性检查。
-// 任何 HTTP 响应（2xx 或 4xx）都证明可达；传输错误或缺少Provider配置则返回错误。
 func Probe(ctx context.Context, cfg Config, client *http.Client) error {
 	v, err := New(cfg, client)
 	if err != nil {

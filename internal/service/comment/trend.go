@@ -13,7 +13,6 @@ import (
 const maxCommentTrendDays = 30
 
 // AdminCommentTrend 返回管理概览使用的按日新建评论趋势。
-// timezone 必须是有效的 IANA 时区名，统计包含当天并按本地午夜划分区间。
 func (s *Service) AdminCommentTrend(ctx context.Context, days int, timezone string) (*domain.CommentTrend, error) {
 	if days != 7 && days != 30 {
 		return nil, fmt.Errorf("%w: trend days must be 7 or 30", domain.ErrValidation)

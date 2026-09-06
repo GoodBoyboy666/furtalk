@@ -19,7 +19,7 @@ type PreferenceWriter interface {
 // CommentDeleter 由 comment.Service 实现，供 identity 在删除用户时协调评论清理：
 // 软删除用户只处理其本人评论，硬删除前解除保留评论对目标用户评论的引用。
 type CommentDeleter interface {
-	// SoftDeleteUserComments 单行软删除用户发表的全部评论，不处理其他用户的回复。
+	// SoftDeleteUserComments 软删除用户发表的全部评论，不处理其他用户的回复。
 	SoftDeleteUserComments(ctx context.Context, userID int64) error
 	// SoftDeleteUsersComments 批量软删除多个用户发表的全部评论，不处理其他用户的回复。
 	SoftDeleteUsersComments(ctx context.Context, userIDs []int64) error

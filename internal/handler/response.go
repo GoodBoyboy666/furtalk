@@ -10,7 +10,7 @@ import (
 	"furtalk/internal/service/setting"
 )
 
-// 响应 DTO 与映射。字段名与历史 HTTP 契约完全一致。
+// 响应 DTO 与领域数据映射。
 
 // NotificationPreferencesResponse 通知偏好的响应体。
 type NotificationPreferencesResponse struct {
@@ -34,6 +34,7 @@ type MeResponse struct {
 	UpdatedAt               time.Time                       `json:"updated_at"`
 }
 
+// toMeResponse 将身份资料转换为当前用户响应。
 func toMeResponse(p identity.Profile) MeResponse {
 	return MeResponse{
 		ID:            strconv.FormatInt(p.ID, 10),
@@ -92,8 +93,7 @@ type OAuthCompleteRequest struct {
 	Handoff string `json:"handoff"`
 }
 
-// OAuthCompleteResponse  OAuth 登录完成端点的成功响应，
-// redirect 已净化的站内回跳地址。
+// OAuthCompleteResponse 表示 OAuth 登录完成后的站内回跳地址。
 type OAuthCompleteResponse struct {
 	Redirect string `json:"redirect"`
 }
@@ -135,6 +135,7 @@ type AdminUserListResponse struct {
 	Total int64               `json:"total"`
 }
 
+// toAdminUserResponse 将身份资料转换为管理端用户响应。
 func toAdminUserResponse(p identity.Profile) AdminUserResponse {
 	return AdminUserResponse{
 		ID:            strconv.FormatInt(p.ID, 10),
@@ -166,7 +167,7 @@ type RuntimeConfigResponse struct {
 	Captcha         *RuntimeCaptchaResponse `json:"captcha"`
 }
 
-// CaptchaActionResponse 单个 action 的公共 CAPTCHA 渲染投影。
+// CaptchaActionResponse 单个 action 的公共 CAPTCHA 渲染配置。
 // APIEndpoint 仅 CAP 返回，已解析为官方 widget 端点。
 type CaptchaActionResponse struct {
 	Required    bool   `json:"required"`
@@ -175,7 +176,7 @@ type CaptchaActionResponse struct {
 	APIEndpoint string `json:"api_endpoint,omitempty"`
 }
 
-// RuntimeCaptchaResponse  widget 运行时配置中的按 action CAPTCHA 投影。
+// RuntimeCaptchaResponse 是 widget 运行时配置中的按 action CAPTCHA 设置。
 type RuntimeCaptchaResponse struct {
 	Comment *CaptchaActionResponse `json:"comment,omitempty"`
 }
@@ -420,6 +421,7 @@ type AdminThreadListResponse struct {
 	Total   int64                 `json:"total"`
 }
 
+// toRuntimeConfigResponse 将运行时配置转换为 Widget 响应。
 func toRuntimeConfigResponse(rc *comment.RuntimeConfig) RuntimeConfigResponse {
 	resp := RuntimeConfigResponse{
 		SiteID:          strconv.FormatInt(rc.SiteID, 10),
@@ -440,6 +442,7 @@ func toRuntimeConfigResponse(rc *comment.RuntimeConfig) RuntimeConfigResponse {
 	return resp
 }
 
+// toCaptchaActionResponse 将 CAPTCHA 配置转换为响应数据。
 func toCaptchaActionResponse(projection comment.CaptchaProjection) *CaptchaActionResponse {
 	return &CaptchaActionResponse{
 		Required:    projection.Required,
@@ -449,6 +452,7 @@ func toCaptchaActionResponse(projection comment.CaptchaProjection) *CaptchaActio
 	}
 }
 
+// toThreadCommentsResponse 将线程评论视图转换为响应数据。
 func toThreadCommentsResponse(view *comment.ThreadView) ThreadCommentsResponse {
 	resp := ThreadCommentsResponse{
 		Thread: ThreadMetaResponse{
@@ -468,6 +472,7 @@ func toThreadCommentsResponse(view *comment.ThreadView) ThreadCommentsResponse {
 	return resp
 }
 
+// toCommentResponse 将评论视图转换为公开响应。
 func toCommentResponse(view comment.CommentView) CommentResponse {
 	return CommentResponse{
 		ID:              strconv.FormatInt(view.ID, 10),
@@ -493,6 +498,7 @@ func toCommentResponse(view comment.CommentView) CommentResponse {
 	}
 }
 
+// toLikeResponse 将点赞结果转换为响应数据。
 func toLikeResponse(result *comment.LikeResult) LikeResponse {
 	return LikeResponse{
 		CommentID: strconv.FormatInt(result.CommentID, 10),
@@ -501,6 +507,7 @@ func toLikeResponse(result *comment.LikeResult) LikeResponse {
 	}
 }
 
+// toLatestCommentListResponse 将最新评论视图转换为响应数据。
 func toLatestCommentListResponse(views []comment.LatestCommentView) LatestCommentListResponse {
 	comments := make([]LatestCommentResponse, 0, len(views))
 	for _, v := range views {
@@ -509,6 +516,7 @@ func toLatestCommentListResponse(views []comment.LatestCommentView) LatestCommen
 	return LatestCommentListResponse{Comments: comments}
 }
 
+// toLatestCommentResponse 将最新评论视图转换为响应数据。
 func toLatestCommentResponse(view comment.LatestCommentView) LatestCommentResponse {
 	return LatestCommentResponse{
 		ID:              strconv.FormatInt(view.ID, 10),
@@ -531,6 +539,7 @@ func toLatestCommentResponse(view comment.LatestCommentView) LatestCommentRespon
 	}
 }
 
+// toMeCommentResponse 将本人评论视图转换为响应数据。
 func toMeCommentResponse(view comment.OwnerCommentView) MeCommentResponse {
 	return MeCommentResponse{
 		ID:              strconv.FormatInt(view.ID, 10),
@@ -557,6 +566,7 @@ func toMeCommentResponse(view comment.OwnerCommentView) MeCommentResponse {
 	}
 }
 
+// toMeCommentDetailResponse 将本人评论详情转换为响应数据。
 func toMeCommentDetailResponse(detail comment.OwnerCommentDetail) MeCommentDetailResponse {
 	return MeCommentDetailResponse{
 		MeCommentResponse: toMeCommentResponse(detail.View),
@@ -564,6 +574,7 @@ func toMeCommentDetailResponse(detail comment.OwnerCommentDetail) MeCommentDetai
 	}
 }
 
+// toCommentDeleteResponse 将评论删除结果转换为响应数据。
 func toCommentDeleteResponse(result comment.DeleteResult) CommentDeleteResponse {
 	return CommentDeleteResponse{
 		DeletedRootID: strconv.FormatInt(result.DeletedRootID, 10),
@@ -571,6 +582,7 @@ func toCommentDeleteResponse(result comment.DeleteResult) CommentDeleteResponse 
 	}
 }
 
+// toWidgetSessionResponse 将 Widget 会话结果转换为响应数据。
 func toWidgetSessionResponse(result comment.ProbeResult) WidgetSessionResponse {
 	if !result.Valid {
 		return WidgetSessionResponse{Valid: false}
@@ -586,6 +598,7 @@ func toWidgetSessionResponse(result comment.ProbeResult) WidgetSessionResponse {
 	}
 }
 
+// toAdminCommentResponse 将管理端评论视图转换为响应数据。
 func toAdminCommentResponse(view comment.AdminCommentView) AdminCommentResponse {
 	base := toCommentResponse(view.CommentView)
 	return AdminCommentResponse{
@@ -618,6 +631,7 @@ func toAdminCommentResponse(view comment.AdminCommentView) AdminCommentResponse 
 	}
 }
 
+// toAdminCommentTrendResponse 将评论趋势转换为响应数据。
 func toAdminCommentTrendResponse(trend domain.CommentTrend) AdminCommentTrendResponse {
 	points := make([]AdminCommentTrendPointResponse, 0, len(trend.Points))
 	for _, point := range trend.Points {
@@ -633,6 +647,7 @@ func toAdminCommentTrendResponse(trend domain.CommentTrend) AdminCommentTrendRes
 	}
 }
 
+// toAdminThreadResponse 将管理端线程视图转换为响应数据。
 func toAdminThreadResponse(view comment.AdminThreadView) AdminThreadResponse {
 	return AdminThreadResponse{
 		ID:              strconv.FormatInt(view.ID, 10),
@@ -669,6 +684,7 @@ type SiteListResponse struct {
 	Sites []SiteResponse `json:"sites"`
 }
 
+// toOriginResponse 将站点来源转换为响应数据。
 func toOriginResponse(o domain.Origin) OriginResponse {
 	return OriginResponse{
 		ID:     strconv.FormatInt(o.ID, 10),
@@ -676,6 +692,7 @@ func toOriginResponse(o domain.Origin) OriginResponse {
 	}
 }
 
+// toSiteResponse 将站点领域数据转换为响应数据。
 func toSiteResponse(s domain.Site) SiteResponse {
 	origins := make([]OriginResponse, 0, len(s.Origins))
 	for _, o := range s.Origins {
@@ -698,7 +715,7 @@ type SettingsResponse struct {
 }
 
 // PublicConfigResponse 匿名读取的站点协议与 Web 主题配置白名单。
-// 该 DTO 刻意不复用 SettingsResponse，避免泄露管理员设置或 provider 配置。
+// 该 DTO 不复用 SettingsResponse，以限制返回字段并隔离管理员设置与 provider 配置。
 type PublicConfigResponse struct {
 	UserAgreementURL    string `json:"user_agreement_url"`
 	PrivacyPolicyURL    string `json:"privacy_policy_url"`
@@ -712,7 +729,7 @@ type LegalConsentResetResponse struct {
 }
 
 // ProviderMetadata 提供商元数据的 HTTP 表示，不含机密。
-// Enabled 仅 OAuth/OIDC 与 Spam 返回；CAPTCHA 提供商省略该字段。
+// Enabled 仅 OAuth/OIDC、Spam 与 Notification 返回；CAPTCHA 提供商省略该字段。
 // PublicConfig 自由表单的公开字段 map，字段集合与 ProviderUpsertRequest 的
 // 公开字段一致（client_id、instance_url、issuer_url、team_id、key_id、endpoint、
 // action、region 等；spam.local 的词库固定为 configs/spam/keywords.txt）；
@@ -730,8 +747,8 @@ type ProvidersResponse struct {
 	Providers []ProviderMetadata `json:"providers"`
 }
 
-// PublicCaptchaConfig 启用的 CAPTCHA provider 的公共投影。
-// APIEndpoint 仅 CAP 返回，且已解析为官方 widget 端点。
+// PublicCaptchaConfig 启用的 CAPTCHA provider 的公共配置。
+// APIEndpoint 仅 CAP 返回，且已解析为 CAP widget 端点。
 type PublicCaptchaConfig struct {
 	Provider    string `json:"provider"`
 	SiteKey     string `json:"site_key"`
@@ -744,6 +761,7 @@ type CaptchaConfigResponse struct {
 	Captcha  *PublicCaptchaConfig `json:"captcha,omitempty"`
 }
 
+// toCaptchaConfigResponse 将公共 CAPTCHA 配置转换为响应数据。
 func toCaptchaConfigResponse(cfg *setting.PublicCaptchaConfig) CaptchaConfigResponse {
 	if cfg == nil || !cfg.Required {
 		return CaptchaConfigResponse{Required: false}

@@ -143,8 +143,7 @@ type view struct {
 	epoch    int64
 }
 
-// NewService 构建设置服务，注入事务运行器与设置仓储。
-// CAPTCHA 选择校验器可通过 SetCaptchaValidator 安装。
+// NewService 构建设置服务。
 func NewService(txRunner TxRunner, settingsRepo *repository.SettingsRepo) *Service {
 	return &Service{txRunner: txRunner, settingsRepo: settingsRepo}
 }
@@ -179,7 +178,7 @@ func DefaultSettings() domain.Settings {
 	}
 }
 
-// Validate 检查跨字段不变量和枚举/限制合法性。
+// Validate 校验设置快照。
 func Validate(s domain.Settings) error {
 	if s.CommentMode != domain.CommentModeAnonymous && s.CommentMode != domain.CommentModeAuthenticated {
 		return fmt.Errorf("%w: comment mode must be anonymous or authenticated", domain.ErrValidation)
@@ -234,6 +233,7 @@ func Validate(s domain.Settings) error {
 	return nil
 }
 
+// validPrivacyMode 校验隐私模式。
 func validPrivacyMode(mode string) bool {
 	return mode == "none" || mode == "coarse" || mode == "full"
 }
@@ -284,7 +284,6 @@ func validPublicKey(key string) bool {
 }
 
 // validateItemType 校验单个设置项的 type 支持且 value 形态匹配。
-// json 类型只接受 object/array，标量必须使用对应的 string/integer/boolean。
 func validateItemType(item SettingItem) error {
 	switch item.Type {
 	case SettingTypeString:
@@ -313,7 +312,6 @@ func validateItemType(item SettingItem) error {
 }
 
 // validatePatch 校验 PATCH 请求的结构：非空、key 格式、无重复、无保留前缀、
-// type 受支持、value 形态匹配，已知 key 的 type 必须与注册表一致。
 func validatePatch(items []SettingItem) error {
 	if len(items) == 0 {
 		return fmt.Errorf("%w: settings must not be empty", domain.ErrValidation)
@@ -549,8 +547,7 @@ func (s *Service) SetCaptchaValidator(v CaptchaSelectionValidator) {
 	}
 }
 
-// Get 返回类型化设置与凭证 epoch 的原子快照，
-// 首次访问时在短事务内播种缺失的默认项与内部 epoch 行。
+// Get 读取设置快照。
 func (s *Service) Get(ctx context.Context) (View, error) {
 	s.mu.RLock()
 	cached := s.cached
@@ -587,7 +584,7 @@ func (s *Service) Get(ctx context.Context) (View, error) {
 	return View{Settings: v.settings, Epoch: v.epoch}, nil
 }
 
-// seedDefaults 在短事务内播种全部缺失的默认项，重复播种由 ON CONFLICT DO NOTHING 兜底。
+// seedDefaults 初始化缺失的默认设置项。
 func (s *Service) seedDefaults(ctx context.Context) error {
 	missing := missingRows(nil)
 	if len(missing) == 0 {
@@ -599,8 +596,6 @@ func (s *Service) seedDefaults(ctx context.Context) error {
 }
 
 // Patch 校验局部输入后把变更合并到当前完整快照验证，再在单个事务内
-// upsert 提交项；comment_mode 实际变化时锁定读取并递增内部凭证代次。
-// 成功后返回完整的公开设置项列表，响应按 key 升序。
 func (s *Service) Patch(ctx context.Context, items []SettingItem, updatedBy int64) ([]SettingItem, error) {
 	if err := validatePatch(items); err != nil {
 		return nil, err
@@ -674,9 +669,7 @@ func (s *Service) Patch(ctx context.Context, items []SettingItem, updatedBy int6
 	return s.PublicItems(ctx)
 }
 
-// ResetLegalConsent atomically increments the administrator-owned consent
-// version. URL settings are not touched; cache invalidation happens only after
-// the transaction commits.
+// ResetLegalConsent 原子递增管理员维护的法律同意版本。
 func (s *Service) ResetLegalConsent(ctx context.Context, updatedBy int64) (int64, error) {
 	var next int64
 	err := s.txRunner.RunInTx(ctx, func(ctx context.Context) error {
@@ -746,6 +739,7 @@ func modeOf(rows []repository.DynamicSettingRow) string {
 	return ""
 }
 
+// invalidate 清除设置服务缓存。
 func (s *Service) invalidate() {
 	s.Invalidate()
 }

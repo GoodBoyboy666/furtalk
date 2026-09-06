@@ -255,7 +255,7 @@ func commentStatusBatchGroupKey(target repository.CommentStatusBatchTarget) stri
 	return string(target.Status) + "|" + before + "|" + published + "|" + deleted
 }
 
-// hardDeleteInCurrentTx 解除回复引用并删除目标行；调用方已经位于外层事务。
+// hardDeleteInCurrentTx 解除回复引用并删除目标行；使用方必须已位于外层事务。
 func (s *Service) hardDeleteInCurrentTx(ctx context.Context, siteID, id int64) error {
 	if err := s.comments.DetachCommentChildren(ctx, siteID, id); err != nil {
 		return err

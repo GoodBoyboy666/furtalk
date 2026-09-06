@@ -19,7 +19,7 @@ import (
 	"furtalk/internal/service/identity"
 )
 
-// TestConfigProjections 验证组合根把中央配置投影为 consumer-owned 最小配置的完整映射。
+// TestConfigProjections 验证依赖组装入口把中央配置投影为 consumer-owned 最小配置的完整映射。
 // 每个字段都显式断言，platform、feature 与 app-private 字段在重构后不会漂移。
 func TestConfigProjections(t *testing.T) {
 	cfg := config.Config{
@@ -195,7 +195,7 @@ func TestConfigProjectionsUsesExplicitPasskeyAndIssuer(t *testing.T) {
 	}
 }
 
-// TestNewLoggerUsesConfiguredFormat 验证组合根按 config.Logging.Format 选择 handler：
+// TestNewLoggerUsesConfiguredFormat 验证依赖组装入口按 config.Logging.Format 选择 handler：
 // text 输出 slog 文本，json 输出结构化 JSON，两者共享同一脱敏 handler 契约。
 func TestNewLoggerUsesConfiguredFormat(t *testing.T) {
 	for _, tt := range []struct {

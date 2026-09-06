@@ -11,13 +11,11 @@ import (
 	"unicode"
 )
 
-// ErrInvalid 包装所有被拒绝的 URL，调用方可以据此保留稳定的错误类别，
+// ErrInvalid 包装所有被拒绝的 URL，使用方可以据此保留稳定的错误类别，
 // 同时在调试时查看具体的技术原因。
 var ErrInvalid = errors.New("urlx: invalid URL")
 
 // ParseHTTP 解析使用 HTTP 或 HTTPS scheme 的绝对 URL。
-// 去除首尾空白，拒绝控制字符、凭据、通配符主机、非法端口和缺失主机名，
-// 同时保留调用方协议允许使用的路径、查询参数和片段。
 func ParseHTTP(raw string) (*url.URL, error) {
 	u, err := parseAbsolute(raw)
 	if err != nil {
@@ -48,8 +46,6 @@ func ParseHTTPS(raw string) (*url.URL, error) {
 }
 
 // ParseHTTPBase 解析绝对 HTTP(S) Base URL。
-// 查询参数和片段会被拒绝；主机名和默认端口会被格式化，
-// 末尾的字面路径分隔符会被移除，同时保留转义路径语义。
 func ParseHTTPBase(raw string) (*url.URL, error) {
 	trimmed, err := cleanRaw(raw)
 	if err != nil {
@@ -80,8 +76,6 @@ func ParseHTTPSBase(raw string) (*url.URL, error) {
 }
 
 // CanonicalOrigin 返回稳定的 Web Origin。
-// 允许 HTTPS；HTTP 仅允许 localhost 和回环地址。路径、查询参数、片段、
-// 用户信息、通配符及非法端口都会被拒绝，主机名大小写和默认端口会被格式化。
 func CanonicalOrigin(raw string) (string, error) {
 	trimmed, err := cleanRaw(raw)
 	if err != nil {
@@ -103,7 +97,6 @@ func CanonicalOrigin(raw string) (string, error) {
 }
 
 // ParseLocalReference 接受同源相对 URL 引用。
-// 拒绝控制字符、反斜杠、绝对 URL 和网络路径引用。
 func ParseLocalReference(raw string) (*url.URL, error) {
 	trimmed := strings.TrimSpace(raw)
 	for _, r := range trimmed {
@@ -145,6 +138,7 @@ func JoinPathDirectory(base *url.URL, segments ...string) *url.URL {
 	return u.JoinPath("/")
 }
 
+// parseAbsolute 解析并校验绝对 HTTP URL。
 func parseAbsolute(raw string) (*url.URL, error) {
 	trimmed, err := cleanRaw(raw)
 	if err != nil {
@@ -163,6 +157,7 @@ func parseAbsolute(raw string) (*url.URL, error) {
 	return u, nil
 }
 
+// cleanRaw 清理 URL 首尾空白并拒绝控制字符。
 func cleanRaw(raw string) (string, error) {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
@@ -176,6 +171,7 @@ func cleanRaw(raw string) (string, error) {
 	return trimmed, nil
 }
 
+// validateHostPort 校验 URL 主机名与端口。
 func validateHostPort(u *url.URL) error {
 	host := u.Hostname()
 	if host == "" {
@@ -201,6 +197,7 @@ func validateHostPort(u *url.URL) error {
 	return nil
 }
 
+// splitHostPort 拆分主机与端口并校验地址格式。
 func splitHostPort(raw string) (host, port string, hasPort bool, err error) {
 	if strings.HasPrefix(raw, "[") {
 		close := strings.IndexByte(raw, ']')
@@ -226,11 +223,13 @@ func splitHostPort(raw string) (host, port string, hasPort bool, err error) {
 	return raw, "", false, nil
 }
 
+// canonicalizeHost 规范化主机名与默认端口。
 func canonicalizeHost(u *url.URL) {
 	host := strings.ToLower(u.Hostname())
 	port := u.Port()
 	if port != "" {
-		portNumber, _ := strconv.Atoi(port) // validateHostPort ran before canonicalization.
+		// splitHostPort 已完成端口格式校验。
+		portNumber, _ := strconv.Atoi(port)
 		if (u.Scheme == "http" && portNumber == 80) || (u.Scheme == "https" && portNumber == 443) {
 			port = ""
 		} else {
@@ -250,6 +249,7 @@ func canonicalizeHost(u *url.URL) {
 	}
 }
 
+// trimTrailingPathSeparators 移除基础路径末尾的分隔符。
 func trimTrailingPathSeparators(u *url.URL) {
 	if u.RawPath != "" {
 		rawPath := strings.TrimRight(u.RawPath, "/")
@@ -273,6 +273,7 @@ func trimTrailingPathSeparators(u *url.URL) {
 	u.Path = strings.TrimRight(u.Path, "/")
 }
 
+// escapeSegment 转义路径段并保护点路径语义。
 func escapeSegment(segment string) string {
 	escaped := url.PathEscape(segment)
 	// URL.JoinPath 会清理字面量 . 和 .. 路径段。
@@ -283,6 +284,7 @@ func escapeSegment(segment string) string {
 	return escaped
 }
 
+// isLoopbackHost 判断主机是否为回环地址。
 func isLoopbackHost(host string) bool {
 	if host == "localhost" || host == "127.0.0.1" || host == "::1" {
 		return true
@@ -291,6 +293,7 @@ func isLoopbackHost(host string) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
+// invalid 创建带有统一错误类别的 URL 错误。
 func invalid(format string, args ...any) error {
 	return fmt.Errorf("%w: %s", ErrInvalid, fmt.Sprintf(format, args...))
 }

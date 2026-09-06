@@ -20,6 +20,7 @@ type cacheAuthCodeStore struct {
 	cache *cache.Namespace
 }
 
+// NewAuthCodeStore 构建一次性授权码存储适配器。
 func NewAuthCodeStore(store cache.Store) AuthCodeStore {
 	return cacheAuthCodeStore{cache: cache.NewNamespace(store, "widget_auth_code", authCodeKeyPrefix, 1000)}
 }

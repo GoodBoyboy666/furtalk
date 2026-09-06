@@ -14,8 +14,6 @@ import (
 const discordMaxRunes = 2000
 
 // sendDiscord 向 Discord execute webhook 端点投递。
-// wait=true 强制服务端返回创建后的 Message 以获得权威结果；
-// allowed_mentions.parse=[] 抑制全部用户提及；content 转义 Markdown 控制字符。
 func (d *Dispatcher) sendDiscord(ctx context.Context, cfg Config, msg Message) error {
 	endpoint, err := urlx.ParseHTTPS(cfg.WebhookURL)
 	if err != nil {

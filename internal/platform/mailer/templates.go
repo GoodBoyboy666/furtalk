@@ -15,6 +15,7 @@ import (
 // TemplateKind 标识邮件模板场景，同时决定 configs/email 下的模板文件名。
 type TemplateKind string
 
+// 邮件模板种类对应的固定标识。
 const (
 	// KindLoginCode 登录验证码邮件模板。
 	KindLoginCode TemplateKind = "login_code"
@@ -96,10 +97,6 @@ type TemplateSet struct {
 }
 
 // LoadTemplates 读取并解析目录下的全部五个邮件模板。
-// 固定文件清单由 TemplateKind 决定；每个模板解析后使用零值数据执行一次，
-// 提前发现引用不存在结构字段的错误。
-// 任一文件缺失、不可读、解析失败或字段校验失败，都返回包含模板 kind
-// 与完整文件路径的错误，调用方应将其视为启动错误。
 func LoadTemplates(dir string) (*TemplateSet, error) {
 	set := &TemplateSet{}
 	specs := []struct {

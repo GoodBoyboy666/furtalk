@@ -37,7 +37,7 @@ var microsoftGUIDPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0
 
 // microsoftProvider 是 Microsoft identity platform v2 的固定 common 适配器。
 // 使用 S256 PKCE 与必选 nonce（按 catalog）。ID token 用 Microsoft JWKS 手工
-// 验证签名：issuer 先按 tid 展开模板，再与命中签名 key 的 issuer 元数据交叉
+// 验证签名时按 tid 展开 issuer 模板，并与命中签名 key 的 issuer 元数据交叉
 // 校验，audience、有效期与 nonce 逐一检查。subject 是不可变的 tid+oid 组合；
 // email/preferred_username 可变或缺失，不作为 VerifiedEmail。
 type microsoftProvider struct {
@@ -60,6 +60,7 @@ type microsoftSigningKey struct {
 	issuer []string
 }
 
+// newMicrosoftProvider 创建 Microsoft 固定端点适配器。
 func newMicrosoftProvider(cfg Config, client *http.Client) *microsoftProvider {
 	authURL := cfg.AuthURL
 	if authURL == "" {
@@ -89,8 +90,7 @@ func (p *microsoftProvider) Name() string {
 	return "Microsoft"
 }
 
-// clientContext 返回注入共享 HTTP client 的上下文，
-// 使 token/JWKS 的全部网络请求走同一 client（含超时）。
+// clientContext 返回注入共享 HTTP client 的上下文。
 func (p *microsoftProvider) clientContext(ctx context.Context) context.Context {
 	if p.httpClient == nil {
 		return ctx
@@ -98,6 +98,7 @@ func (p *microsoftProvider) clientContext(ctx context.Context) context.Context {
 	return context.WithValue(ctx, oauth2.HTTPClient, p.httpClient)
 }
 
+// oauthConfig 构建 Microsoft OAuth 配置。
 func (p *microsoftProvider) oauthConfig(redirectURI string) *oauth2.Config {
 	return &oauth2.Config{
 		ClientID:     p.clientID,
@@ -113,8 +114,6 @@ func (p *microsoftProvider) oauthConfig(redirectURI string) *oauth2.Config {
 }
 
 // BuildAuthURL 为新的 state、可选 PKCE verifier 与可选 nonce 生成 Microsoft
-// 授权 URL。仅在 verifier 非空时附加 code_challenge（S256），仅在 nonce 非空时
-// 附加 nonce 参数。
 func (p *microsoftProvider) BuildAuthURL(ctx context.Context, req AuthorizationRequest) (string, error) {
 	opts := make([]oauth2.AuthCodeOption, 0, 2)
 	if req.Verifier != "" {
@@ -127,7 +126,6 @@ func (p *microsoftProvider) BuildAuthURL(ctx context.Context, req AuthorizationR
 }
 
 // Exchange 用 code 换取 token 并完整验证 Microsoft ID token。
-// 任何失败统一映射为 ErrIdentity；错误文本不包含 code/token/secret。
 func (p *microsoftProvider) Exchange(ctx context.Context, req ExchangeRequest) (*Identity, error) {
 	opts := make([]oauth2.AuthCodeOption, 0, 1)
 	if req.Verifier != "" {
@@ -144,10 +142,7 @@ func (p *microsoftProvider) Exchange(ctx context.Context, req ExchangeRequest) (
 	return p.verifyIDToken(ctx, rawIDToken, req.Nonce)
 }
 
-// verifyIDToken 手工验证 Microsoft ID token（不使用 go-oidc 的固定 issuer
-// verifier，因为具体 issuer 由 token 的 tid 决定）：
-// 解析 JWS 头并限制 RS256，取 kid 命中签名密钥并验证签名，然后依次检查
-// issuer 模板展开、签名 key issuer 约束、audience、有效期、nonce、tid/oid。
+// verifyIDToken 手工验证 Microsoft ID token。
 func (p *microsoftProvider) verifyIDToken(ctx context.Context, raw string, nonce string) (*Identity, error) {
 	parsed, err := jose.ParseSigned(raw, []jose.SignatureAlgorithm{jose.RS256})
 	if err != nil {
@@ -213,8 +208,7 @@ func (p *microsoftProvider) verifyIDToken(ctx context.Context, raw string, nonce
 	}, nil
 }
 
-// microsoftKeyAllowsIssuer 判断命中签名 key 的 issuer 元数据是否允许该 token
-// issuer：每条目按 token tid 展开 {tenantid} 模板后精确匹配。
+// microsoftKeyAllowsIssuer 判断签名 key 的 issuer 元数据是否允许该 token。
 func microsoftKeyAllowsIssuer(entries []string, tid, tokenIssuer string) bool {
 	for _, entry := range entries {
 		if expanded := strings.ReplaceAll(entry, microsoftTenantPlaceholder, tid); expanded == tokenIssuer {
@@ -225,7 +219,6 @@ func microsoftKeyAllowsIssuer(entries []string, tid, tokenIssuer string) bool {
 }
 
 // signingKeys 返回缓存的 Microsoft 签名密钥；缓存过期或缺失时重新抓取。
-// 抓取失败返回错误（失败关闭），不返回过期快照。
 func (p *microsoftProvider) signingKeys(ctx context.Context) (map[string]microsoftSigningKey, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -242,7 +235,6 @@ func (p *microsoftProvider) signingKeys(ctx context.Context) (map[string]microso
 }
 
 // fetchJWKS 抓取并解析 Microsoft JWKS，返回 kid 索引。
-// 任一密钥缺少 kid、issuer 元数据畸形或不是 RSA 公钥时整体拒绝（失败关闭）。
 func (p *microsoftProvider) fetchJWKS(ctx context.Context) (map[string]microsoftSigningKey, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.jwksURL, nil)
 	if err != nil {
@@ -284,8 +276,6 @@ type microsoftJWKMeta struct {
 }
 
 // parseMicrosoftSigningKey 解析单个 Microsoft 签名密钥：
-// kid 必须存在；issuer（若出现）必须是字符串数组且每个元素非空；
-// 密钥本身必须是 RSA 公钥。
 func parseMicrosoftSigningKey(raw json.RawMessage) (microsoftSigningKey, error) {
 	var meta microsoftJWKMeta
 	if err := json.Unmarshal(raw, &meta); err != nil {

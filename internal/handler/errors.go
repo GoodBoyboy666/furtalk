@@ -8,8 +8,7 @@ import (
 	"furtalk/internal/service/notification"
 )
 
-// errorMappings 返回全部语义错误到 HTTP 响应的单一映射组。
-// 排列顺序决定翻译优先级：业务 sentinel 在前，协议错误在后。
+// errorMappings 返回领域错误到 HTTP 响应的映射。
 func errorMappings() []httpx.Mapping {
 	return []httpx.Mapping{
 		// identity 域错误。

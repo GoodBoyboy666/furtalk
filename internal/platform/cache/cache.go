@@ -34,14 +34,12 @@ type AtomicJSONComparer interface {
 	CompareAndDeleteJSON(ctx context.Context, key string, expected json.RawMessage) (bool, error)
 }
 
-// RawJSONReader is an optional capability for retrieving the exact JSON bytes
-// stored under a key. It is useful to protocols that need to pair a read with
-// a subsequent compare-and-swap operation, and does not change Store.
+// RawJSONReader 提供读取键对应原始 JSON 字节的可选能力。
 type RawJSONReader interface {
 	GetRawJSON(ctx context.Context, key string) (json.RawMessage, error)
 }
 
-// Store 内存与 Redis 共享的临时存储接口。
+// Store 定义内存与 Redis 共享的临时存储接口。
 type Store interface {
 	// Get 检索一个键并解码到 out 中。键缺失或已过期时返回 ErrNotFound。
 	Get(ctx context.Context, key string, out any) error
@@ -55,16 +53,17 @@ type Store interface {
 	GetOrLoad(ctx context.Context, key string, out any, ttl time.Duration, load func() (any, error)) error
 }
 
+// Close 定义可关闭缓存资源的接口。
 type Close interface {
 	Close() error
 }
 
+// Config 携带缓存存储的静态配置。
 type Config struct {
 	RedisURL string
 }
 
 // NewStore 根据配置构建临时存储。
-// 未配置 Redis 时返回内存存储。
 func NewStore(cfg Config, logger *slog.Logger) (Store, error) {
 	logger = logging.Normalize(logger)
 	if cfg.RedisURL == "" {
@@ -86,8 +85,6 @@ func NewStore(cfg Config, logger *slog.Logger) (Store, error) {
 }
 
 // NewCacheMonitor 周期性探测 Redis 存储。
-// 探测失败时返回错误，由应用监督器触发快速失败。
-// 内存存储返回 nil，不运行监控。
 func NewCacheMonitor(store Store, logger *slog.Logger) func(context.Context) error {
 	return NewCacheMonitorWithInterval(store, logger, healthInterval)
 }

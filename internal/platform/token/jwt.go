@@ -60,7 +60,6 @@ type Claims struct {
 }
 
 // UserID 将 subject 解析为十进制 int64 并返回。
-// subject 为持久化用户 id 的十进制字符串。
 func (c Claims) UserID() (int64, error) {
 	id, err := strconv.ParseInt(c.Subject, 10, 64)
 	if err != nil || id <= 0 {
@@ -80,7 +79,6 @@ func NewService(cfg Config) *Service {
 }
 
 // SignFirstParty 用户 id 与当前会话代次签发 first-party 登录 token。
-// sessionVersion 必须是正整数；签发时写入 claim，供撤销检查与当前版本比较。
 func (s *Service) SignFirstParty(userID, sessionVersion int64) (string, error) {
 	if sessionVersion <= 0 {
 		return "", fmt.Errorf("jwt: first-party session version must be positive, got %d", sessionVersion)
@@ -102,14 +100,12 @@ func (s *Service) SignFirstParty(userID, sessionVersion int64) (string, error) {
 	return s.sign(claims)
 }
 
-// Lifetime 返回配置的 token 有效期，用于设置 FP Cookie 的 Max-Age，
+// Lifetime 返回配置的 token 有效期。
 func (s *Service) Lifetime() time.Duration {
 	return s.cfg.Lifetime
 }
 
 // SignWidget 签发绑定到站点与给定 credential epoch 的 widget 凭据。
-// Widget 只存在 widget_authenticated 评论凭据；kind 必须为
-// TokenKindWidgetAuthenticated。epoch 是十进制字符串形式的 int64。
 func (s *Service) SignWidget(userID, siteID int64, kind, epoch string) (string, error) {
 	if kind != TokenKindWidgetAuthenticated {
 		return "", fmt.Errorf("jwt: unsupported widget token kind %q", kind)
@@ -163,7 +159,6 @@ func (s *Service) SignUnsubscribe(userID int64, kind string, lifetime time.Durat
 }
 
 // ParseUnsubscribe 验证退订 token，返回用户 id 与 token 授权禁用的通知 kind。
-// 伪造、过期或 audience 不符的 token 一律拒绝。
 func (s *Service) ParseUnsubscribe(raw string) (int64, string, error) {
 	claims, err := s.Parse(raw, AudienceUnsubscribe, TokenKindUnsubscribe)
 	if err != nil {
@@ -180,7 +175,6 @@ func (s *Service) ParseUnsubscribe(raw string) (int64, string, error) {
 }
 
 // Parse 按固定策略以及期望的 audience 与 token kind 验证 token。
-// algorithm、issuer、audience、kind 不符，缺少 subject/jti，或 token 过期时一律拒绝。
 func (s *Service) Parse(raw string, wantAudience, wantKind string) (*Claims, error) {
 	claims := &Claims{}
 	parser := jwt.NewParser(

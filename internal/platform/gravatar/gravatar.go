@@ -1,4 +1,4 @@
-// Package gravatar implements the Gravatar URL protocol without product policy.
+// Package gravatar 提供不包含产品策略的 Gravatar URL 协议支持。
 package gravatar
 
 import (
@@ -11,11 +11,10 @@ import (
 	"furtalk/internal/platform/urlx"
 )
 
-// ErrInvalidBaseURL reports an invalid configured Gravatar-compatible base URL.
+// ErrInvalidBaseURL 表示配置的 Gravatar 基础 URL 无效。
 var ErrInvalidBaseURL = errors.New("gravatar: invalid base url")
 
-// ValidateBaseURL validates an absolute HTTP(S) avatar base without credentials,
-// query parameters, or a fragment.
+// ValidateBaseURL 校验 Gravatar 基础 URL。
 func ValidateBaseURL(raw string) error {
 	if _, err := urlx.ParseHTTPBase(raw); err != nil {
 		return fmt.Errorf("%w: must be an absolute url", ErrInvalidBaseURL)
@@ -23,7 +22,7 @@ func ValidateBaseURL(raw string) error {
 	return nil
 }
 
-// URL derives a Gravatar-compatible avatar URL from a normalized email.
+// URL 根据规范化邮箱生成 Gravatar 头像 URL。
 func URL(normalizedEmail, baseURL string) string {
 	sum := sha256.Sum256([]byte(strings.ToLower(strings.TrimSpace(normalizedEmail))))
 	base, err := urlx.ParseHTTPBase(baseURL)

@@ -36,7 +36,6 @@ type Tencent struct {
 }
 
 // NewTencent 构建腾讯云内容安全检测器。
-// client 为 nil 时使用携带超时的默认客户端。
 func NewTencent(client *http.Client, cfg TencentConfig) *Tencent {
 	if client == nil {
 		client = defaultClient()
@@ -45,7 +44,6 @@ func NewTencent(client *http.Client, cfg TencentConfig) *Tencent {
 }
 
 // Check 提交正文并按 Suggestion 判定：
-// Pass 继续、Review 映射可疑、Block 映射垃圾；API 错误或建议未知为 unknown。
 func (t *Tencent) Check(ctx context.Context, input Input) (Result, error) {
 	payload, err := t.buildRequest(input.Body)
 	if err != nil {
@@ -91,8 +89,7 @@ func (t *Tencent) Check(ctx context.Context, input Input) (Result, error) {
 	}
 }
 
-// buildRequest 构造 TextModeration 请求体，只包含 Base64 正文；
-// BizType 仅在非空时提交。
+// buildRequest 构造仅包含 Base64 正文的 TextModeration 请求体。
 func (t *Tencent) buildRequest(body string) ([]byte, error) {
 	values := map[string]string{
 		"Content": base64.StdEncoding.EncodeToString([]byte(body)),

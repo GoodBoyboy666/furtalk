@@ -40,6 +40,7 @@ type argon2Budget struct {
 	slots chan struct{}
 }
 
+// newArgon2Budget 构建 Argon2 密码计算预算。
 func newArgon2Budget(capacity int) *argon2Budget {
 	if capacity <= 0 {
 		capacity = 1
@@ -47,6 +48,7 @@ func newArgon2Budget(capacity int) *argon2Budget {
 	return &argon2Budget{slots: make(chan struct{}, capacity)}
 }
 
+// acquire 获取密码登录计算容量。
 func (b *argon2Budget) acquire() (func(), bool) {
 	if b == nil {
 		return func() {}, true
@@ -70,8 +72,7 @@ type PasswordLoginInput struct {
 	ClientIP     string
 }
 
-// setPassword 派生 Argon2id 哈希并原子更新密码状态与会话代次，返回新代次。
-// 时间列精度为微秒（precision:6），统一截断以保持存储值一致。
+// setPassword 设置用户密码哈希。
 func (s *Service) setPassword(ctx context.Context, userID int64, password string) (int64, error) {
 	hash, err := hashPassword(password)
 	if err != nil {
@@ -80,15 +81,14 @@ func (s *Service) setPassword(ctx context.Context, userID int64, password string
 	return s.users.SetPassword(ctx, userID, hash, s.now().UTC().Truncate(time.Microsecond))
 }
 
-// LoginWithPassword 保留旧调用签名，供非 HTTP 的内部调用使用；其地址维度
-// 进入稳定 unknown 桶。公开 HTTP 入口使用 LoginWithPasswordFromInput 传入可信 IP。
+// LoginWithPassword 使用密码登录并生成会话。
 func (s *Service) LoginWithPassword(ctx context.Context, rawEmail, password, captchaToken string) (*Session, error) {
 	return s.LoginWithPasswordFromInput(ctx, PasswordLoginInput{
 		Email: rawEmail, Password: password, CaptchaToken: captchaToken,
 	})
 }
 
-// LoginWithPasswordFromInput 校验 CAPTCHA、专用预算后核对邮箱与密码组合，签发 FP Cookie。
+// LoginWithPasswordFromInput 校验 CAPTCHA 和登录预算后核对邮箱密码并生成会话。
 func (s *Service) LoginWithPasswordFromInput(ctx context.Context, input PasswordLoginInput) (*Session, error) {
 	_, normalized, err := value.NormalizeEmail(input.Email)
 	if err != nil {
@@ -127,8 +127,7 @@ func (s *Service) LoginWithPasswordFromInput(ctx context.Context, input Password
 	return s.completeLogin(ctx, user)
 }
 
-// admitPasswordLogin 消耗密码登录的 IP 与规范化邮箱预算。邮箱只以固定摘要
-// 进入进程内桶，避免在限流器结构中保存明文地址。
+// admitPasswordLogin 为密码登录申请计算容量。
 func (s *Service) admitPasswordLogin(normalized, clientIP string) error {
 	if s.admission == nil {
 		return nil
@@ -181,6 +180,7 @@ type envelopeParams struct {
 	hash    []byte
 }
 
+// parseEnvelope 解析密码哈希信封。
 func parseEnvelope(encoded string) (*envelopeParams, error) {
 	parts := strings.Split(encoded, "$")
 	if len(parts) != 6 || parts[1] != "argon2id" {

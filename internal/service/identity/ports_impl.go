@@ -14,7 +14,6 @@ var (
 )
 
 // CreateUser 应用当前邮箱注册策略后创建用户，邮箱冲突时返回 domain.ErrConflict。
-// 满足 domain.UserWriter，供 comment 经写接口代写匿名用户。
 func (s *Service) CreateUser(ctx context.Context, user *domain.User) error {
 	if user == nil || strings.TrimSpace(user.EmailNormalized) == "" {
 		return domain.ErrValidation
@@ -26,7 +25,6 @@ func (s *Service) CreateUser(ctx context.Context, user *domain.User) error {
 }
 
 // CreateUserWithPassword 创建用户并随行写入 Argon2id 密码状态。
-// 供 bootstrap 首次初始化调用：哈希策略留在 identity，外层事务同时提交用户与 bootstrap 单例。
 func (s *Service) CreateUserWithPassword(ctx context.Context, user *domain.User, plaintextPassword string) error {
 	hash, err := hashPassword(plaintextPassword)
 	if err != nil {

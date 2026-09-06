@@ -16,7 +16,7 @@ import (
 	"furtalk/internal/platform/value"
 )
 
-// OAuth 一次性 state/verifier 与流程用途常量。
+// OAuth 一次性 state、verifier 与流程用途常量。
 const (
 	oauthStateTTL    = 10 * time.Minute
 	oauthStatePrefix = "oauth-state:"
@@ -47,9 +47,7 @@ type OAuthState struct {
 	RedirectURI string `json:"redirect_uri,omitempty"`
 }
 
-// OAuthHandoff  Apple form_post 桥接在 oauth-handoff:<token> 下保存的
-// 短时一次性回调载荷。它只做传输适配，不交换授权码、不创建/绑定用户、
-// 不签发 Cookie。
+// OAuthHandoff 保存 Apple form_post 回调的短时一次性传输载荷。
 type OAuthHandoff struct {
 	Provider string `json:"provider"`
 	State    string `json:"state"`
@@ -144,13 +142,13 @@ func (s *Service) OAuthProviders(ctx context.Context) ([]ProviderMeta, error) {
 
 type registrationMode uint8
 
+// registrationMode 定义 OAuth/OIDC 提供商的注册策略。
 const (
 	registrationVerifiedEmail registrationMode = iota
 	registrationBindOnly
 )
 
-// providerRegistrationMode 返回 identity 拥有的固定 provider 注册策略；
-// 未知 key（自定义 OIDC）默认按已验证邮箱注册处理。
+// providerRegistrationMode 读取提供商注册模式。
 func providerRegistrationMode(providerKey string) registrationMode {
 	switch providerKey {
 	case "line", "mastodon", "microsoft":
@@ -160,11 +158,7 @@ func providerRegistrationMode(providerKey string) registrationMode {
 	}
 }
 
-// BeginOAuth 启动 Authorization Code + PKCE 流程。
-// 启动失败按类别区分：provider 缺失返回 ErrProviderNotFound（404）、密钥损坏
-// 返回 ErrSecretCorrupt（500）、provider 构造或 OIDC discovery/授权 URL 失败
-// 返回 ErrUnavailable（503）；只有 bind 未登录返回 401。
-// bind-only provider 的 register 用途在构建任何内容前直接以通用失败拒绝。
+// BeginOAuth 启动 OAuth/OIDC 授权流程。
 func (s *Service) BeginOAuth(ctx context.Context, providerKey, purpose string, userID int64, redirect string) (*OAuthStart, error) {
 	if purpose != oauthPurposeLogin && purpose != oauthPurposeRegister && purpose != oauthPurposeBind {
 		return nil, domain.ErrValidation
@@ -236,11 +230,7 @@ func (s *Service) BeginOAuth(ctx context.Context, providerKey, purpose string, u
 	return &OAuthStart{AuthURL: authURL}, nil
 }
 
-// FinishOAuth 消费 state，用 PKCE 交换 code，并按登录/注册/绑定规则签发会话。
-// 返回的 redirect 在 state 有效时始终是已净化的站内回跳地址；state 无效时为空。
-// 错误分类不泄露账号存在性：state 缺失/过期/重放/不匹配返回
-// ErrOAuthCallbackInvalid，授权码交换或令牌校验失败返回
-// ErrOAuthVerificationFailed，其余身份解析错误原样透传。
+// FinishOAuth 完成 OAuth/OIDC 回调并生成会话。
 func (s *Service) FinishOAuth(ctx context.Context, providerKey, state, code string) (*Session, string, error) {
 	if s.oauth == nil {
 		return nil, "", domain.ErrOAuthVerificationFailed
@@ -281,10 +271,7 @@ func (s *Service) FinishOAuth(ctx context.Context, providerKey, state, code stri
 	return session, record.Redirect, nil
 }
 
-// OAuthAccessDenied 原子消费一次性 state，恢复净化后的回跳地址，
-// 并返回 ErrOAuthAccessDenied 表示用户取消了授权。
-// 不创建绑定、不签发会话、不创建用户。未知或 provider 不匹配的 state
-// 返回 ErrOAuthCallbackInvalid，不泄露回调细节。
+// OAuthAccessDenied 处理 OAuth/OIDC 授权拒绝回调。
 func (s *Service) OAuthAccessDenied(ctx context.Context, providerKey, state string) (string, error) {
 	raw, err := s.oauthState.AtomicConsume(ctx, state)
 	if err != nil {
@@ -297,9 +284,7 @@ func (s *Service) OAuthAccessDenied(ctx context.Context, providerKey, state stri
 	return record.Redirect, domain.ErrOAuthAccessDenied
 }
 
-// CreateOAuthHandoff 为 Apple form_post 回调创建短时一次性 handoff 记录，
-// 返回不透明 token。state 必填；code/error 按实际载荷可有可无。
-// 授权码绝不进入任何 URL。
+// CreateOAuthHandoff 创建一次性 OAuth/OIDC 回调交接记录。
 func (s *Service) CreateOAuthHandoff(ctx context.Context, providerKey, state, code, errMsg string) (string, error) {
 	if state == "" {
 		return "", domain.ErrValidation
@@ -339,8 +324,7 @@ func (s *Service) CreateOAuthHandoff(ctx context.Context, providerKey, state, co
 	return token, nil
 }
 
-// ConsumeOAuthHandoff 原子消费一次性 handoff 记录。
-// 缺失、过期、重放或损坏的 token 返回 ErrOAuthCallbackInvalid。
+// ConsumeOAuthHandoff 消费一次性 OAuth/OIDC 回调交接记录。
 func (s *Service) ConsumeOAuthHandoff(ctx context.Context, handoff string) (OAuthHandoff, error) {
 	raw, err := s.oauthHandoff.AtomicConsume(ctx, handoff)
 	if err != nil {
@@ -353,9 +337,7 @@ func (s *Service) ConsumeOAuthHandoff(ctx context.Context, handoff string) (OAut
 	return record, nil
 }
 
-// resolveOAuthIdentity 按注册模式与绑定状态解析身份。
-// 固定顺序：先要求非空 subject → 按 (provider_key, subject) 查绑定 →
-// bind-only 拒绝 / bind 直接绑定当前用户 → 已验证邮箱注册/邮箱匹配。
+// resolveOAuthIdentity 解析 OAuth/OIDC 身份并应用注册或绑定策略。
 func (s *Service) resolveOAuthIdentity(ctx context.Context, providerConfig *AuthProvider, oauthIdentity *oauth.Identity, record OAuthState) (*Session, error) {
 	// 1. 要求适配器输出非空 subject；空 subject 一律通用失败。
 	if oauthIdentity == nil || oauthIdentity.Subject == "" {
@@ -364,7 +346,7 @@ func (s *Service) resolveOAuthIdentity(ctx context.Context, providerConfig *Auth
 	// 2. 先按 (provider_key, subject) 查绑定，不触碰邮箱。
 	bound, err := s.identities.GetByProviderSubject(ctx, providerConfig.ProviderKey, oauthIdentity.Subject)
 	if err == nil {
-		// 3. 已绑定：bind 只允许绑定当前用户，绝不把调用方切到其他账号；
+		// 3. 已绑定：bind 只允许绑定当前用户，绑定操作不切换账号；
 		// login/register（旧语义）直接登录绑定用户。
 		if record.Purpose == oauthPurposeBind && record.UserID != bound.UserID {
 			return nil, domain.ErrInvalidCredentials
@@ -411,8 +393,7 @@ func (s *Service) resolveOAuthIdentity(ctx context.Context, providerConfig *Auth
 	return s.bindOAuthIdentity(ctx, providerConfig, oauthIdentity, user)
 }
 
-// registerOAuthUser 在一个事务内静默创建普通已验证用户、绑定外部身份。
-// 未知邮箱自动注册前校验域名名单；已存在的绑定或绑定已有用户不受影响。
+// registerOAuthUser 注册 OAuth/OIDC 用户并绑定外部身份。
 func (s *Service) registerOAuthUser(ctx context.Context, providerConfig *AuthProvider, oauthIdentity *oauth.Identity, normalized string, record OAuthState) (*Session, error) {
 	public, _, err := s.policy.Policy(ctx)
 	if err != nil {
@@ -494,6 +475,7 @@ func (s *Service) completeOAuthLogin(ctx context.Context, bound *domain.External
 	return s.completeLogin(ctx, user)
 }
 
+// buildProvider 根据配置构建 OAuth/OIDC 提供商。
 func (s *Service) buildProvider(providerConfig *AuthProvider) (OAuthProvider, error) {
 	if providerConfig == nil || s.oauth == nil {
 		return nil, domain.ErrUnavailable
@@ -517,6 +499,7 @@ func (s *Service) buildProvider(providerConfig *AuthProvider) (OAuthProvider, er
 	return provider, nil
 }
 
+// oauthRedirectURI 生成 OAuth 回调地址。
 func (s *Service) oauthRedirectURI(providerKey string) string {
 	base, err := urlx.ParseHTTPBase(s.baseURL)
 	if err != nil {
@@ -525,8 +508,7 @@ func (s *Service) oauthRedirectURI(providerKey string) string {
 	return urlx.JoinPathSegments(base, "oauth", "callback", providerKey).String()
 }
 
-// providerDisplayName 从固定 provider catalog 投影展示名；
-// 未知 key（自定义 OIDC）回落到 key 本身。
+// providerDisplayName 读取 OAuth/OIDC 提供商展示名。
 func (s *Service) providerDisplayName(provider AuthProvider) string {
 	if spec, ok := oauth.LookupProvider(provider.ProviderKey); ok {
 		return spec.Name
@@ -534,9 +516,7 @@ func (s *Service) providerDisplayName(provider AuthProvider) string {
 	return provider.ProviderKey
 }
 
-// sanitizeRedirect 只保留同源重定向目标。
-// 浏览器会把反斜杠归一化为斜杠，因此 `\`、控制字符与空白混淆必须在解析前拒绝；
-// 解析后拒绝绝对 URL 与携带 host 的网络路径引用，只放行站内相对路径与锚点。
+// sanitizeRedirect 规范化站内重定向地址。
 func sanitizeRedirect(raw string) string {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {

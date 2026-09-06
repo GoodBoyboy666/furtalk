@@ -50,8 +50,6 @@ type Mailer interface {
 }
 
 // NewProvider 根据静态 SMTP 配置组装 SMTP 邮件发送器。
-// 未设置 host 时返回 nil，notification 消费方变为惰性（尽力而为，不投递）；
-// host 已设置但配置非法时启动报错。
 func NewProvider(smtpConfig SMTPConfig) (Mailer, error) {
 	if smtpConfig.Host == "" {
 		return nil, nil
@@ -106,7 +104,6 @@ type smtpMailer struct {
 }
 
 // Send 组装 MIME 邮件并通过 SMTP 投递。
-// 收件人、发件人或正文缺失时返回 ErrConfig，投递失败返回 ErrUnavailable。
 func (m *smtpMailer) Send(ctx context.Context, msg Message) error {
 	to := msg.To
 	if to == "" {
@@ -139,8 +136,7 @@ func (m *smtpMailer) Send(ctx context.Context, msg Message) error {
 	return nil
 }
 
-// Probe 执行连通性检查：连接 SMTP 服务器，执行配置的 TLS/STARTTLS 握手并发送 EHLO，
-// 不会发送任何邮件。
+// Probe 执行 SMTP 连通性检查。
 func Probe(ctx context.Context, cfg SMTPConfig) error {
 	m, err := NewSMTP(cfg)
 	if err != nil {

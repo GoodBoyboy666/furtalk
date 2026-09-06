@@ -12,6 +12,7 @@ import (
 	"gorm.io/gorm"
 )
 
+// SiteRepo 提供站点及来源的持久化操作。
 type SiteRepo struct {
 	db *gorm.DB
 }
@@ -152,8 +153,7 @@ func (r *SiteRepo) AddOrigin(ctx context.Context, siteID int64, origin string) (
 	return &created, nil
 }
 
-// UpdateOrigin 以 site_id 与 origin id 限定范围更新 origin 值，返回更新后的记录。
-// 记录不存在时返回 domain.ErrNotFound，重复值返回 domain.ErrConflict。
+// UpdateOrigin 更新站点来源并返回最新记录。
 func (r *SiteRepo) UpdateOrigin(ctx context.Context, siteID, originID int64, origin string) (*domain.Origin, error) {
 	db := gormtx.DB(ctx, r.db)
 	// 更新前以 site 作用域确认记录存在，因为不同数据库下 RowsAffected 语义不一致。
@@ -177,7 +177,7 @@ func (r *SiteRepo) UpdateOrigin(ctx context.Context, siteID, originID int64, ori
 	return &updated, nil
 }
 
-// RemoveOrigin 删除origin
+// RemoveOrigin 删除站点的 origin。
 func (r *SiteRepo) RemoveOrigin(ctx context.Context, siteID, originID int64) error {
 	result := gormtx.DB(ctx, r.db).
 		Where("site_id = ? AND id = ?", siteID, originID).

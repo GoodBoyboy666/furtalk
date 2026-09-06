@@ -1,5 +1,4 @@
-// Command migrate-provider-secrets converts provider secret envelopes from v1
-// (raw 32-byte key) to v2 (HKDF-derived AES-256 key).
+// migrate-provider-secrets 工具将 provider 密钥信封从 v1 转换为 v2。
 package main
 
 import (
@@ -38,6 +37,7 @@ type config struct {
 	legacyRawKey    []byte
 }
 
+// KindReport 汇总单类 provider 密钥的迁移结果。
 type KindReport struct {
 	Scanned   int
 	Converted int
@@ -45,6 +45,7 @@ type KindReport struct {
 	NoSecret  int
 }
 
+// Report 汇总全部 provider 密钥的迁移结果。
 type Report struct {
 	ByKind map[string]KindReport
 	DryRun bool
@@ -66,6 +67,7 @@ type converter struct {
 
 var kindOrder = []string{"captcha", "auth", "spam", "notification"}
 
+// main 解析参数并执行 provider 密钥迁移。
 func main() {
 	if err := run(os.Args[1:], os.Stdout); err != nil {
 		fmt.Fprintln(os.Stderr, "provider secret migration failed:", err)
@@ -73,6 +75,7 @@ func main() {
 	}
 }
 
+// run 连接目标数据库并执行 provider 密钥迁移。
 func run(args []string, stdout io.Writer) error {
 	cfg, err := parseFlags(args)
 	if err != nil {
@@ -119,6 +122,7 @@ func run(args []string, stdout io.Writer) error {
 	return err
 }
 
+// parseFlags 解析迁移参数并读取密钥配置。
 func parseFlags(args []string) (config, error) {
 	var cfg config
 	set := flag.NewFlagSet("migrate-provider-secrets", flag.ContinueOnError)
@@ -189,6 +193,7 @@ func parseFlags(args []string) (config, error) {
 	return cfg, nil
 }
 
+// migrate 在事务中转换 provider 密钥并按模式提交或回滚。
 func migrate(ctx context.Context, runner *gormtx.Runner, repo *repository.SettingsRepo, legacyRaw, newRaw []byte, execute bool) (Report, error) {
 	legacyKey := append([]byte(nil), legacyRaw...)
 	currentKey, err := crypto.DeriveProviderKey(newRaw)
@@ -218,6 +223,7 @@ func migrate(ctx context.Context, runner *gormtx.Runner, repo *repository.Settin
 	return report, nil
 }
 
+// convert 扫描并转换各类 provider 密钥信封。
 func (c *converter) convert(ctx context.Context) (Report, error) {
 	report := Report{ByKind: make(map[string]KindReport, len(kindOrder))}
 	captchaRows, err := c.repo.ListCaptchaProviders(ctx)
@@ -298,6 +304,7 @@ func (c *converter) convert(ctx context.Context) (Report, error) {
 	return report, nil
 }
 
+// convertRecords 转换指定类别的 provider 密钥记录。
 func (c *converter) convertRecords(ctx context.Context, kind string, records []providerRecord) (KindReport, error) {
 	var report KindReport
 	for _, record := range records {
@@ -332,6 +339,7 @@ func (c *converter) convertRecords(ctx context.Context, kind string, records []p
 	return report, nil
 }
 
+// cryptoxDecrypt 组合信封字段并解密 provider 密钥。
 func cryptoxDecrypt(key []byte, version byte, nonce, ciphertext []byte) ([]byte, error) {
 	envelope := make([]byte, 0, 1+len(nonce)+len(ciphertext))
 	envelope = append(envelope, version)
@@ -340,6 +348,7 @@ func cryptoxDecrypt(key []byte, version byte, nonce, ciphertext []byte) ([]byte,
 	return crypto.Decrypt(key, version, envelope)
 }
 
+// printReport 将 provider 密钥迁移统计写入输出流。
 func printReport(w io.Writer, report Report) error {
 	mode := "execute"
 	if report.DryRun {
@@ -357,10 +366,13 @@ func printReport(w io.Writer, report Report) error {
 	return nil
 }
 
+// rawEnv 读取未经清理的环境变量。
 func rawEnv(key string) string { return os.Getenv(key) }
 
+// trimmedEnv 读取并清理环境变量。
 func trimmedEnv(key string) string { return strings.TrimSpace(rawEnv(key)) }
 
+// envInt 读取环境变量中的整数值。
 func envInt(key string) int {
 	value := trimmedEnv(key)
 	if value == "" {

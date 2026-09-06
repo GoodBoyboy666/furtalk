@@ -17,8 +17,7 @@ import (
 	"furtalk/internal/repository"
 )
 
-// mapEphemeralError keeps cache capacity details out of the HTTP contract and
-// logs only the fixed namespace name. Cache records and keys are never logged.
+// mapEphemeralError 将临时缓存容量错误映射为领域错误。
 func (s *Service) mapEphemeralError(ctx context.Context, namespace string, err error) error {
 	if errors.Is(err, cache.ErrCapacity) {
 		s.logEphemeralCapacity(ctx, namespace)
@@ -27,6 +26,7 @@ func (s *Service) mapEphemeralError(ctx context.Context, namespace string, err e
 	return err
 }
 
+// logEphemeralCapacity 记录临时缓存容量不足。
 func (s *Service) logEphemeralCapacity(ctx context.Context, namespace string) {
 	logging.FromContext(ctx, s.log).WarnContext(ctx, "ephemeral namespace capacity exhausted", "namespace", namespace)
 }
@@ -135,8 +135,7 @@ func NewService(deps Dependencies) *Service {
 	}
 	emailCodes := deps.EmailCodes
 	if emailCodes == nil {
-		// Focused tests may intentionally provide only a narrow cache fake.
-		// Production wiring supplies the bounded adapter from the composition root.
+		// 定向测试可能只提供精简缓存替身；生产装配提供有界适配器。
 		if _, ok := deps.Cache.(onetime.Backend); ok {
 			emailCodes, _ = NewEmailCodeStore(deps.Cache)
 		} else {
@@ -177,7 +176,7 @@ func NewService(deps Dependencies) *Service {
 
 // runAdminMutation 在进程内串行化管理员变更并锁定活跃管理员集合。
 func (s *Service) runAdminMutation(ctx context.Context, fn func(context.Context) error) error {
-	// 管理员互斥锁覆盖事务提交或回滚，避免提交前释放造成新的检查竞态。
+	// 管理员互斥锁覆盖事务提交或回滚，提交前保持检查与写入的串行化。
 	return s.runAdminMutationWithActiveAdminCount(ctx, func(txCtx context.Context, _ int64) error {
 		return fn(txCtx)
 	})
@@ -185,7 +184,7 @@ func (s *Service) runAdminMutation(ctx context.Context, fn func(context.Context)
 
 // runAdminMutationWithActiveAdminCount 串行化破坏性管理员变更并返回活跃管理员数量。
 func (s *Service) runAdminMutationWithActiveAdminCount(ctx context.Context, fn func(context.Context, int64) error) error {
-	// 按稳定顺序锁定集合，调用方据此模拟多次移除。
+	// 按稳定顺序锁定集合，使用方可据此执行多次移除。
 	s.adminMutation.Lock()
 	defer s.adminMutation.Unlock()
 	return s.txRunner.RunInTx(ctx, func(txCtx context.Context) error {
@@ -198,7 +197,6 @@ func (s *Service) runAdminMutationWithActiveAdminCount(ctx context.Context, fn f
 }
 
 // SetCommentDeleter 安装评论清理写接口。
-// comment.Service 与 identity.Service 相互引用，组合根构造两侧后调用本方法接线。
 func (s *Service) SetCommentDeleter(w domain.CommentDeleter) {
 	s.commentDeleter = w
 }
@@ -229,8 +227,8 @@ type OAuthProviderReader interface {
 	OAuthProvider(ctx context.Context, providerKey string) (*AuthProvider, error)
 }
 
-// AuthProvider 是 identity 消费的 OAuth/OIDC 提供商投影。
-// 具体 setting DTO 由组合根逐字段转换，避免 sibling feature 类型泄漏。
+// AuthProvider 是 identity 使用的 OAuth/OIDC 提供商映射。
+// 具体 setting DTO 由依赖组装入口逐字段转换，隔离不同 feature 的类型。
 type AuthProvider struct {
 	ProviderKey     string
 	Kind            domain.ProviderKind

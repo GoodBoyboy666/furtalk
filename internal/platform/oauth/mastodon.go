@@ -34,7 +34,7 @@ type mastodonDiscovery struct {
 // 要求实例 >= 4.3（元数据端点必须可用）；使用 S256 PKCE 但不发送 nonce。
 // 4.4+ 通过 userinfo 端点取得 ActivityPub actor URI 作为 subject，
 // 4.3 回退使用 verify_credentials 的局部 Account ID 做实例作用域化编码。
-// 该 provider 永远不返回邮箱。
+// 该 provider 不提供邮箱字段。
 type mastodonProvider struct {
 	key          string
 	clientID     string
@@ -46,12 +46,13 @@ type mastodonProvider struct {
 	disco *mastodonDiscovery
 }
 
+// newMastodonProvider 创建 Mastodon 单实例 OAuth2 适配器。
 func newMastodonProvider(cfg Config, client *http.Client) (*mastodonProvider, error) {
 	if cfg.InstanceURL == "" {
 		return nil, fmt.Errorf("%w: mastodon instance url is required", ErrUnsupported)
 	}
-	// ProviderService 会对持久化实例强制要求 HTTPS；此处保留 HTTP，
-	// 供适配器测试使用注入的 httptest/本地传输。
+	// ProviderService 会对持久化实例强制要求 HTTPS；HTTP 仅用于适配器测试注入的
+	// httptest 或本地传输。
 	instance, err := urlx.ParseHTTPBase(cfg.InstanceURL)
 	if err != nil {
 		return nil, fmt.Errorf("%w: mastodon instance url is invalid", ErrUnsupported)
@@ -70,8 +71,7 @@ func (p *mastodonProvider) Name() string {
 	return "Mastodon"
 }
 
-// clientContext 返回注入共享 HTTP client 的上下文，
-// 使 metadata/token/userinfo 的全部网络请求走同一 client（含超时）。
+// clientContext 返回注入共享 HTTP client 的上下文。
 func (p *mastodonProvider) clientContext(ctx context.Context) context.Context {
 	if p.httpClient == nil {
 		return ctx
@@ -80,8 +80,6 @@ func (p *mastodonProvider) clientContext(ctx context.Context) context.Context {
 }
 
 // discovery 在 {instance}/.well-known/oauth-authorization-server 请求 RFC 8414
-// 元数据并缓存结果。实例低于 4.3 时元数据不可用，discovery 失败即硬失败（4.3 下限），
-// 不回退到硬编码端点。
 func (p *mastodonProvider) discovery(ctx context.Context) (*mastodonDiscovery, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -123,6 +121,7 @@ func (p *mastodonProvider) discovery(ctx context.Context) (*mastodonDiscovery, e
 	return &doc, nil
 }
 
+// oauthConfig 根据发现文档构建 Mastodon OAuth 配置。
 func (p *mastodonProvider) oauthConfig(ctx context.Context, redirectURI string) (*oauth2.Config, error) {
 	doc, err := p.discovery(ctx)
 	if err != nil {
@@ -142,8 +141,6 @@ func (p *mastodonProvider) oauthConfig(ctx context.Context, redirectURI string) 
 }
 
 // BuildAuthURL 在元数据成功后，为新的 state 与可选 PKCE verifier 生成授权 URL。
-// 仅在 verifier 非空时附加 code_challenge（S256）；Mastodon 不发送 nonce，
-// 即使请求中带 nonce 也忽略。
 func (p *mastodonProvider) BuildAuthURL(ctx context.Context, req AuthorizationRequest) (string, error) {
 	config, err := p.oauthConfig(ctx, req.RedirectURI)
 	if err != nil {
@@ -157,8 +154,6 @@ func (p *mastodonProvider) BuildAuthURL(ctx context.Context, req AuthorizationRe
 }
 
 // Exchange 用 code 换取 token 并解析已认证 actor，返回只含 Subject 的 Identity。
-// 4.4+ 用 userinfo 的 ActivityPub actor URI；4.3 回退用 verify_credentials 的
-// Account ID 做 (issuer, id) 作用域化编码。任何失败映射为 ErrIdentity。
 func (p *mastodonProvider) Exchange(ctx context.Context, req ExchangeRequest) (*Identity, error) {
 	config, err := p.oauthConfig(ctx, req.RedirectURI)
 	if err != nil {
@@ -186,8 +181,7 @@ func (p *mastodonProvider) Exchange(ctx context.Context, req ExchangeRequest) (*
 	return &Identity{Subject: subject, VerifiedEmail: ""}, nil
 }
 
-// resolveActor 按元数据能力解析 actor subject：
-// 有 userinfo_endpoint（4.4+）时用它；没有时走 verify_credentials 回退（4.3）。
+// resolveActor 按元数据能力解析 actor subject。
 func (p *mastodonProvider) resolveActor(ctx context.Context, doc *mastodonDiscovery, token *oauth2.Token) (string, error) {
 	if doc.UserInfoURL != "" {
 		return p.fetchUserInfoSubject(ctx, doc.UserInfoURL, token)
@@ -195,8 +189,7 @@ func (p *mastodonProvider) resolveActor(ctx context.Context, doc *mastodonDiscov
 	return p.fetchVerifyCredentialsSubject(ctx, doc.Issuer, token)
 }
 
-// fetchUserInfoSubject 用 Bearer token 请求 4.4+ userinfo 端点，
-// 返回 ActivityPub actor URI 原样作为全局唯一的 subject。
+// fetchUserInfoSubject 从 4.4+ userinfo 端点提取 actor subject。
 func (p *mastodonProvider) fetchUserInfoSubject(ctx context.Context, userInfoURL string, token *oauth2.Token) (string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, userInfoURL, nil)
 	if err != nil {
@@ -227,8 +220,7 @@ func (p *mastodonProvider) fetchUserInfoSubject(ctx context.Context, userInfoURL
 	return info.Subject, nil
 }
 
-// fetchVerifyCredentialsSubject 用 Bearer token 请求 4.3 verify_credentials 端点，
-// 返回 (issuer, Account ID) 的作用域化编码 subject。
+// fetchVerifyCredentialsSubject 从 4.3 verify_credentials 端点提取 actor subject。
 func (p *mastodonProvider) fetchVerifyCredentialsSubject(ctx context.Context, issuer string, token *oauth2.Token) (string, error) {
 	instance, err := urlx.ParseHTTPBase(p.instanceURL)
 	if err != nil {

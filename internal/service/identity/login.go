@@ -39,8 +39,7 @@ type cacheEmailCodeStore struct {
 	passwordReset *onetime.Store
 }
 
-// NewEmailCodeStore constructs the two bounded email-code stores over the
-// existing shared cache backend. It does not create or own another backend.
+// NewEmailCodeStore 构建邮箱验证码存储适配器。
 func NewEmailCodeStore(store cache.Store) (EmailCodeStore, error) {
 	if _, ok := store.(onetime.Backend); !ok {
 		return nil, onetime.ErrAtomicUnsupported
@@ -64,10 +63,12 @@ func NewEmailCodeStore(store cache.Store) (EmailCodeStore, error) {
 	return cacheEmailCodeStore{store: store, login: login, passwordReset: passwordReset}, nil
 }
 
+// bounded 将时长限制在允许范围内。
 func (a cacheEmailCodeStore) bounded() bool {
 	return a.login != nil || a.passwordReset != nil
 }
 
+// oneTimeFor 构建一次性验证码存储键。
 func (a cacheEmailCodeStore) oneTimeFor(purpose string) (*onetime.Store, error) {
 	switch purpose {
 	case emailCodePurpose:
@@ -88,11 +89,12 @@ func (a cacheEmailCodeStore) oneTimeFor(purpose string) (*onetime.Store, error) 
 	}
 }
 
+// emailCodeKey 构建邮箱验证码存储键。
 func emailCodeKey(purpose, normalizedEmail string) string {
 	return "email-code:" + purpose + ":" + normalizedEmail
 }
 
-// SetEmailCode issues or replaces an expiring one-time digest.
+// SetEmailCode 写入或替换带过期时间的一次性摘要。
 func (a cacheEmailCodeStore) SetEmailCode(ctx context.Context, purpose, normalizedEmail, digest string, ttl time.Duration) error {
 	oneTime, err := a.oneTimeFor(purpose)
 	if err != nil {
@@ -138,12 +140,11 @@ func (a cacheEmailCodeStore) AtomicVerifyEmailCode(ctx context.Context, purpose,
 		}
 		return result == onetime.Consumed, nil
 	}
-	// A narrow test double may support issuance/gates but not verification.
+	// 精简测试替身可能只支持签发和准入检查，不支持验证。
 	return false, nil
 }
 
-// SendEmailCode 校验邮箱、执行 CAPTCHA 策略、保存验证码哈希并投递验证码邮件。
-// 未知邮箱的域名必须通过名单策略，否则在写验证码缓存或发送邮件前拒绝。
+// SendEmailCode 发送邮箱验证码。
 func (s *Service) SendEmailCode(ctx context.Context, rawEmail, captchaToken string) error {
 	_, normalized, err := value.NormalizeEmail(rawEmail)
 	if err != nil {
@@ -190,8 +191,7 @@ type EmailCodeLoginInput struct {
 	CaptchaToken string
 }
 
-// LoginWithEmailCode 校验 CAPTCHA 后原子消费一次性验证码并登录。
-// 未知邮箱在允许公开注册时自动注册普通用户。
+// LoginWithEmailCode 使用邮箱验证码登录。
 func (s *Service) LoginWithEmailCode(ctx context.Context, input EmailCodeLoginInput) (*Session, error) {
 	_, normalized, err := value.NormalizeEmail(input.Email)
 	if err != nil {
@@ -218,7 +218,7 @@ func (s *Service) LoginWithEmailCode(ctx context.Context, input EmailCodeLoginIn
 		return nil, err
 	}
 	// 先完成登录门禁（账户状态、评论模式、签发与 CSRF），只有门禁成功后
-	// 才把既存未验证邮箱标记为已验证，避免仅凭验证码消费就写入验证状态。
+	// 既存未验证邮箱仅在完整登录成功后标记为已验证。
 	session, err := s.completeLogin(ctx, user)
 	if err != nil {
 		return nil, err
@@ -232,8 +232,7 @@ func (s *Service) LoginWithEmailCode(ctx context.Context, input EmailCodeLoginIn
 	return session, nil
 }
 
-// registerOnCodeLogin 在验证码登录命中未知邮箱且允许公开注册时创建用户。
-// 自动注册前再次校验域名，域名名单在注册阶段同样生效。
+// registerOnCodeLogin 在验证码登录时注册用户。
 func (s *Service) registerOnCodeLogin(ctx context.Context, normalized string) (*Session, error) {
 	public, _, err := s.policy.Policy(ctx)
 	if err != nil {
@@ -260,6 +259,7 @@ func (s *Service) registerOnCodeLogin(ctx context.Context, normalized string) (*
 	return s.completeLogin(ctx, user)
 }
 
+// completeLogin 为用户生成登录会话。
 func (s *Service) completeLogin(ctx context.Context, user *domain.User) (*Session, error) {
 	if user.Status != domain.UserStatusActive {
 		return nil, domain.ErrDisabled
@@ -286,7 +286,7 @@ func (s *Service) completeLogin(ctx context.Context, user *domain.User) (*Sessio
 	}, nil
 }
 
-// Logout 清除 FP Cookie。服务端不保存会话，也无黑名单。
+// Logout 处理第一方登出请求。
 func (s *Service) Logout(ctx context.Context) error {
 	return nil
 }
@@ -309,7 +309,6 @@ func generateCode(length int) (string, error) {
 }
 
 // renderEmailCodeMessage 渲染验证码邮件的主题、纯文本正文与模板化 HTML 正文。
-// HTML 正文由模板渲染器生成，失败时返回错误，由调用方按邮件服务不可用处理。
 func renderEmailCodeMessage(templates mailer.TemplateRenderer, to, code string, ttl time.Duration) (mailer.Message, error) {
 	minutes := int(ttl / time.Minute)
 	html, err := templates.LoginCode(mailer.LoginCodeData{

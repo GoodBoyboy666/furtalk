@@ -95,7 +95,7 @@ func seedAccountDeleteFixture(t *testing.T, db *gorm.DB) accountDeleteFixture {
 }
 
 // newAccountDeleteService 装配身份服务，并把评论服务作为清理端口接线，
-// 与组合根的 SetCommentDeleter 接线一致。
+// 与依赖组装入口的 SetCommentDeleter 接线一致。
 func newAccountDeleteService(t *testing.T, db *gorm.DB) *Service {
 	t.Helper()
 	store := &adminTestStore{}

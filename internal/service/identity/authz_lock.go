@@ -17,8 +17,7 @@ type userLockEntry struct {
 // authzLockRegistry 保留授权缓存锁的既有类型名称。
 type authzLockRegistry = userLockRegistry
 
-// lock 获取用户级锁并返回释放函数。refs 同时计数持有者与等待者，避免同一
-// 用户仍有排队操作时提前删除锁条目。
+// lock 获取用户级锁并返回释放函数；refs 统计持有者与等待者。
 func (r *userLockRegistry) lock(userID int64) func() {
 	r.mu.Lock()
 	if r.entries == nil {

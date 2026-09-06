@@ -100,7 +100,6 @@ func (a *Adapter) FinishRegistration(user User, sessionJSON, responseJSON []byte
 }
 
 // BeginLogin 返回 discoverable 断言选项 JSON 与不透明 session 载荷。
-// 登录始终使用客户端可发现的 passkey，不接受用户标识或 credential allow-list。
 func (a *Adapter) BeginLogin() (json.RawMessage, []byte, error) {
 	options, session, err := a.wa.BeginDiscoverableLogin()
 	if err != nil {
@@ -118,7 +117,6 @@ func (a *Adapter) BeginLogin() (json.RawMessage, []byte, error) {
 }
 
 // FinishLogin 根据 discoverable session 验证断言。
-// lookup 根据 credential ID 与 authenticator 返回的 user handle 解析用户；
 func (a *Adapter) FinishLogin(sessionJSON, responseJSON []byte, lookup func(rawID, userHandle []byte) (*User, error)) (*Credential, uint32, error) {
 	session, err := decodeSession(sessionJSON)
 	if err != nil {
@@ -148,6 +146,7 @@ type ceremonySession struct {
 	raw     []byte
 }
 
+// beginRegistration 创建 WebAuthn 注册选项与会话数据。
 func (a *Adapter) beginRegistration(user User) (*ceremonySession, error) {
 	options, session, err := a.wa.BeginRegistration(
 		user.toSDK(),
@@ -163,6 +162,7 @@ func (a *Adapter) beginRegistration(user User) (*ceremonySession, error) {
 	return &ceremonySession{options: options, raw: encoded}, nil
 }
 
+// encodeSession 编码 WebAuthn 会话数据。
 func encodeSession(session *webauthn.SessionData) ([]byte, error) {
 	raw, err := json.Marshal(session)
 	if err != nil {
@@ -171,6 +171,7 @@ func encodeSession(session *webauthn.SessionData) ([]byte, error) {
 	return raw, nil
 }
 
+// decodeSession 解码 WebAuthn 会话数据。
 func decodeSession(raw []byte) (webauthn.SessionData, error) {
 	var session webauthn.SessionData
 	if err := json.Unmarshal(raw, &session); err != nil {
@@ -179,7 +180,7 @@ func decodeSession(raw []byte) (webauthn.SessionData, error) {
 	return session, nil
 }
 
-// toSDK 把面向服务层的 user 转成 go-webauthn 的 User 接口。
+// toSDK 将服务层用户转换为 go-webauthn 用户。
 func (u User) toSDK() webauthn.User {
 	return sdkUser{user: u}
 }
@@ -212,6 +213,7 @@ func (u sdkUser) WebAuthnCredentials() []webauthn.Credential {
 	return out
 }
 
+// toSDK 将服务层凭证转换为 go-webauthn 凭证。
 func (c Credential) toSDK() webauthn.Credential {
 	transports := make([]protocol.AuthenticatorTransport, 0, len(c.Transports))
 	for _, t := range c.Transports {
@@ -232,6 +234,7 @@ func (c Credential) toSDK() webauthn.Credential {
 	}
 }
 
+// fromSDK 将 go-webauthn 凭证转换为服务层凭证。
 func fromSDK(c *webauthn.Credential) *Credential {
 	transports := make([]string, 0, len(c.Transport))
 	for _, t := range c.Transport {

@@ -18,14 +18,11 @@ const (
 )
 
 // New 构建默认 text 格式的 INFO 阈值 logger，并在 handler 前安装敏感属性过滤。
-// 正常运行日志写 stdout；配置或 Fx 图创建前的启动失败由调用方选择 stderr。
 func New(w io.Writer) *slog.Logger {
 	return NewWithFormat(w, FormatText)
 }
 
 // NewWithFormat 按显式格式构建 INFO 阈值的 logger。
-// json 使用 slog.NewJSONHandler，text（及空值）使用 slog.NewTextHandler；
-// 两者共享同一个敏感属性过滤 handler 与全部字段 helper。
 func NewWithFormat(w io.Writer, format string) *slog.Logger {
 	var handler slog.Handler
 	switch format {
@@ -38,7 +35,6 @@ func NewWithFormat(w io.Writer, format string) *slog.Logger {
 }
 
 // Discard 返回丢弃全部记录的 logger，供可选依赖为空时的确定性兜底。
-// 生产 Fx 图始终注入真实 logger；兜底只服务于测试或可选组件。
 func Discard() *slog.Logger {
 	return slog.New(discardHandler{})
 }
@@ -71,7 +67,7 @@ func Duration(d time.Duration) slog.Attr {
 	return slog.Int64("duration_ms", d.Milliseconds())
 }
 
-// discardHandler 丢弃全部记录；Enabled 返回 false 使调用方直接跳过。
+// discardHandler 丢弃全部记录；Enabled 返回 false 使使用方直接跳过。
 type discardHandler struct{}
 
 // Enabled 始终为 false，使 slog 跳过记录处理。

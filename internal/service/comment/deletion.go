@@ -6,8 +6,7 @@ import (
 	"furtalk/internal/domain"
 )
 
-// SoftDeleteUserComments 单行软删除该用户发表的全部评论，不处理其他用户的回复。
-// 供身份服务在软删除用户时统一协调；已删除节点保持原状态。
+// SoftDeleteUserComments 软删除该用户发表的全部评论，不处理其他用户的回复。
 func (s *Service) SoftDeleteUserComments(ctx context.Context, userID int64) error {
 	return s.comments.SoftDeleteByUser(ctx, userID, s.now())
 }
@@ -19,9 +18,7 @@ func (s *Service) SoftDeleteUsersComments(ctx context.Context, userIDs []int64) 
 	return err
 }
 
-// PrepareUserHardDelete 在物理删除用户前解除保留评论对该用户评论的
-// parent_id / root_id 引用，使删除只级联移除该用户自己的评论。
-// 供身份服务在硬删除用户时统一协调，须与用户行删除在同一事务内。
+// PrepareUserHardDelete 为物理删除用户解除评论引用。
 func (s *Service) PrepareUserHardDelete(ctx context.Context, userID int64) error {
 	return s.comments.DetachUserCommentChildren(ctx, userID)
 }
@@ -33,8 +30,6 @@ func (s *Service) PrepareUsersHardDelete(ctx context.Context, userIDs []int64) e
 }
 
 // DeleteByOwner 删除当前用户自己的某条评论，按 user_delete_mode 软删或硬删。
-// 只处理选中评论；硬删除在同一事务内解除保留回复的引用并删除该行，
-// 其回复保持原状态与正文。用户不能自行选择软删或硬删。
 func (s *Service) DeleteByOwner(ctx context.Context, actorID, commentID int64, wantSiteID *int64) (*DeleteResult, error) {
 	comment, err := s.comments.FindGlobalByID(ctx, commentID)
 	if err != nil {
@@ -65,8 +60,7 @@ func (s *Service) DeleteByOwner(ctx context.Context, actorID, commentID int64, w
 	return &DeleteResult{DeletedRootID: commentID, Hard: false}, nil
 }
 
-// AdminDelete 按管理员选择的模式删除单条评论；软删除保留占位节点，
-// 硬删除需显式确认且只删除选中行。回复评论保持原状态。
+// AdminDelete 按管理员选择的模式删除单条评论。
 func (s *Service) AdminDelete(ctx context.Context, id int64, hard, confirm bool) (*DeleteResult, error) {
 	if hard && !confirm {
 		return nil, domain.ErrConfirmationRequired
@@ -82,7 +76,7 @@ func (s *Service) AdminDelete(ctx context.Context, id int64, hard, confirm bool)
 		return &DeleteResult{DeletedRootID: id, Hard: true}, nil
 	}
 	// 已软删除的评论再次软删除属于非法转换（409），
-	// 与四状态状态机中的 same-state 冲突语义一致；硬删除仍可清理占位节点。
+	// 与四状态状态机中的 same-state 冲突语义一致；硬删除仍可清理相关引用。
 	if comment.Status == domain.CommentStatusDeleted {
 		return nil, domain.ErrConflict
 	}
@@ -100,7 +94,6 @@ func (s *Service) softDeleteOne(ctx context.Context, siteID int64, comment *doma
 }
 
 // hardDeleteOne 在同一事务内解除保留回复对目标评论的 parent_id / root_id
-// 引用，然后只删除目标行。任一步失败整体回滚。
 func (s *Service) hardDeleteOne(ctx context.Context, siteID, id int64) error {
 	return s.txRunner.RunInTx(ctx, func(ctx context.Context) error {
 		return s.hardDeleteInCurrentTx(ctx, siteID, id)

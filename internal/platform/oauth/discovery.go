@@ -33,6 +33,7 @@ type discoveryProvider struct {
 	provider *oidc.Provider
 }
 
+// newDiscoveryProvider 创建基于 discovery 的单实例 OIDC 适配器。
 func newDiscoveryProvider(cfg Config, client *http.Client) (*discoveryProvider, error) {
 	if cfg.InstanceURL == "" {
 		return nil, fmt.Errorf("%w: %s instance url is required", ErrUnsupported, cfg.ProviderKey)
@@ -63,8 +64,7 @@ func (p *discoveryProvider) Name() string {
 	return p.name
 }
 
-// clientContext 返回注入共享 HTTP client 的上下文，
-// 使 discovery/JWKS/token/userinfo 的全部网络请求走同一 client（含超时）。
+// clientContext 返回注入共享 HTTP client 的上下文。
 func (p *discoveryProvider) clientContext(ctx context.Context) context.Context {
 	if p.httpClient == nil {
 		return ctx
@@ -73,8 +73,6 @@ func (p *discoveryProvider) clientContext(ctx context.Context) context.Context {
 }
 
 // discovery 在 {instance}/.well-known/openid-configuration 手动执行 discovery
-// 并缓存结果。discovery 文档只用于解析端点与 issuer；id-token verifier 使用
-// 发现到的 issuer 与 jwks_uri 构造，不要求 discovered issuer 与 instance 一致。
 func (p *discoveryProvider) discovery(ctx context.Context) (*oidc.Provider, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -92,8 +90,6 @@ func (p *discoveryProvider) discovery(ctx context.Context) (*oidc.Provider, erro
 }
 
 // fetchDiscoveryDocument 请求并解析 OIDC discovery 文档。
-// issuer、authorization_endpoint、token_endpoint 与 jwks_uri 必须齐全；
-// userinfo_endpoint 由 ID token 缺少已验证邮箱时才用到，允许缺失。
 func (p *discoveryProvider) fetchDiscoveryDocument(ctx context.Context) (*oidc.ProviderConfig, error) {
 	instance, err := urlx.ParseHTTPBase(p.instanceURL)
 	if err != nil {
@@ -126,6 +122,7 @@ func (p *discoveryProvider) fetchDiscoveryDocument(ctx context.Context) (*oidc.P
 	return &doc, nil
 }
 
+// oauthConfig 根据发现文档构建 OAuth 配置。
 func (p *discoveryProvider) oauthConfig(ctx context.Context, redirectURI string) (*oauth2.Config, error) {
 	provider, err := p.discovery(ctx)
 	if err != nil {
@@ -144,8 +141,6 @@ func (p *discoveryProvider) oauthConfig(ctx context.Context, redirectURI string)
 }
 
 // BuildAuthURL 在 discovery 成功后，为新的 state、可选 PKCE verifier 与可选 nonce
-// 生成授权 URL。仅在 verifier 非空时附加 code_challenge（S256），仅在 nonce 非空时
-// 附加 nonce 参数。
 func (p *discoveryProvider) BuildAuthURL(ctx context.Context, req AuthorizationRequest) (string, error) {
 	config, err := p.oauthConfig(ctx, req.RedirectURI)
 	if err != nil {
@@ -162,9 +157,6 @@ func (p *discoveryProvider) BuildAuthURL(ctx context.Context, req AuthorizationR
 }
 
 // Exchange 用 code 换取 token，校验 ID token 的签名、issuer、audience 与 nonce。
-// ID token 含已验证邮箱时直接使用；否则用访问令牌请求 UserInfo 作为 subject 一致的
-// 已验证邮箱回退。缺失邮箱不否定 subject，返回空的 VerifiedEmail。
-// 输出的 Subject 是 (discovered issuer, ID token subject) 的作用域化编码。
 func (p *discoveryProvider) Exchange(ctx context.Context, req ExchangeRequest) (*Identity, error) {
 	config, err := p.oauthConfig(ctx, req.RedirectURI)
 	if err != nil {
@@ -226,8 +218,6 @@ func (p *discoveryProvider) Exchange(ctx context.Context, req ExchangeRequest) (
 }
 
 // fetchUserInfoVerifiedEmail 在 ID token 缺少已验证邮箱时，用访问令牌请求 UserInfo
-// 作为回退。仅当 UserInfo 的 sub 与 ID token subject 一致且 email 已验证时才返回邮箱；
-// UserInfo 缺失邮箱或未验证时返回空字符串，不否定 subject。
 func (p *discoveryProvider) fetchUserInfoVerifiedEmail(ctx context.Context, provider *oidc.Provider, token *oauth2.Token, subject string) (string, error) {
 	info, err := provider.UserInfo(p.clientContext(ctx), oauth2.StaticTokenSource(token))
 	if err != nil {

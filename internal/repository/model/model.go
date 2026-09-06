@@ -1,4 +1,4 @@
-// Package model GORM model。
+// Package model 定义数据库持久化模型及其领域类型转换方法。
 package model
 
 import (
@@ -24,6 +24,7 @@ func All() []any {
 	}
 }
 
+// User 表示用户持久化模型。
 type User struct {
 	ID                 int64              `gorm:"primaryKey;autoIncrement;generated:identity"`
 	Email              string             `gorm:"column:email;type:text;not null"`
@@ -42,6 +43,7 @@ type User struct {
 	UpdatedAt          time.Time          `gorm:"column:updated_at;precision:6;autoUpdateTime"`
 }
 
+// ToUser 将用户持久化模型转换为领域用户。
 func (r User) ToUser() domain.User {
 	return domain.User{
 		ID:                 r.ID,
@@ -60,6 +62,7 @@ func (r User) ToUser() domain.User {
 	}
 }
 
+// ToSite 将站点持久化模型转换为领域站点。
 func (r Site) ToSite() domain.Site {
 	return domain.Site{
 		ID:           r.ID,
@@ -71,6 +74,7 @@ func (r Site) ToSite() domain.Site {
 	}
 }
 
+// PasskeyCredential 表示 Passkey 凭据持久化模型。
 type PasskeyCredential struct {
 	ID              int64      `gorm:"primaryKey;autoIncrement;generated:identity"`
 	UserID          int64      `gorm:"column:user_id;not null"`
@@ -87,6 +91,7 @@ type PasskeyCredential struct {
 	User            User       `gorm:"foreignKey:UserID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
 }
 
+// ToPasskeyCredential 将 Passkey 持久化模型转换为领域凭据。
 func (r PasskeyCredential) ToPasskeyCredential() domain.PasskeyCredential {
 	return domain.PasskeyCredential{
 		ID:              r.ID,
@@ -104,6 +109,7 @@ func (r PasskeyCredential) ToPasskeyCredential() domain.PasskeyCredential {
 	}
 }
 
+// ExternalIdentity 表示外部身份持久化模型。
 type ExternalIdentity struct {
 	ID              int64      `gorm:"primaryKey;autoIncrement;generated:identity"`
 	UserID          int64      `gorm:"column:user_id;not null;uniqueIndex:uq_external_identities_user_provider,priority:1"`
@@ -115,6 +121,7 @@ type ExternalIdentity struct {
 	User            User       `gorm:"foreignKey:UserID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
 }
 
+// ToExternalIdentity 将外部身份持久化模型转换为领域身份。
 func (r ExternalIdentity) ToExternalIdentity() domain.ExternalIdentity {
 	return domain.ExternalIdentity{
 		ID:              r.ID,
@@ -127,6 +134,7 @@ func (r ExternalIdentity) ToExternalIdentity() domain.ExternalIdentity {
 	}
 }
 
+// NotificationPreferences 表示通知偏好持久化模型。
 type NotificationPreferences struct {
 	ID                int64     `gorm:"primaryKey;autoIncrement;generated:identity"`
 	UserID            int64     `gorm:"column:user_id;not null;uniqueIndex:uq_notification_preferences_user"`
@@ -136,6 +144,7 @@ type NotificationPreferences struct {
 	User              User      `gorm:"foreignKey:UserID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
 }
 
+// ToNotificationPreferences 将通知偏好持久化模型转换为领域数据。
 func (r NotificationPreferences) ToNotificationPreferences() domain.NotificationPreferences {
 	return domain.NotificationPreferences{
 		ID:                r.ID,
@@ -146,6 +155,7 @@ func (r NotificationPreferences) ToNotificationPreferences() domain.Notification
 	}
 }
 
+// Site 表示站点持久化模型。
 type Site struct {
 	ID           int64             `gorm:"primaryKey;autoIncrement;generated:identity"`
 	Name         string            `gorm:"column:name;type:text;not null"`
@@ -155,6 +165,7 @@ type Site struct {
 	UpdatedAt    time.Time         `gorm:"column:updated_at;precision:6;autoUpdateTime"`
 }
 
+// SiteOrigin 表示站点允许来源持久化模型。
 type SiteOrigin struct {
 	ID        int64     `gorm:"primaryKey;autoIncrement;generated:identity"`
 	SiteID    int64     `gorm:"column:site_id;not null;uniqueIndex:uq_site_origins_site_origin,priority:1"`
@@ -163,10 +174,12 @@ type SiteOrigin struct {
 	Site      Site      `gorm:"foreignKey:SiteID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
 }
 
+// ToOrigin 将站点来源持久化模型转换为领域来源。
 func (r SiteOrigin) ToOrigin() domain.Origin {
 	return domain.Origin{ID: r.ID, Origin: r.Origin}
 }
 
+// Thread 表示评论线程持久化模型。
 type Thread struct {
 	ID              int64     `gorm:"primaryKey;autoIncrement;generated:identity;uniqueIndex:uq_threads_site_id,priority:2"`
 	SiteID          int64     `gorm:"column:site_id;not null;uniqueIndex:uq_threads_site_id,priority:1;uniqueIndex:uq_threads_site_page,priority:1"`
@@ -179,6 +192,7 @@ type Thread struct {
 	Site            Site      `gorm:"foreignKey:SiteID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
 }
 
+// ToThread 将线程持久化模型转换为领域线程。
 func (r Thread) ToThread() domain.Thread {
 	return domain.Thread{
 		ID:              r.ID,
@@ -192,6 +206,7 @@ func (r Thread) ToThread() domain.Thread {
 	}
 }
 
+// Comment 表示评论持久化模型。
 type Comment struct {
 	ID                 int64                 `gorm:"primaryKey;autoIncrement;generated:identity;uniqueIndex:uq_comments_site_id,priority:2;index:idx_comments_public,priority:5;index:idx_comments_site_status,priority:4;index:idx_comments_user,priority:3;index:idx_comments_site_parent,priority:4;index:idx_comments_site_root,priority:4"`
 	SiteID             int64                 `gorm:"column:site_id;not null;uniqueIndex:uq_comments_site_id,priority:1;index:idx_comments_public,priority:1;index:idx_comments_site_status,priority:1;index:idx_comments_site_parent,priority:1;index:idx_comments_site_root,priority:1"`
@@ -224,6 +239,7 @@ type Comment struct {
 	ReplyToUser        *User                 `gorm:"foreignKey:ReplyToUserID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL;"`
 }
 
+// ToComment 将评论持久化模型转换为领域评论。
 func (r Comment) ToComment() domain.Comment {
 	return domain.Comment{
 		ID:                 r.ID,
@@ -252,6 +268,7 @@ func (r Comment) ToComment() domain.Comment {
 	}
 }
 
+// CommentLike 表示评论点赞持久化模型。
 type CommentLike struct {
 	ID        int64     `gorm:"primaryKey;autoIncrement;generated:identity"`
 	SiteID    int64     `gorm:"column:site_id;not null;uniqueIndex:uq_comment_likes_site_comment_user,priority:1;index:idx_comment_likes_site_comment,priority:1"`
@@ -263,6 +280,7 @@ type CommentLike struct {
 	User      User      `gorm:"foreignKey:UserID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
 }
 
+// DynamicSetting 表示动态设置持久化模型。
 type DynamicSetting struct {
 	ID        int64     `gorm:"primaryKey;autoIncrement;generated:identity"`
 	Key       string    `gorm:"column:key;type:text;not null;uniqueIndex:uq_dynamic_settings_key"`
@@ -272,6 +290,7 @@ type DynamicSetting struct {
 	UpdatedAt time.Time `gorm:"column:updated_at;precision:6;autoUpdateTime"`
 }
 
+// BootstrapState 表示应用初始化状态持久化模型。
 type BootstrapState struct {
 	ID            int64     `gorm:"primaryKey;autoIncrement;generated:identity"`
 	SingletonKey  int       `gorm:"column:singleton_key;not null;default:1;uniqueIndex:uq_bootstrap_state_singleton;check:ck_bootstrap_state_singleton,singleton_key = 1"`

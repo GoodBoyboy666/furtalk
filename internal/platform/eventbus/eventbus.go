@@ -37,7 +37,6 @@ func New[T any](capacity int, log *slog.Logger) *Bus[T] {
 }
 
 // Publish 将事件入队。
-// 成功返回 nil；队列已满或总线关闭时返回 ErrDropped。
 func (b *Bus[T]) Publish(ev T) error {
 	select {
 	case <-b.done:
@@ -68,7 +67,6 @@ func (b *Bus[T]) Consume(ctx context.Context, fn func(T)) error {
 }
 
 // Close 停止总线。待处理事件被丢弃；此后的 Publish 返回 ErrDropped。
-// Close 幂等。
 func (b *Bus[T]) Close() {
 	b.once.Do(func() { close(b.done) })
 }

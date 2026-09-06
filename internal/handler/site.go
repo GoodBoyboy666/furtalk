@@ -22,6 +22,7 @@ func RegisterAdminSites(admin *gin.RouterGroup, service *site.Service) {
 	group.DELETE("/:site_id/origins/:origin_id", adminSitesRemoveOrigin(service))
 }
 
+// adminSitesList 处理管理端站点 HTTP 请求。
 // @Summary 列出站点
 // @Tags admin-sites
 // @Produce json
@@ -44,6 +45,7 @@ func adminSitesList(service *site.Service) gin.HandlerFunc {
 	}
 }
 
+// adminSitesCreate 处理管理端站点 HTTP 请求。
 // @Summary 创建站点
 // @Tags admin-sites
 // @Accept json
@@ -72,6 +74,7 @@ func adminSitesCreate(service *site.Service) gin.HandlerFunc {
 	}
 }
 
+// adminSitesGet 处理管理端站点 HTTP 请求。
 // @Summary 获取站点详情
 // @Tags admin-sites
 // @Produce json
@@ -98,6 +101,7 @@ func adminSitesGet(service *site.Service) gin.HandlerFunc {
 	}
 }
 
+// adminSitesUpdate 处理管理端站点 HTTP 请求。
 // @Summary 更新站点
 // @Tags admin-sites
 // @Accept json
@@ -137,6 +141,7 @@ func adminSitesUpdate(service *site.Service) gin.HandlerFunc {
 	}
 }
 
+// adminSitesDelete 处理管理端站点 HTTP 请求。
 // @Summary 删除站点
 // @Tags admin-sites
 // @Param site_id path integer true "站点 ID（十进制字符串）"
@@ -165,6 +170,7 @@ func adminSitesDelete(service *site.Service) gin.HandlerFunc {
 	}
 }
 
+// adminSitesAddOrigin 处理管理端站点 HTTP 请求。
 // @Summary 添加站点允许的 origin
 // @Tags admin-sites
 // @Accept json
@@ -201,6 +207,7 @@ func adminSitesAddOrigin(service *site.Service) gin.HandlerFunc {
 	}
 }
 
+// adminSitesUpdateOrigin 处理管理端站点 HTTP 请求。
 // @Summary 更新站点允许的 origin
 // @Tags admin-sites
 // @Accept json
@@ -243,6 +250,7 @@ func adminSitesUpdateOrigin(service *site.Service) gin.HandlerFunc {
 	}
 }
 
+// adminSitesRemoveOrigin 处理管理端站点 HTTP 请求。
 // @Summary 移除站点允许的 origin
 // @Tags admin-sites
 // @Param site_id path integer true "站点 ID（十进制字符串）"

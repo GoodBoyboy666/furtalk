@@ -1,4 +1,4 @@
-// Command Furtalk 后端的进程入口。
+// Furtalk 后端进程入口。
 // 负责启动失败日志与运行单一 *fx.App；全部装配、信号与退出码
 // 生命周期由 internal/app.New / *fx.App.Run 管理。
 //
@@ -15,6 +15,7 @@ import (
 	"furtalk/internal/platform/logging"
 )
 
+// main 启动 Furtalk 后端应用。
 func main() {
 	web := flag.Bool("web", false, "serve the embedded Web console")
 	flag.Parse()

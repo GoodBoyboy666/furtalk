@@ -3,7 +3,7 @@
 // Mastodon 的单实例 OAuth2 适配器、Microsoft/LINE/Apple 的专用 ID-token 适配器
 // 与通用 OIDC。
 // 只有显式验证邮箱的 provider（email_verified=true 且非空）才会产生可用的 VerifiedEmail；
-// 缺失邮箱不否定 Subject，绑定模式 provider 永不返回邮箱。
+// Subject 是否要求邮箱由具体 provider 的身份策略决定。
 package oauth
 
 import (
@@ -24,7 +24,7 @@ var (
 
 // Identity 是标准化后的 provider 输出。
 // 只有 provider 断言邮箱已验证时 VerifiedEmail 才非空；
-// 缺失邮箱不否定 Subject，此时 VerifiedEmail 为空字符串。
+// provider 可在缺失邮箱时保留 Subject 或返回身份错误。
 type Identity struct {
 	Subject       string
 	VerifiedEmail string
@@ -71,7 +71,7 @@ type Config struct {
 	AuthURL      string
 	TokenURL     string
 	IssuerURL    string
-	// APIURL 覆盖 GitHub API 基础地址（测试使用 mock server）。
+	// APIURL 覆盖 provider API、验证或 JWKS 端点（测试使用 mock server）。
 	APIURL string
 	// InstanceURL 是自托管实例的规范化 HTTPS 基址（GitLab/Gitea/Mastodon）。
 	InstanceURL string
@@ -87,10 +87,6 @@ type Config struct {
 }
 
 // New 根据给定配置构建 provider 适配器。
-// oauth kind 支持 github/mastodon/twitter/discord；oidc kind 支持 gitlab/gitea 的
-// discovery 适配器与 microsoft/apple/line 的专用 ID-token 适配器，其余 key
-// （google/自定义 OIDC）走通用 OIDC 适配器。
-// 其他任何组合一律以 ErrUnsupported 拒绝。
 func New(cfg Config) (Provider, error) {
 	client := boundedClient(cfg.HTTPClient, cfg.Timeout)
 	switch cfg.Kind {

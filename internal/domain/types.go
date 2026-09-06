@@ -87,7 +87,7 @@ const (
 
 // UserDeleteMode 用户删除评论的方式。
 const (
-	// UserDeleteModeSoft 软删除（保留占位节点）。
+	// UserDeleteModeSoft 软删除并保留评论记录。
 	UserDeleteModeSoft = "soft"
 	// UserDeleteModeHard 硬删除（物理移除该评论）。
 	UserDeleteModeHard = "hard"
@@ -98,28 +98,25 @@ type CommentSort string
 
 // 公开评论列表的排序方向。
 const (
-	// CommentSortAsc 按 (created_at, id) 升序。
+	// CommentSortAsc 按置顶分组内的 (created_at, id) 升序。
 	CommentSortAsc CommentSort = "asc"
-	// CommentSortDesc 按 (created_at, id) 降序。
+	// CommentSortDesc 按置顶分组内的 (created_at, id) 降序。
 	CommentSortDesc CommentSort = "desc"
-	// CommentSortHot 按 (like_count, created_at, id) 降序（仅 Like 计数）。
+	// CommentSortHot 按置顶分组内的 (like_count, created_at, id) 降序。
 	CommentSortHot CommentSort = "hot"
 )
 
-// ValidCommentSort 报告排序方向字符串是否为 asc/desc。
-// 该校验只用于管理端/用户端列表，不包含 hot。
+// ValidCommentSort 判断排序参数是否为 asc 或 desc。
 func ValidCommentSort(sort string) bool {
 	return CommentSort(sort) == CommentSortAsc || CommentSort(sort) == CommentSortDesc
 }
 
-// ValidPublicCommentSort 报告公开 Widget 评论列表的排序值：
-// 兼容的 asc/desc 与新增的 hot。
+// ValidPublicCommentSort 判断公开排序参数是否为 asc、desc 或 hot。
 func ValidPublicCommentSort(sort string) bool {
 	return ValidCommentSort(sort) || CommentSort(sort) == CommentSortHot
 }
 
-// NormalizeAdminSort 解析管理列表的 sort 参数：空值为 desc（最新优先），
-// 值必须是的 asc/desc，非法值返回验证错误。
+// NormalizeAdminSort 规范化管理端评论列表的排序参数。
 func NormalizeAdminSort(raw string) (CommentSort, error) {
 	if raw == "" {
 		return CommentSortDesc, nil
@@ -130,8 +127,7 @@ func NormalizeAdminSort(raw string) (CommentSort, error) {
 	return CommentSort(raw), nil
 }
 
-// OffsetForPage 从页码与每页数量安全推导 offset（第 1 页返回 0）。
-// 页码由 handler 边界保证为正整数；本函数只做纯整数运算，溢出时限制到最大可用偏移。
+// OffsetForPage 根据页码和页长计算分页偏移量。
 func OffsetForPage(page, limit int) int {
 	if page <= 1 || limit <= 0 {
 		return 0
@@ -285,8 +281,8 @@ type ThreadPatch struct {
 	CommentsEnabled *bool
 }
 
-// Cursor 每个列表查询使用的 (created_at, id) 分页位置。
-// LikeCount 与 Hot 仅对 hot 排序游标有意义：hot 游标携带 (like_count, created_at, id) 且带版本/排序标记，方向游标不得用于 hot。
+// Cursor 保存列表查询的分页位置与排序标记。
+// Hot 排序游标携带 LikeCount、CreatedAt、ID 和 Hot 标记，方向排序游标不含 LikeCount。
 type Cursor struct {
 	// Pinned 公开排序中的置顶分组位；旧游标解码为 false 以保持兼容。
 	Pinned    bool
@@ -373,6 +369,7 @@ type BatchResult struct {
 	UnchangedCount int
 }
 
+// ResourceError 表示关联资源标识与底层错误的组合。
 type ResourceError struct {
 	ResourceID int64
 	Err        error

@@ -8,6 +8,7 @@ import (
 	"furtalk/internal/platform/mailer"
 )
 
+// 邮件分发器的队列与并发限制常量。
 const (
 	mailRecipientLimit = 100
 	mailWorkerCount    = 4
@@ -24,7 +25,7 @@ type mailJob struct {
 
 type mailSubmitter func(mailJob) bool
 
-// mailDispatcher bounds notification mail fan-out and owns its worker lifecycle.
+// mailDispatcher 限制通知邮件并发量并管理工作协程生命周期。
 type mailDispatcher struct {
 	queue   chan mailJob
 	cancel  context.CancelFunc
@@ -32,6 +33,7 @@ type mailDispatcher struct {
 	dropped atomic.Uint64
 }
 
+// newMailDispatcher 构建邮件分发器。
 func newMailDispatcher(ctx context.Context, deliver func(mailJob)) *mailDispatcher {
 	workerCtx, cancel := context.WithCancel(ctx)
 	d := &mailDispatcher{
@@ -55,6 +57,7 @@ func newMailDispatcher(ctx context.Context, deliver func(mailJob)) *mailDispatch
 	return d
 }
 
+// submit 提交邮件任务。
 func (d *mailDispatcher) submit(job mailJob) bool {
 	if d == nil {
 		return false
@@ -68,6 +71,7 @@ func (d *mailDispatcher) submit(job mailJob) bool {
 	}
 }
 
+// stop 停止邮件分发器。
 func (d *mailDispatcher) stop() {
 	if d == nil {
 		return
@@ -76,6 +80,7 @@ func (d *mailDispatcher) stop() {
 	d.wg.Wait()
 }
 
+// droppedCount 读取被丢弃的邮件任务数。
 func (d *mailDispatcher) droppedCount() uint64 {
 	if d == nil {
 		return 0

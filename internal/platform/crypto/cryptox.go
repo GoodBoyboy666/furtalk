@@ -26,10 +26,9 @@ const (
 	derivedKeyLength         = 32
 	minimumSourceKeyLength   = 32
 
-	// ProviderEnvelopeVersion is the current provider-secret envelope format.
+	// ProviderEnvelopeVersion 是当前 provider secret 信封格式版本。
 	ProviderEnvelopeVersion byte = 2
-	// ProviderKeyDerivationInfo separates provider encryption from other uses of
-	// the configured tokens secret and is part of the persisted v2 contract.
+	// ProviderKeyDerivationInfo 是 provider secret 派生密钥的用途隔离标签。
 	ProviderKeyDerivationInfo = "furtalk/provider-secrets/aes-256-gcm/v2"
 )
 
@@ -43,7 +42,6 @@ var (
 )
 
 // DeriveKey 使用 HKDF-SHA-256 从 raw 派生固定长度密钥。
-// info 是用途与版本隔离标签；salt 故意为空，因为 raw 已是高熵机器密钥。
 func DeriveKey(raw []byte, info string) ([]byte, error) {
 	if len(raw) < minimumSourceKeyLength {
 		return nil, ErrSourceKeyLength
@@ -55,7 +53,7 @@ func DeriveKey(raw []byte, info string) ([]byte, error) {
 	return key, nil
 }
 
-// DeriveProviderKey derives the AES-256 key used by provider-secret envelope v2.
+// DeriveProviderKey 派生 provider secret 信封使用的 AES-256 密钥。
 func DeriveProviderKey(raw []byte) ([]byte, error) {
 	return DeriveKey(raw, ProviderKeyDerivationInfo)
 }
@@ -84,8 +82,7 @@ func SHA256Hex(raw []byte) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// Encrypt 使用新的随机 nonce 以 AES-256-GCM 密封明文，并返回首字节携带给定 key version 的信封。
-// 密钥必须正好 32 字节。
+// Encrypt 使用随机 nonce 以 AES-256-GCM 密封明文并写入 key version。
 func Encrypt(key []byte, keyVersion byte, plaintext []byte) ([]byte, error) {
 	block, err := newBlock(key)
 	if err != nil {
@@ -107,8 +104,6 @@ func Encrypt(key []byte, keyVersion byte, plaintext []byte) ([]byte, error) {
 }
 
 // Decrypt 打开信封并返回明文。
-// 结构性或认证失败，以及嵌入的 key version 与提供值不匹配时都安全失败；
-// 轮换后的密钥不会静默解密旧密钥写入的记录。
 func Decrypt(key []byte, keyVersion byte, envelope []byte) ([]byte, error) {
 	block, err := newBlock(key)
 	if err != nil {
@@ -133,6 +128,7 @@ func Decrypt(key []byte, keyVersion byte, envelope []byte) ([]byte, error) {
 	return plaintext, nil
 }
 
+// newBlock 校验密钥长度并创建 AES 分组密码。
 func newBlock(key []byte) (cipher.Block, error) {
 	if len(key) != derivedKeyLength {
 		return nil, ErrKeyLength

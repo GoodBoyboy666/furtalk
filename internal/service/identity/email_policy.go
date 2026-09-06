@@ -9,8 +9,6 @@ import (
 )
 
 // checkEmailDomainAllowed 校验未知邮箱的域名是否被当前名单策略允许注册。
-// 白名单非空时仅精确命中白名单；白名单为空时黑名单精确命中则拒绝。
-// 拒绝返回明确的 domain.ErrEmailDomainNotAllowed，不伪装成凭据失败。
 func (s *Service) checkEmailDomainAllowed(ctx context.Context, normalizedEmail string) error {
 	if s.policy == nil {
 		return domain.ErrUnavailable
@@ -29,6 +27,7 @@ func (s *Service) checkEmailDomainAllowed(ctx context.Context, normalizedEmail s
 	return nil
 }
 
+// emailDomain 提取邮箱域名。
 func emailDomain(normalizedEmail string) (string, error) {
 	at := strings.LastIndex(normalizedEmail, "@")
 	if at < 0 || at == len(normalizedEmail)-1 {
@@ -41,6 +40,7 @@ func emailDomain(normalizedEmail string) (string, error) {
 	return domainName, nil
 }
 
+// emailDomainAllowed 检查邮箱域名是否允许。
 func emailDomainAllowed(domainName string, whitelist, blacklist []string) bool {
 	if len(whitelist) > 0 {
 		return containsEmailDomain(whitelist, domainName)
@@ -48,6 +48,7 @@ func emailDomainAllowed(domainName string, whitelist, blacklist []string) bool {
 	return !containsEmailDomain(blacklist, domainName)
 }
 
+// containsEmailDomain 检查邮箱域名列表是否包含指定域名。
 func containsEmailDomain(list []string, domainName string) bool {
 	for _, entry := range list {
 		if entry == domainName {
@@ -57,6 +58,7 @@ func containsEmailDomain(list []string, domainName string) bool {
 	return false
 }
 
+// defaultNickname 根据邮箱生成默认昵称。
 func defaultNickname(normalizedEmail string) string {
 	local := strings.SplitN(normalizedEmail, "@", 2)[0]
 	if strings.TrimSpace(local) == "" {

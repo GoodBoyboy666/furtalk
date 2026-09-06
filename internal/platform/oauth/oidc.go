@@ -19,8 +19,8 @@ const (
 	oidcScopeProfile = "profile"
 )
 
-// oidcProvider 封装基于 discovery 的 OpenID Connect provider，支持 Google、通用 OIDC、
-// GitLab 与 Gitea。discovery 文档、JWKS 以及 ID token 的签名、issuer、audience 校验
+// oidcProvider 封装基于 discovery 的 Google 与通用 OpenID Connect provider。
+// discovery 文档、JWKS 以及 ID token 的签名、issuer、audience 校验
 // 来自 coreos/go-oidc；nonce 由本包发送并校验，邮箱仅在被断言已验证时输出。
 type oidcProvider struct {
 	key          string
@@ -34,6 +34,7 @@ type oidcProvider struct {
 	provider *oidc.Provider
 }
 
+// newOIDCProvider 创建通用 OIDC 适配器。
 func newOIDCProvider(cfg Config, client *http.Client) (*oidcProvider, error) {
 	if strings.TrimSpace(cfg.IssuerURL) == "" {
 		return nil, fmt.Errorf("%w: oidc issuer url is required", ErrUnsupported)
@@ -57,8 +58,7 @@ func (p *oidcProvider) Name() string {
 	return p.name
 }
 
-// clientContext 返回注入共享 HTTP client 的上下文，
-// 使 discovery/JWKS/token/userinfo 的全部网络请求走同一 client（含超时）。
+// clientContext 返回注入共享 HTTP client 的上下文。
 func (p *oidcProvider) clientContext(ctx context.Context) context.Context {
 	if p.httpClient == nil {
 		return ctx
@@ -81,6 +81,7 @@ func (p *oidcProvider) discovery(ctx context.Context) (*oidc.Provider, error) {
 	return provider, nil
 }
 
+// oauthConfig 根据 OIDC discovery 构建 OAuth 配置。
 func (p *oidcProvider) oauthConfig(ctx context.Context, redirectURI string) (*oauth2.Config, error) {
 	provider, err := p.discovery(ctx)
 	if err != nil {
@@ -96,7 +97,6 @@ func (p *oidcProvider) oauthConfig(ctx context.Context, redirectURI string) (*oa
 }
 
 // BuildAuthURL 在 discovery 成功后，为新的 state、可选 PKCE verifier 与可选 nonce 生成授权 URL。
-// 仅在 verifier 非空时附加 code_challenge（S256），仅在 nonce 非空时附加 nonce 参数。
 func (p *oidcProvider) BuildAuthURL(ctx context.Context, req AuthorizationRequest) (string, error) {
 	config, err := p.oauthConfig(ctx, req.RedirectURI)
 	if err != nil {
@@ -113,8 +113,6 @@ func (p *oidcProvider) BuildAuthURL(ctx context.Context, req AuthorizationReques
 }
 
 // Exchange 用 code 换取 token，校验 ID token 的签名、issuer、audience 与 nonce。
-// ID token 含已验证邮箱时直接使用；否则用访问令牌请求 UserInfo 作为 subject 一致的
-// 已验证邮箱回退。缺失邮箱不否定 subject，返回空的 VerifiedEmail。
 func (p *oidcProvider) Exchange(ctx context.Context, req ExchangeRequest) (*Identity, error) {
 	config, err := p.oauthConfig(ctx, req.RedirectURI)
 	if err != nil {
@@ -169,8 +167,6 @@ func (p *oidcProvider) Exchange(ctx context.Context, req ExchangeRequest) (*Iden
 }
 
 // fetchUserInfoVerifiedEmail 在 ID token 缺少已验证邮箱时，用访问令牌请求 UserInfo 作为回退。
-// 仅当 UserInfo 的 sub 与 ID token subject 一致且 email 已验证时才返回邮箱；
-// UserInfo 缺失邮箱或未验证时返回空字符串，不否定 subject。
 func (p *oidcProvider) fetchUserInfoVerifiedEmail(ctx context.Context, token *oauth2.Token, subject string) (string, error) {
 	provider, err := p.discovery(ctx)
 	if err != nil {

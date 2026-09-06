@@ -15,7 +15,7 @@ import (
 	"furtalk/internal/platform/notifier"
 )
 
-// ChannelConfig 是 notification 投递消费的通道配置投影。
+// ChannelConfig 保存通知渠道投递所需的配置。
 type ChannelConfig struct {
 	BotToken           string
 	ChatID             string
@@ -27,7 +27,7 @@ type ChannelConfig struct {
 	SigningSecret      *string
 }
 
-// ChannelProvider 是已启用通知通道的消费方投影。
+// ChannelProvider 保存已启用通知渠道及其配置。
 type ChannelProvider struct {
 	ProviderKey string
 	Config      ChannelConfig
@@ -88,8 +88,6 @@ type webhookComment struct {
 }
 
 // sendChannels 向全部已启用通知通道扇出投递一条规范化消息。
-// 只处理 comment.created 且持久化状态为 published/pending 的评论；
-// 各通道并发执行、使用共享上下文，一个通道失败只记录日志，不取消兄弟通道。
 func (s *Service) sendChannels(ctx context.Context, comment *domain.Comment, author *domain.User, ev domain.CommentEvent) {
 	if s.channels == nil || s.dispatcher == nil || s.sites == nil {
 		return
@@ -140,8 +138,6 @@ func (s *Service) dispatchChannel(ctx context.Context, provider ChannelProvider,
 }
 
 // buildChannelMessage 从限定作用域的评论/作者/站点/线程读取构造
-// 一条规范化管理员通道消息，同时构造通用 WebHook v1 信封的原始字节。
-// 消息绝不包含邮箱、IP、UA、收件人列表或退订 token。
 func (s *Service) buildChannelMessage(ctx context.Context, comment *domain.Comment, author *domain.User, site *domain.Site, ev domain.CommentEvent) (*notifier.Message, error) {
 	label, _ := channelLabels(comment.Status)
 	var pageTitle, pageURL string
@@ -195,8 +191,6 @@ func (s *Service) buildChannelMessage(ctx context.Context, comment *domain.Comme
 }
 
 // webHookEnvelope 构造通用 WebHook v1 信封并序列化为原始字节。
-// 事件为固定 "comment.created"；notification_type 区分新评论/待审核；
-// event_id 对单次创建事件确定，接收方可据此去重。
 func (s *Service) webHookEnvelope(ev domain.CommentEvent, comment *domain.Comment, author *domain.User, site *domain.Site, pageTitle, pageURL string) ([]byte, error) {
 	_, notifType := channelLabels(comment.Status)
 	body, truncated := notifier.TruncateRunes(comment.BodyMarkdown, webhookBodyMaxRunes)
@@ -236,7 +230,6 @@ func (s *Service) webHookEnvelope(ev domain.CommentEvent, comment *domain.Commen
 }
 
 // channelLabels 返回评论状态对应的通知标签与 WebHook notification_type。
-// 仅 published / pending 会进入通道分支；其他状态不会调用本函数。
 func channelLabels(status domain.CommentStatus) (label, notifType string) {
 	if status == domain.CommentStatusPending {
 		return "评论待审核", "pending_comment"
@@ -263,9 +256,7 @@ func (s *Service) channelConfig(provider ChannelProvider) (notifier.Config, erro
 	}, nil
 }
 
-// TestChannel 向指定通知通道发送一条显式标记的测试消息，供管理员测试端点使用。
-// 测试允许在通道停用时执行，但要求配置完整：配置无效返回 domain.ErrValidation，
-// 远程投递失败返回 domain.ErrUnavailable，错误不含目标或远程正文。
+// TestChannel 发送通知渠道测试消息。
 func (s *Service) TestChannel(ctx context.Context, providerKey string, cfg ChannelConfig) error {
 	if s.dispatcher == nil {
 		return domain.ErrUnavailable
@@ -293,7 +284,6 @@ func (s *Service) TestChannel(ctx context.Context, providerKey string, cfg Chann
 }
 
 // webHookTestEnvelope 构造通用 WebHook 测试消息的 v1 信封。
-// 复用与生产相同的传输与签名路径，仅事件内容不同。
 func (s *Service) webHookTestEnvelope() ([]byte, error) {
 	env := map[string]any{
 		"version":           "1",

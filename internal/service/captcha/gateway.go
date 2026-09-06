@@ -1,4 +1,4 @@
-// Package captcha owns the dynamic business gateway shared by CAPTCHA consumers.
+// Package captcha 提供供各 CAPTCHA 用例共享的动态业务网关。
 package captcha
 
 import (
@@ -14,7 +14,7 @@ import (
 
 const clientTimeout = 5 * time.Second
 
-// Config is the decrypted CAPTCHA provider snapshot consumed by the gateway.
+// Config 是网关使用的已解密 CAPTCHA 提供商配置快照。
 type Config struct {
 	Provider  string
 	SiteKey   string
@@ -22,15 +22,14 @@ type Config struct {
 	Endpoint  string
 }
 
-// ProviderReader reads the currently selected, decrypted CAPTCHA provider.
+// ProviderReader 读取当前选中的已解密 CAPTCHA 提供商配置。
 type ProviderReader interface {
 	SelectedCaptcha(ctx context.Context) (*Config, error)
 }
 
 type verifierFactory func(Config) (platformcaptcha.Verifier, error)
 
-// Gateway re-reads the current provider for every verification and caches
-// platform clients by the complete provider configuration fingerprint.
+// Gateway 在每次验证时读取当前提供商，并按完整配置指纹缓存平台客户端。
 type Gateway struct {
 	reader      ProviderReader
 	newVerifier verifierFactory
@@ -39,7 +38,7 @@ type Gateway struct {
 	cache map[string]platformcaptcha.Verifier
 }
 
-// NewGateway constructs the shared dynamic CAPTCHA gateway.
+// NewGateway 构建动态 CAPTCHA 网关。
 func NewGateway(reader ProviderReader) *Gateway {
 	return &Gateway{
 		reader: reader,
@@ -56,8 +55,7 @@ func NewGateway(reader ProviderReader) *Gateway {
 	}
 }
 
-// Verify resolves the current provider, verifies the token and returns stable
-// domain CAPTCHA errors to every consumer.
+// Verify 验证 CAPTCHA 令牌并返回领域错误。
 func (g *Gateway) Verify(ctx context.Context, action, token string) error {
 	if g == nil || g.reader == nil {
 		return domain.ErrCaptchaUnavailable
@@ -76,6 +74,7 @@ func (g *Gateway) Verify(ctx context.Context, action, token string) error {
 	return mapError(verifier.Verify(ctx, action, token))
 }
 
+// verifierFor 按配置构建或复用 CAPTCHA 验证器。
 func (g *Gateway) verifierFor(cfg *Config) (platformcaptcha.Verifier, error) {
 	key := fmt.Sprintf("%s\x00%s\x00%s\x00%s", cfg.Provider, cfg.SiteKey, cfg.SecretKey, cfg.Endpoint)
 	g.mu.Lock()
@@ -91,6 +90,7 @@ func (g *Gateway) verifierFor(cfg *Config) (platformcaptcha.Verifier, error) {
 	return verifier, nil
 }
 
+// mapError 将 CAPTCHA 提供商错误映射为领域错误。
 func mapError(err error) error {
 	switch {
 	case err == nil:

@@ -21,9 +21,7 @@ const (
 	actionPending
 )
 
-// canTransition 报告数据模型状态机是否允许直接转换。
-// 管理员可显式把评论从四个状态中的任意一个移动到任意另一个状态；
-// 相同状态请求始终冲突，不会静默改写时间戳。
+// canTransition 检查评论审核状态转换是否允许。
 func canTransition(from, to domain.CommentStatus) bool {
 	if from == to {
 		return false
@@ -106,9 +104,7 @@ func (s *Service) AdminEditBody(ctx context.Context, id int64, body string) (*Ad
 	return s.adminViewFor(ctx, updated)
 }
 
-// AdminPublish 把评论发布为 published。来源可以是 pending、spam 或 deleted；
-// 离开 deleted 时只恢复目标单条。只有审核策略为 review 时才在提交后
-// 发布 CommentPublished 事件；direct 策略下管理员发布不产生发布通知。
+// AdminPublish 将评论发布为 published 状态。
 func (s *Service) AdminPublish(ctx context.Context, id int64) (*AdminCommentView, error) {
 	comment, err := s.adminTransition(ctx, id, actionPublish)
 	if err != nil {
@@ -124,8 +120,7 @@ func (s *Service) AdminPublish(ctx context.Context, id int64) (*AdminCommentView
 	return s.adminViewFor(ctx, comment)
 }
 
-// AdminMarkSpam 把评论标记为 spam。来源可以是 pending、published 或 deleted；
-// 保留历史 published_at，清除删除标记。
+// AdminMarkSpam 将评论标记为 spam 状态。
 func (s *Service) AdminMarkSpam(ctx context.Context, id int64) (*AdminCommentView, error) {
 	comment, err := s.adminTransition(ctx, id, actionSpam)
 	if err != nil {
@@ -135,7 +130,6 @@ func (s *Service) AdminMarkSpam(ctx context.Context, id int64) (*AdminCommentVie
 }
 
 // AdminPending 把评论移入待审核（pending）。来源可以是 published、spam 或
-// deleted；离开 deleted 时只更新目标单条。
 func (s *Service) AdminPending(ctx context.Context, id int64) (*AdminCommentView, error) {
 	comment, err := s.adminTransition(ctx, id, actionPending)
 	if err != nil {
@@ -145,7 +139,6 @@ func (s *Service) AdminPending(ctx context.Context, id int64) (*AdminCommentView
 }
 
 // AdminRestore 恢复已删除的单条评论：回到删除前状态，清除删除标记。
-// 只恢复目标单条，其他评论保持原状态。
 func (s *Service) AdminRestore(ctx context.Context, id int64) (*AdminCommentView, error) {
 	comment, err := s.adminTransition(ctx, id, actionRestore)
 	if err != nil {
@@ -170,8 +163,7 @@ func (s *Service) adminTransition(ctx context.Context, id int64, action adminAct
 	return updated, nil
 }
 
-// applyAdminTransition 在当前事务中把已加载评论移动到目标审核状态。
-// 单条和批量入口共用该状态机；调用方负责在需要时处理 no-op 语义。
+// applyAdminTransition 将评论转换为目标审核状态。
 func (s *Service) applyAdminTransition(ctx context.Context, comment *domain.Comment, action adminAction, now time.Time) (bool, error) {
 	if comment == nil {
 		return false, domain.ErrNotFound

@@ -12,14 +12,14 @@ import (
 	"gorm.io/gorm/clause"
 )
 
+// LikeResult 表示评论点赞后的计数与当前用户状态。
 type LikeResult struct {
 	CommentID int64
 	LikeCount int64
 	Liked     bool
 }
 
-// AddLike 添加 Like：
-// 已存在时保持原样，评论缺失或非 published 返回 domain.ErrNotFound，
+// AddLike 创建评论点赞并返回最新状态。
 func (r *CommentRepo) AddLike(ctx context.Context, siteID, commentID, userID int64) (*LikeResult, error) {
 	var result *LikeResult
 	err := gormtx.DB(ctx, r.db).Transaction(func(tx *gorm.DB) error {
@@ -46,9 +46,7 @@ func (r *CommentRepo) AddLike(ctx context.Context, siteID, commentID, userID int
 	return result, nil
 }
 
-// RemoveLike 移除 Like：
-// 不存在时也返回成功，评论缺失或非 published 返回
-// domain.ErrNotFound。返回权威计数与 liked=false。
+// RemoveLike 删除评论点赞并返回最新状态。
 func (r *CommentRepo) RemoveLike(ctx context.Context, siteID, commentID, userID int64) (*LikeResult, error) {
 	var result *LikeResult
 	err := gormtx.DB(ctx, r.db).Transaction(func(tx *gorm.DB) error {

@@ -1,5 +1,4 @@
-// Package onetime provides a business-agnostic store for expiring secrets
-// that may be verified a limited number of times and consumed once.
+// Package onetime 提供可限次校验并一次性消费的过期凭据存储。
 package onetime
 
 import (
@@ -14,14 +13,11 @@ import (
 )
 
 var (
-	// ErrAtomicUnsupported indicates that one-time storage was constructed
-	// without the required narrow atomic backend.
+	// ErrAtomicUnsupported 表示一次性存储缺少所需的原子后端能力。
 	ErrAtomicUnsupported = errors.New("onetime: backend lacks atomic JSON comparison")
 )
 
-// Backend is the narrow storage contract required by Store. It intentionally
-// excludes unrelated cache operations so a namespaced backend cannot be
-// accidentally bypassed through a broad shared-store interface.
+// Backend 是 Store 所需的最小存储接口，存储访问必须经过命名空间缓存配额约束。
 type Backend interface {
 	Set(context.Context, string, any, time.Duration) error
 	Delete(context.Context, string) error
@@ -30,35 +26,33 @@ type Backend interface {
 	CompareAndDeleteJSON(context.Context, string, json.RawMessage) (bool, error)
 }
 
-// VerifyResult describes the result of a verification attempt.
+// VerifyResult 表示一次性凭据校验的结果。
 type VerifyResult uint8
 
+// 一次性凭据校验结果的固定标识。
 const (
-	// Consumed indicates a matching digest was accepted and the secret removed.
+	// Consumed 表示摘要匹配且凭据已删除。
 	Consumed VerifyResult = iota
-	// Attempted indicates a non-matching digest was recorded as a failed attempt.
+	// Attempted 表示摘要不匹配且失败次数已记录。
 	Attempted
-	// Invalid indicates a missing, expired, malformed, or exhausted secret.
+	// Invalid 表示凭据缺失、过期、格式错误或尝试次数耗尽。
 	Invalid
 )
 
-// record is deliberately private. Its JSON field names remain stable so active
-// records written by older versions remain readable during rolling deployment.
+// record 是保持 JSON 字段名稳定的内部凭据记录。
 type record struct {
 	Hash      string    `json:"hash"`
 	Attempts  int       `json:"attempts"`
 	ExpiresAt time.Time `json:"expires_at"`
 }
 
-// Store manages expiring, limited-attempt secrets on top of one cache backend.
-// It does not own the backend's lifecycle or create another client/pool.
+// Store 基于单个缓存后端管理过期且限次的凭据。
 type Store struct {
 	backend Backend
 	now     func() time.Time
 }
 
-// New constructs a Store over an existing narrow backend. There is
-// intentionally no read-modify-write fallback.
+// New 创建平台适配器或基础设施实例。
 func New(backend Backend) (*Store, error) {
 	if backend == nil {
 		return nil, ErrAtomicUnsupported
@@ -66,8 +60,7 @@ func New(backend Backend) (*Store, error) {
 	return &Store{backend: backend, now: time.Now}, nil
 }
 
-// Issue stores or replaces a secret. The digest is opaque to this package;
-// callers choose how to derive it and provide their business key.
+// Issue 保存或替换带 TTL 的一次性凭据摘要。
 func (s *Store) Issue(ctx context.Context, key, digest string, ttl time.Duration) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -79,16 +72,12 @@ func (s *Store) Issue(ctx context.Context, key, digest string, ttl time.Duration
 	}, ttl)
 }
 
-// Delete removes a secret. Missing keys are treated as success by the cache
-// contract.
+// Delete 删除指定的一次性凭据。
 func (s *Store) Delete(ctx context.Context, key string) error {
 	return s.backend.Delete(ctx, key)
 }
 
-// VerifyAndConsume verifies a submitted digest and atomically applies the
-// corresponding state transition. Stale CAS attempts are retried from a fresh
-// read, so concurrent wrong submissions cannot lose increments and concurrent
-// matching submissions can consume only once.
+// VerifyAndConsume 比较凭据摘要并通过原子操作记录失败或完成消费。
 func (s *Store) VerifyAndConsume(ctx context.Context, key, submittedDigest string, maxAttempts int) (VerifyResult, error) {
 	for {
 		if err := ctx.Err(); err != nil {
@@ -161,10 +150,12 @@ func (s *Store) VerifyAndConsume(ctx context.Context, key, submittedDigest strin
 	}
 }
 
+// getRaw 读取一次性凭据的原始 JSON。
 func (s *Store) getRaw(ctx context.Context, key string) (json.RawMessage, error) {
 	return s.backend.GetRawJSON(ctx, key)
 }
 
+// validRecord 校验一次性凭据记录的必要字段。
 func validRecord(value record) bool {
 	return value.Hash != "" && value.Attempts >= 0 && !value.ExpiresAt.IsZero()
 }

@@ -15,6 +15,7 @@ import (
 	"gorm.io/gorm/clause"
 )
 
+// DynamicSettingRow 表示动态设置的持久化数据行。
 type DynamicSettingRow struct {
 	Key       string
 	Type      string
@@ -22,6 +23,7 @@ type DynamicSettingRow struct {
 	UpdatedBy int64
 }
 
+// SettingsRepo 提供动态设置和提供商配置的持久化操作。
 type SettingsRepo struct {
 	db *gorm.DB
 }
@@ -58,8 +60,7 @@ func (r *SettingsRepo) Get(ctx context.Context, key string) (*DynamicSettingRow,
 	return &out, nil
 }
 
-// LockRows 锁定并返回指定 key 的设置行，供事务内先读后写使用。
-// 仅 PostgreSQL 生成 FOR UPDATE；SQLite 不支持该子句，单进程写事务由 busy timeout 负责，返回行仍按当前事务可见性读取。
+// LockRows 在写事务中读取并锁定指定动态设置行。
 func (r *SettingsRepo) LockRows(ctx context.Context, keys []string) ([]DynamicSettingRow, error) {
 	query := gormtx.DB(ctx, r.db).Where("key IN ?", keys)
 	if r.db.Dialector.Name() != "sqlite" {
@@ -92,8 +93,7 @@ func (r *SettingsRepo) SeedMissing(ctx context.Context, rows []DynamicSettingRow
 	return nil
 }
 
-// Upsert 批量写入设置项;同 key 已存在时直接覆盖,
-// 未提交的 key 保持原值。批次在单个事务内全部成功或全部失败。
+// Upsert 批量写入动态设置行。
 func (r *SettingsRepo) Upsert(ctx context.Context, rows []DynamicSettingRow) error {
 	if len(rows) == 0 {
 		return nil
@@ -112,6 +112,7 @@ func (r *SettingsRepo) Upsert(ctx context.Context, rows []DynamicSettingRow) err
 	return nil
 }
 
+// toDynamicSettingRow 将持久化设置模型转换为设置数据行。
 func toDynamicSettingRow(row model.DynamicSetting) DynamicSettingRow {
 	return DynamicSettingRow{
 		Key:       row.Key,
@@ -121,6 +122,7 @@ func toDynamicSettingRow(row model.DynamicSetting) DynamicSettingRow {
 	}
 }
 
+// toDynamicSettingModel 将设置数据行转换为持久化模型。
 func toDynamicSettingModel(s DynamicSettingRow) model.DynamicSetting {
 	return model.DynamicSetting{
 		Key:       s.Key,
@@ -130,6 +132,7 @@ func toDynamicSettingModel(s DynamicSettingRow) model.DynamicSetting {
 	}
 }
 
+// CaptchaProviderSettingKey 是当前 CAPTCHA 提供商选择设置的键名。
 const CaptchaProviderSettingKey = "captcha_provider"
 
 const providerSettingSuffix = "_provider"
@@ -144,9 +147,7 @@ func ProviderSettingKey(providerKey string) string {
 	return providerSettingKey(providerKey)
 }
 
-// IsProviderSettingKey 报告 key 是否属于 provider 配置动态设置行。
-// provider 行是内部设置，通用设置读写须将其过滤，不得进入公开设置；
-// captcha_provider 是公开选择设置而非 provider 配置行，明确排除。
+// IsProviderSettingKey 判断键名是否为提供商设置键。
 func IsProviderSettingKey(key string) bool {
 	return key != CaptchaProviderSettingKey && strings.HasSuffix(key, providerSettingSuffix)
 }
@@ -259,8 +260,7 @@ func (r *SettingsRepo) ListCaptchaProviders(ctx context.Context) ([]CaptchaProvi
 	return out, nil
 }
 
-// GetCaptchaProvider 按 provider key 查询 CAPTCHA 配置行；
-// 行缺失或类型不是 CAPTCHA 时返回 domain.ErrNotFound。
+// GetCaptchaProvider 查询 CAPTCHA 提供商配置。
 func (r *SettingsRepo) GetCaptchaProvider(ctx context.Context, providerKey string) (*CaptchaProviderRow, error) {
 	row, err := r.getProviderDecoded(ctx, providerKey)
 	if err != nil {
@@ -311,8 +311,7 @@ func (r *SettingsRepo) ListAuthProviders(ctx context.Context) ([]AuthProviderRow
 	return out, nil
 }
 
-// GetAuthProvider 按 provider key 查询 OAuth/OIDC 配置行；
-// 行缺失或类型不是 OAuth/OIDC 时返回 domain.ErrNotFound。
+// GetAuthProvider 查询 OAuth/OIDC 提供商配置。
 func (r *SettingsRepo) GetAuthProvider(ctx context.Context, providerKey string) (*AuthProviderRow, error) {
 	row, err := r.getProviderDecoded(ctx, providerKey)
 	if err != nil {
@@ -364,8 +363,7 @@ func (r *SettingsRepo) ListSpamProviders(ctx context.Context) ([]SpamProviderRow
 	return out, nil
 }
 
-// GetSpamProvider 按 provider key 查询垃圾检测配置行；
-// 行缺失或类型不是 spam 时返回 domain.ErrNotFound。
+// GetSpamProvider 查询垃圾检测提供商配置。
 func (r *SettingsRepo) GetSpamProvider(ctx context.Context, providerKey string) (*SpamProviderRow, error) {
 	row, err := r.getProviderDecoded(ctx, providerKey)
 	if err != nil {
@@ -417,8 +415,7 @@ func (r *SettingsRepo) ListNotificationProviders(ctx context.Context) ([]Notific
 	return out, nil
 }
 
-// GetNotificationProvider 按 provider key 查询通知通道配置行；
-// 行缺失或类型不是 notification 时返回 domain.ErrNotFound。
+// GetNotificationProvider 查询通知提供商配置。
 func (r *SettingsRepo) GetNotificationProvider(ctx context.Context, providerKey string) (*NotificationProviderRow, error) {
 	row, err := r.getProviderDecoded(ctx, providerKey)
 	if err != nil {
@@ -502,8 +499,7 @@ func (d decodedProviderRow) toNotificationRow() NotificationProviderRow {
 	}
 }
 
-// listProviderDecoded 返回全部 provider 配置行解码后的中间表示，按 key 升序；
-// 排除公开选择设置 captcha_provider 行。
+// listProviderDecoded 列出解码后的提供商配置。
 func (r *SettingsRepo) listProviderDecoded(ctx context.Context) ([]decodedProviderRow, error) {
 	var rows []model.DynamicSetting
 	if err := gormtx.DB(ctx, r.db).

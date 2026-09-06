@@ -14,9 +14,7 @@ import (
 	"furtalk/internal/platform/value"
 )
 
-// RequestPasswordReset 为已存在的邮箱生成一次性密码重置验证码并投递邮件。
-// 未知邮箱返回相同的公开成功，且零邮件、零用户、零有效验证码记录；
-// 邮件/配置失败在用户 lookup 之后只记录日志，不返回区分存在性的响应。
+// RequestPasswordReset 请求发送密码重置邮件。
 func (s *Service) RequestPasswordReset(ctx context.Context, rawEmail, captchaToken string) error {
 	_, normalized, err := value.NormalizeEmail(rawEmail)
 	if err != nil {
@@ -62,10 +60,7 @@ func (s *Service) RequestPasswordReset(ctx context.Context, rawEmail, captchaTok
 	return nil
 }
 
-// ResetPasswordWithCode 原子消费一次性密码重置验证码并更新密码。
-// 密码哈希、首次 email verification 与会话代次递增在同一数据库事务写入：
-// 已验证邮箱保留原验证时间，未验证邮箱写入当前时间。
-// 成功不签发会话 Cookie；目标用户全部既有 JWT 因代次递增而失效。
+// ResetPasswordWithCode 使用密码重置验证码更新密码。
 func (s *Service) ResetPasswordWithCode(ctx context.Context, rawEmail, code, newPassword string) error {
 	_, normalized, err := value.NormalizeEmail(rawEmail)
 	if err != nil {
@@ -101,8 +96,7 @@ func (s *Service) ResetPasswordWithCode(ctx context.Context, rawEmail, code, new
 	return s.invalidateAuthz(ctx, userID)
 }
 
-// renderPasswordResetMessage 渲染密码重置验证码邮件的主题、纯文本正文与模板化 HTML 正文。
-// HTML 正文由模板渲染器生成，失败时返回错误，由调用方按投递失败处理。
+// renderPasswordResetMessage 渲染密码重置邮件。
 func renderPasswordResetMessage(templates mailer.TemplateRenderer, to, code string, ttl time.Duration) (mailer.Message, error) {
 	minutes := int(ttl / time.Minute)
 	html, err := templates.PasswordResetCode(mailer.PasswordResetCodeData{

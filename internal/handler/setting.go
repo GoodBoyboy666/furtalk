@@ -23,6 +23,7 @@ func RegisterAdminSettings(admin *gin.RouterGroup, settingsService *setting.Serv
 	admin.DELETE("/providers/:provider_key", adminDeleteProvider(providers))
 }
 
+// RegisterPublicConfig 注册 HTTP 路由。
 // @Summary 获取公开站点配置
 // @Tags public-config
 // @Produce json
@@ -33,6 +34,7 @@ func RegisterPublicConfig(api *gin.RouterGroup, service *setting.Service) {
 	api.GET("/config", publicConfig(service))
 }
 
+// publicConfig 返回公开站点配置。
 func publicConfig(service *setting.Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Header("Cache-Control", "no-store")
@@ -50,6 +52,7 @@ func publicConfig(service *setting.Service) gin.HandlerFunc {
 	}
 }
 
+// adminResetLegalConsent 处理管理端 HTTP 请求。
 // @Summary 要求用户重新同意协议
 // @Tags admin-settings
 // @Produce json
@@ -75,6 +78,7 @@ func RegisterAdminSMTP(admin *gin.RouterGroup, service *setting.SMTPProbe) {
 	admin.POST("/smtp/test", adminSMTPTest(service))
 }
 
+// adminGetSettings 处理管理端 HTTP 请求。
 // @Summary 读取系统设置
 // @Tags admin-settings
 // @Produce json
@@ -93,6 +97,7 @@ func adminGetSettings(service *setting.Service) gin.HandlerFunc {
 	}
 }
 
+// adminPatchSettings 处理管理端 HTTP 请求。
 // @Summary 更新系统设置
 // @Tags admin-settings
 // @Accept json
@@ -121,6 +126,7 @@ func adminPatchSettings(service *setting.Service) gin.HandlerFunc {
 	}
 }
 
+// adminListProviders 处理管理端 HTTP 请求。
 // @Summary 列出提供商配置
 // @Tags admin-providers
 // @Produce json
@@ -160,6 +166,7 @@ func adminListProviders(service *setting.ProviderService) gin.HandlerFunc {
 	}
 }
 
+// adminUpsertProvider 处理管理端 HTTP 请求。
 // @Summary 新增或更新提供商
 // @Tags admin-providers
 // @Accept json
@@ -222,6 +229,7 @@ func adminUpsertProvider(service *setting.ProviderService) gin.HandlerFunc {
 	}
 }
 
+// adminDeleteProvider 处理管理端 HTTP 请求。
 // @Summary 删除提供商配置
 // @Tags admin-providers
 // @Param provider_key path string true "提供商 key"
@@ -241,6 +249,7 @@ func adminDeleteProvider(service *setting.ProviderService) gin.HandlerFunc {
 	}
 }
 
+// adminTestProvider 处理管理端 HTTP 请求。
 // @Summary 测试提供商连通性
 // @Tags admin-providers
 // @Produce json
@@ -262,6 +271,7 @@ func adminTestProvider(service *setting.ProviderService) gin.HandlerFunc {
 	}
 }
 
+// adminSMTPTest 处理管理端 HTTP 请求。
 // @Summary 测试 SMTP 投递配置
 // @Tags smtp
 // @Produce json

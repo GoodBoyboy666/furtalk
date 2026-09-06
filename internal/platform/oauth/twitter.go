@@ -46,6 +46,7 @@ type twitterProvider struct {
 	httpClient   *http.Client
 }
 
+// newTwitterProvider 创建 Twitter/X OAuth2 适配器。
 func newTwitterProvider(cfg Config, client *http.Client) *twitterProvider {
 	authURL := cfg.AuthURL
 	if authURL == "" {
@@ -83,8 +84,7 @@ func (p *twitterProvider) Name() string {
 	return "Twitter"
 }
 
-// clientContext 返回注入共享 HTTP client 的上下文，
-// 使 token/userinfo 的全部网络请求走同一 client（含超时）。
+// clientContext 返回注入共享 HTTP client 的上下文。
 func (p *twitterProvider) clientContext(ctx context.Context) context.Context {
 	if p.httpClient == nil {
 		return ctx
@@ -92,6 +92,7 @@ func (p *twitterProvider) clientContext(ctx context.Context) context.Context {
 	return context.WithValue(ctx, oauth2.HTTPClient, p.httpClient)
 }
 
+// oauthConfig 构建 Twitter/X OAuth 配置。
 func (p *twitterProvider) oauthConfig(redirectURI string) *oauth2.Config {
 	return &oauth2.Config{
 		ClientID:     p.clientID,
@@ -107,8 +108,6 @@ func (p *twitterProvider) oauthConfig(redirectURI string) *oauth2.Config {
 }
 
 // BuildAuthURL 为新的 state 与可选 PKCE verifier 生成 Twitter/X 授权 URL。
-// 仅在 verifier 非空时附加 code_challenge（S256）；X 不发送 nonce，
-// 即使请求中带 nonce 也忽略。
 func (p *twitterProvider) BuildAuthURL(ctx context.Context, req AuthorizationRequest) (string, error) {
 	opts := make([]oauth2.AuthCodeOption, 0, 1)
 	if req.Verifier != "" {
@@ -118,9 +117,6 @@ func (p *twitterProvider) BuildAuthURL(ctx context.Context, req AuthorizationReq
 }
 
 // Exchange 用 code 换取 token，通过 Bearer 拉取 /2/users/me 并返回标准化后的 Identity。
-// subject 是响应中不可变的 id；VerifiedEmail 只取非空的 confirmed_email，
-// 缺失邮箱不否定 subject。任何失败映射为 ErrIdentity，错误文本不包含
-// code/token/secret。
 func (p *twitterProvider) Exchange(ctx context.Context, req ExchangeRequest) (*Identity, error) {
 	opts := make([]oauth2.AuthCodeOption, 0, 1)
 	if req.Verifier != "" {
@@ -147,7 +143,6 @@ type twitterUser struct {
 }
 
 // fetchUserInfo 用 Bearer token 请求 /2/users/me。
-// 非 200 或 JSON 解析失败返回错误（由 Exchange 统一映射为 ErrIdentity）。
 func (p *twitterProvider) fetchUserInfo(ctx context.Context, token *oauth2.Token) (*twitterUser, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.userInfoURL, nil)
 	if err != nil {

@@ -21,7 +21,7 @@ func NewWidgetJWTVerifier(svc *jwt.Service) *WidgetJWTVerifier {
 	return &WidgetJWTVerifier{svc: svc}
 }
 
-// Verify 解析并验证原始 widget 令牌。
+// Verify 验证原始 Widget 凭据。
 func (v *WidgetJWTVerifier) Verify(ctx context.Context, raw string) (WidgetCredential, error) {
 	if v.svc == nil {
 		return nil, errors.New("comment: widget jwt verifier is not configured")
@@ -68,10 +68,7 @@ func (c *widgetCredential) Epoch() int64 { return c.epoch }
 // ExpiresAt 返回凭证过期时间。
 func (c *widgetCredential) ExpiresAt() time.Time { return c.expiresAt }
 
-// WidgetRoleAllowed 判定给定实时评论模式下，widget_authenticated 主体角色是否
-// 可以使用 widget 凭据。匿名模式只允许活跃管理员（普通访客直接公开提交，不持
-// 有凭据）；认证模式允许活跃普通用户与管理员；未知模式一律拒绝。
-// probe 与 protected-route 中间件复用本规则，两处判定保持一致。
+// WidgetRoleAllowed 检查 Widget 主体角色是否允许当前评论模式。
 func WidgetRoleAllowed(mode string, role domain.Role) bool {
 	switch mode {
 	case domain.CommentModeAnonymous:
@@ -83,9 +80,7 @@ func WidgetRoleAllowed(mode string, role domain.Role) bool {
 	}
 }
 
-// popupAuthorizationAllowed 判定给定评论模式下，第一方主体是否可以通过显式授权
-// 流程签发/交换该模式的授权码。匿名模式只允许管理员（普通用户走邮箱签发路径）；
-// 认证模式允许普通用户与管理员；未知模式一律拒绝。
+// popupAuthorizationAllowed 检查第一方主体是否允许签发 Widget 授权。
 func popupAuthorizationAllowed(mode string, role domain.Role) bool {
 	switch mode {
 	case domain.CommentModeAnonymous:
@@ -97,7 +92,7 @@ func popupAuthorizationAllowed(mode string, role domain.Role) bool {
 	}
 }
 
-// parseDecimalClaim 解析 JWT 声明中的正十进制字符串业务 id。
+// parseDecimalClaim 解析 JWT 中的非负十进制业务 ID。
 func parseDecimalClaim(raw, name string) (int64, error) {
 	if raw == "" {
 		return 0, fmt.Errorf("%w: missing %s", domain.ErrValidation, name)

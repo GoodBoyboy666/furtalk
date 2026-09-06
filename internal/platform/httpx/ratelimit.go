@@ -9,7 +9,6 @@ import (
 )
 
 // RateLimit 是进程内限流中间件。
-// 超过配置容量时返回 429。
 func RateLimit(limiter *ratelimit.Limiter) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if limiter == nil {

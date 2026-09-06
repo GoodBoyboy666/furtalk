@@ -35,6 +35,7 @@ func (s *Service) publishCommentPublished(ctx context.Context, comment *domain.C
 	s.publish(ctx, ev)
 }
 
+// publish 发布评论事件。
 func (s *Service) publish(ctx context.Context, ev domain.CommentEvent) {
 	if s.bus == nil {
 		return

@@ -19,8 +19,7 @@ import (
 
 // 词库文件与单行的大小限制。
 const (
-	// keywordFilePath is the only production keyword-file location. The
-	// application is expected to run from its project/container root.
+	// keywordFilePath 生产环境唯一的词库路径，应用从项目或容器根目录运行。
 	keywordFilePath    = "configs/spam/keywords.txt"
 	maxKeywordFileSize = 64 << 20 // 64 MiB
 	maxKeywordLineLen  = 4000     // 与评论正文最大长度一致
@@ -61,14 +60,12 @@ func NewLocal(cfg LocalConfig, logger *slog.Logger) *LocalMatcher {
 	return newLocal(keywordFilePath, cfg, logger)
 }
 
-// newLocal constructs a matcher for a path. It is intentionally private: the
-// production constructor above always passes the fixed keywordFilePath. Tests
-// use it to isolate file-system fixtures without changing the process cwd.
+// newLocal 创建指定词库路径的本地检测器。
 func newLocal(path string, cfg LocalConfig, logger *slog.Logger) *LocalMatcher {
 	return &LocalMatcher{cfg: cfg, log: logging.Normalize(logger), path: path}
 }
 
-// Check 检测正文是否命中词库。
+// Check 使用本地词库检测正文与昵称。
 func (m *LocalMatcher) Check(ctx context.Context, input Input) (Result, error) {
 	snap, err := m.reloadIfChanged()
 	if err != nil {
@@ -87,7 +84,6 @@ func (m *LocalMatcher) Check(ctx context.Context, input Input) (Result, error) {
 }
 
 // reloadIfChanged 按文件签名决定是否重建词库快照。
-// 热重载失败时继续使用最近一次成功快照；从未成功加载时返回错误。
 func (m *LocalMatcher) reloadIfChanged() (*snapshot, error) {
 	info, err := os.Stat(m.path)
 	if err != nil {
@@ -126,7 +122,6 @@ func (m *LocalMatcher) reloadIfChanged() (*snapshot, error) {
 }
 
 // loadKeywordFile 在大小与单行限制内读取并解析词库文件。
-// 读取前后再次核对签名，避免把写到一半的文件发布为新快照。
 func loadKeywordFile(path string, before fileSignature) ([]string, error) {
 	f, err := os.Open(path)
 	if err != nil {

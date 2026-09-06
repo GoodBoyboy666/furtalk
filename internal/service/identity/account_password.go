@@ -8,12 +8,7 @@ import (
 	"furtalk/internal/platform/logging"
 )
 
-// ChangePassword 设置或替换当前用户密码（个人中心命令），并返回重签的新会话。
-//
-// 无密码用户凭已认证会话首次设密，currentPassword 可缺省并被忽略；
-// 已有密码用户必须提交正确的 currentPassword，错误时返回通用凭据错误且零写入。
-// 成功在密码写入的同一数据库事务内递增会话代次、提交后失效 authz 缓存，
-// 并为当前浏览器重签新版本的会话与 CSRF Cookie：其他设备失效，当前设备保持登录。
+// ChangePassword 设置或替换当前用户密码并返回更新后的会话。
 func (s *Service) ChangePassword(ctx context.Context, userID int64, currentPassword *string, newPassword string) (*Session, error) {
 	if len(newPassword) < minPasswordLength {
 		return nil, domain.ErrValidation
@@ -64,8 +59,7 @@ func (s *Service) ChangePassword(ctx context.Context, userID int64, currentPassw
 	}, nil
 }
 
-// invalidateAuthz 删除用户 authz 缓存，失败按 fail-fast 契约处理。
-// 密码/会话代次变更提交后必须调用，旧缓存不能继续接受已失效的 JWT。
+// invalidateAuthz 删除用户 authz 缓存，失败时记录错误并触发快速失败处理。
 func (s *Service) invalidateAuthz(ctx context.Context, userID int64) error {
 	unlock := s.authzLocks.lock(userID)
 	defer unlock()
@@ -79,8 +73,6 @@ func (s *Service) invalidateAuthz(ctx context.Context, userID int64) error {
 }
 
 // RevokeAllSessions 递增目标用户的会话代次并使全部已签发 JWT 失效。
-// 成功提交后同步失效 authz 缓存；调用方（handler）负责清除当前浏览器 Cookie，
-// 使当前设备也退出。不签发替代会话。
 func (s *Service) RevokeAllSessions(ctx context.Context, userID int64) error {
 	err := s.txRunner.RunInTx(ctx, func(ctx context.Context) error {
 		_, err := s.users.BumpSessionVersion(ctx, userID)

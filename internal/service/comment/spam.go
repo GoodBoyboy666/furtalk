@@ -65,8 +65,7 @@ type SpamProviderReader interface {
 	EnabledSpamProviders(ctx context.Context) ([]SpamProviderConfig, error)
 }
 
-// SpamGateway 按固定顺序“本地 → Akismet → 阿里云 → 腾讯云”串行执行已启用的
-// 垃圾检测渠道，首个 pending/spam 结果立即短路。
+// SpamGateway 按固定顺序串行执行已启用的垃圾检测渠道。
 type SpamGateway struct {
 	reader SpamProviderReader
 	log    *slog.Logger
@@ -85,10 +84,7 @@ func NewSpamGateway(reader SpamProviderReader, logger *slog.Logger) *SpamGateway
 	}
 }
 
-// Check 串行检测并返回状态覆盖：
-// 首个 pending/spam 结果返回对应状态且后续渠道不再调用；
-// 全部渠道通过或 unknown 时返回 nil。渠道故障一律按 unknown 降级，绝不阻断评论提交。
-// 执行顺序始终遍历固定 key 数组，不依赖 reader 返回顺序。
+// Check 执行垃圾检测并返回状态覆盖结果。
 func (g *SpamGateway) Check(ctx context.Context, input SpamInput) *domain.CommentStatus {
 	providers, err := g.reader.EnabledSpamProviders(ctx)
 	if err != nil {
@@ -154,7 +150,6 @@ func (g *SpamGateway) Check(ctx context.Context, input SpamInput) *domain.Commen
 }
 
 // detectorFor 返回与配置指纹匹配的检测器并按指纹缓存。
-// 配置变化（含凭据变更）会产生新指纹，不会复用旧检测器。
 func (g *SpamGateway) detectorFor(cfg SpamProviderConfig) (spam.Detector, error) {
 	fingerprint := spamFingerprint(cfg)
 	g.mu.Lock()
@@ -204,7 +199,7 @@ func isBinarySpamProvider(providerKey string) bool {
 	return providerKey == "spam.local" || providerKey == "spam.akismet"
 }
 
-// statusForSpamAction 把二元渠道的命中动作投影为评论状态。
+// statusForSpamAction 把二元渠道的命中动作映射为评论状态。
 func statusForSpamAction(action string) *domain.CommentStatus {
 	if strings.TrimSpace(action) == "spam" {
 		return spamStatus(domain.CommentStatusSpam)
@@ -229,8 +224,7 @@ func spamErrorCategory(err error) string {
 	}
 }
 
-// commentInitialStatus 按优先级计算评论初始状态：
-// 垃圾检测覆盖 pending/spam 优先，其次全局审核策略 review → pending，其余 published。
+// commentInitialStatus 按审核策略和垃圾检测结果计算评论初始状态。
 func commentInitialStatus(moderation string, override *domain.CommentStatus) domain.CommentStatus {
 	if override != nil {
 		return *override
@@ -250,7 +244,6 @@ func optionalString(value *string) string {
 }
 
 // siteCanonicalURL 返回站点 CanonicalURL；读取失败时返回空串，
-// 垃圾检测不因站点元数据读取失败而阻断评论提交。
 func (s *Service) siteCanonicalURL(ctx context.Context, siteID int64) string {
 	site, err := s.sites.Get(ctx, siteID)
 	if err != nil {

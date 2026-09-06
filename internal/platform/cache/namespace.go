@@ -51,7 +51,7 @@ func NewNamespace(store Store, name, prefix string, limit int) *Namespace {
 	return ns
 }
 
-// NewNamespaceChecked NewNamespace 的返回错误版本，供组装根或其他需要显式处理校验错误的调用方使用。
+// NewNamespaceChecked 是返回校验错误的 NewNamespace 版本，供需要显式处理错误的使用方调用。
 func NewNamespaceChecked(store Store, name, prefix string, limit int) (*Namespace, error) {
 	if store == nil {
 		return nil, fmt.Errorf("%w: nil store", ErrInvalidNamespace)
@@ -95,10 +95,12 @@ func (n *Namespace) Limit() int {
 	return n.limit
 }
 
+// key 生成命名空间内的完整缓存键。
 func (n *Namespace) key(suffix string) string {
 	return n.prefix + suffix
 }
 
+// valid 校验命名空间是否可用。
 func (n *Namespace) valid() error {
 	if n == nil || n.store == nil || n.name == "" || n.prefix == "" || n.limit <= 0 {
 		return ErrInvalidNamespace
@@ -125,8 +127,7 @@ func (n *Namespace) Get(ctx context.Context, suffix string, out any) error {
 	return err
 }
 
-// GetRawJSON returns an owned copy of the exact JSON payload under suffix.
-// Unlike Get, it does not decode or validate the payload.
+// GetRawJSON 读取键对应的原始 JSON 数据。
 func (n *Namespace) GetRawJSON(ctx context.Context, suffix string) (json.RawMessage, error) {
 	if err := n.valid(); err != nil {
 		return nil, err
@@ -151,7 +152,6 @@ func (n *Namespace) GetRawJSON(ctx context.Context, suffix string) (json.RawMess
 }
 
 // Set 在Namespace中写入一个值，Namespace已满时返回 ErrCapacity。
-// 覆盖仍然存活的已有键时沿用原来的名额，不会额外占位。
 func (n *Namespace) Set(ctx context.Context, suffix string, value any, ttl time.Duration) error {
 	if err := n.valid(); err != nil {
 		return err
@@ -183,8 +183,7 @@ func (n *Namespace) Delete(ctx context.Context, suffix string) error {
 	return err
 }
 
-// CompareAndSwapJSON atomically replaces a namespace value when its exact JSON
-// payload matches expected. The existing expiry and quota slot are retained.
+// CompareAndSwapJSON 按期望 JSON 值原子替换缓存条目。
 func (n *Namespace) CompareAndSwapJSON(ctx context.Context, suffix string, expected, replacement json.RawMessage) (bool, error) {
 	if err := n.valid(); err != nil {
 		return false, err
@@ -199,8 +198,7 @@ func (n *Namespace) CompareAndSwapJSON(ctx context.Context, suffix string, expec
 	return comparer.CompareAndSwapJSON(ctx, n.key(suffix), expected, replacement)
 }
 
-// CompareAndDeleteJSON atomically deletes a namespace value when its exact JSON
-// payload matches expected and releases its quota slot.
+// CompareAndDeleteJSON 按期望 JSON 值原子删除缓存条目。
 func (n *Namespace) CompareAndDeleteJSON(ctx context.Context, suffix string, expected json.RawMessage) (bool, error) {
 	if err := n.valid(); err != nil {
 		return false, err
@@ -239,6 +237,7 @@ func (n *Namespace) AtomicConsume(ctx context.Context, suffix string) (string, e
 	return value, err
 }
 
+// setFallback 使用命名空间后备配额写入缓存值。
 func (n *Namespace) setFallback(ctx context.Context, suffix string, value any, ttl time.Duration) error {
 	key := n.key(suffix)
 	n.mu.Lock()
@@ -247,7 +246,7 @@ func (n *Namespace) setFallback(ctx context.Context, suffix string, value any, t
 
 	_, tracked := n.members[key]
 	if !tracked {
-		// 包装器可能建立在预先写入过数据的测试 store 之上。此时把仍然存活的已有记录视为覆盖写入，避免占用两个名额。
+		// 包装器可能建立在预先写入过数据的测试 store 之上；仍然存活的已有记录按覆盖写入计数。
 		var existing json.RawMessage
 		err := n.store.Get(ctx, key, &existing)
 		if err == nil {
@@ -266,6 +265,7 @@ func (n *Namespace) setFallback(ctx context.Context, suffix string, value any, t
 	return nil
 }
 
+// cleanupFallbackLocked 清理后备成员中的过期键。
 func (n *Namespace) cleanupFallbackLocked(now time.Time) {
 	for key, expires := range n.members {
 		if !now.Before(expires) {
@@ -279,6 +279,7 @@ func (s *Memory) namespaceGet(ctx context.Context, _, prefix, suffix string, out
 	return s.Get(ctx, prefix+suffix, out)
 }
 
+// namespaceGetRawJSON 从内存命名空间读取原始 JSON。
 func (s *Memory) namespaceGetRawJSON(ctx context.Context, _, prefix, suffix string) (json.RawMessage, error) {
 	return s.GetRawJSON(ctx, prefix+suffix)
 }
@@ -313,7 +314,7 @@ func (s *Memory) namespaceSet(_ context.Context, name, prefix, suffix string, va
 	if expires, ok := members[key]; ok && now.Before(expires) && exists && now.Before(item.expires) {
 		tracked = true
 	} else if exists && now.Before(item.expires) {
-		// 测试中该键可能已经通过普通 Store 写入过。这里将其视为覆盖写入，而不是再扣一个名额。
+		// 测试中该键可能已经通过普通 Store 写入过；该记录按覆盖写入计数，不重复扣除名额。
 		if len(members) >= limit {
 			return ErrCapacity
 		}
@@ -350,6 +351,7 @@ func (s *Memory) namespaceSet(_ context.Context, name, prefix, suffix string, va
 	return nil
 }
 
+// namespaceDelete 从内存命名空间删除缓存值。
 func (s *Memory) namespaceDelete(_ context.Context, name, prefix, suffix string) error {
 	key := prefix + suffix
 	s.mu.Lock()
@@ -364,6 +366,7 @@ func (s *Memory) namespaceDelete(_ context.Context, name, prefix, suffix string)
 	return nil
 }
 
+// namespaceConsume 从内存命名空间原子消费缓存值。
 func (s *Memory) namespaceConsume(_ context.Context, name, prefix, suffix string) (string, error) {
 	key := prefix + suffix
 	s.mu.Lock()
@@ -387,6 +390,7 @@ func (s *Memory) namespaceConsume(_ context.Context, name, prefix, suffix string
 	return value, nil
 }
 
+// namespaceCompareAndSwapJSON 在内存命名空间中原子替换 JSON。
 func (s *Memory) namespaceCompareAndSwapJSON(ctx context.Context, name, prefix, suffix string, expected, replacement json.RawMessage) (bool, error) {
 	if err := ctx.Err(); err != nil {
 		return false, err
@@ -415,6 +419,7 @@ func (s *Memory) namespaceCompareAndSwapJSON(ctx context.Context, name, prefix, 
 	return true, nil
 }
 
+// namespaceCompareAndDeleteJSON 在内存命名空间中原子删除 JSON。
 func (s *Memory) namespaceCompareAndDeleteJSON(ctx context.Context, name, prefix, suffix string, expected json.RawMessage) (bool, error) {
 	if err := ctx.Err(); err != nil {
 		return false, err
@@ -446,6 +451,7 @@ func (s *Memory) namespaceCompareAndDeleteJSON(ctx context.Context, name, prefix
 	return true, nil
 }
 
+// removeNamespaceMembershipLocked 从所有内存命名空间移除缓存键。
 func (s *Memory) removeNamespaceMembershipLocked(key string) {
 	for name, members := range s.namespaces {
 		delete(members, key)
@@ -455,11 +461,12 @@ func (s *Memory) removeNamespaceMembershipLocked(key string) {
 	}
 }
 
-// Redis Namespace操作。记录键有意沿用既有的 `<prefix><suffix>` 拼接形式。
+// namespaceQuotaKey 生成 Redis 命名空间配额键。
 func namespaceQuotaKey(name string) string {
 	return "furtalk:cache:namespace-quota:" + name
 }
 
+// namespaceGet 从 Redis 命名空间读取并解码值。
 func (s *Redis) namespaceGet(ctx context.Context, name, prefix, suffix string, out any) error {
 	data, err := s.namespaceRead(ctx, name, prefix, suffix)
 	if errors.Is(err, ErrNotFound) {
@@ -474,6 +481,7 @@ func (s *Redis) namespaceGet(ctx context.Context, name, prefix, suffix string, o
 	return nil
 }
 
+// namespaceGetRawJSON 从 Redis 命名空间读取原始 JSON。
 func (s *Redis) namespaceGetRawJSON(ctx context.Context, name, prefix, suffix string) (json.RawMessage, error) {
 	data, err := s.namespaceRead(ctx, name, prefix, suffix)
 	if errors.Is(err, ErrNotFound) {
@@ -485,6 +493,7 @@ func (s *Redis) namespaceGetRawJSON(ctx context.Context, name, prefix, suffix st
 	return bytes.Clone(data), nil
 }
 
+// namespaceRead 从 Redis 命名空间读取原始字节。
 func (s *Redis) namespaceRead(ctx context.Context, name, prefix, suffix string) ([]byte, error) {
 	value, err := namespaceGetScript.Run(ctx, s.client, []string{prefix + suffix, namespaceQuotaKey(name)}).Text()
 	if errors.Is(err, redis.Nil) {
@@ -496,6 +505,7 @@ func (s *Redis) namespaceRead(ctx context.Context, name, prefix, suffix string) 
 	return []byte(value), nil
 }
 
+// namespaceSet 在 Redis 命名空间中按配额写入值。
 func (s *Redis) namespaceSet(ctx context.Context, name, prefix, suffix string, value any, ttl time.Duration, limit int) error {
 	data, err := json.Marshal(value)
 	if err != nil {
@@ -513,6 +523,7 @@ func (s *Redis) namespaceSet(ctx context.Context, name, prefix, suffix string, v
 	return nil
 }
 
+// namespaceDelete 从 Redis 命名空间删除缓存值。
 func (s *Redis) namespaceDelete(ctx context.Context, name, prefix, suffix string) error {
 	if err := namespaceDeleteScript.Run(ctx, s.client,
 		[]string{prefix + suffix, namespaceQuotaKey(name)}).Err(); err != nil {
@@ -521,6 +532,7 @@ func (s *Redis) namespaceDelete(ctx context.Context, name, prefix, suffix string
 	return nil
 }
 
+// namespaceConsume 从 Redis 命名空间原子消费缓存值。
 func (s *Redis) namespaceConsume(ctx context.Context, name, prefix, suffix string) (string, error) {
 	value, err := namespaceConsumeScript.Run(ctx, s.client,
 		[]string{prefix + suffix, namespaceQuotaKey(name)}).Text()
@@ -537,6 +549,7 @@ func (s *Redis) namespaceConsume(ctx context.Context, name, prefix, suffix strin
 	return decoded, nil
 }
 
+// namespaceCompareAndSwapJSON 在 Redis 命名空间中原子替换 JSON。
 func (s *Redis) namespaceCompareAndSwapJSON(ctx context.Context, name, prefix, suffix string, expected, replacement json.RawMessage) (bool, error) {
 	if !json.Valid(replacement) {
 		return false, errors.New("cache: replacement is not valid JSON")
@@ -549,6 +562,7 @@ func (s *Redis) namespaceCompareAndSwapJSON(ctx context.Context, name, prefix, s
 	return result == 1, nil
 }
 
+// namespaceCompareAndDeleteJSON 在 Redis 命名空间中原子删除 JSON。
 func (s *Redis) namespaceCompareAndDeleteJSON(ctx context.Context, name, prefix, suffix string, expected json.RawMessage) (bool, error) {
 	result, err := namespaceCompareAndDeleteJSONScript.Run(ctx, s.client,
 		[]string{prefix + suffix, namespaceQuotaKey(name)}, []byte(expected)).Int()

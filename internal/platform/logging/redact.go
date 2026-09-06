@@ -19,8 +19,6 @@ func (t setupTokenValue) LogValue() slog.Value {
 }
 
 // SetupToken 构造唯一受控放行的 setup_token 属性。
-// bootstrap 首次引导在启动时输出一次明文 token；
-// 其他调用点构造的 setup_token 属性仍会被统一 handler 脱敏。
 func SetupToken(raw string) slog.Attr {
 	return slog.Any("setup_token", setupTokenValue(raw))
 }
@@ -43,7 +41,7 @@ var sensitiveExact = map[string]struct{}{
 	"apikey":        {},
 }
 
-// redactingHandler 在 JSON handler 前过滤敏感属性。
+// redactingHandler 在目标日志 handler 前过滤敏感属性。
 // 明确的凭据属性名与 *_token/*_password/*_secret 后缀输出固定占位符；
 // group 递归处理；error 属性保留用于诊断。
 type redactingHandler struct {

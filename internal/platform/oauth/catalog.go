@@ -3,6 +3,7 @@ package oauth
 // CallbackMode 授权回调的接收方式。
 type CallbackMode string
 
+// OAuth 回调支持的接收方式。
 const (
 	// CallbackQuery 回调参数以 query 字符串传递（默认）。
 	CallbackQuery CallbackMode = "query"

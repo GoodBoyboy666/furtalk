@@ -85,7 +85,7 @@ func TestProjectNotificationConfigCopiesEveryConsumerField(t *testing.T) {
 	}
 }
 
-// TestCommentPolicyProjectsCommentSort 验证组合根的策略适配器把动态设置中的
+// TestCommentPolicyProjectsCommentSort 验证依赖组装入口的策略适配器把动态设置中的
 // comment_sort 逐字段投影到 CommentPolicy，构成 settings -> runtime-config ->
 // public query 的跨层契约。
 func TestCommentPolicyProjectsCommentSort(t *testing.T) {

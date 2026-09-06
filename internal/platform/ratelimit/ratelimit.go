@@ -15,6 +15,7 @@ type Config struct {
 	Burst int     // 可累积的最大令牌数
 }
 
+// 限流器使用的默认空闲时间、清理周期和桶容量。
 const (
 	idleTimeout   = 10 * time.Minute
 	cleanupPeriod = 1 * time.Minute
@@ -47,7 +48,6 @@ type PolicyRegistry struct {
 }
 
 // NewPolicyRegistry 按策略定义构建注册表。rate 或 burst 非正的定义会被跳过，请求这些策略时直接失败（fail closed）。
-// 输入 map 会被复制，调用方之后的修改不会影响注册表。
 func NewPolicyRegistry(configs map[string]Config) *PolicyRegistry {
 	registry := &PolicyRegistry{
 		policies: make(map[string]*Limiter, len(configs)),
@@ -63,7 +63,6 @@ func NewPolicyRegistry(configs map[string]Config) *PolicyRegistry {
 }
 
 // Allow 报告 subject 在指定策略下是否有一个令牌可用。未知策略一律拒绝（fail closed）。
-// 空 subject 会固定落入同一个 unknown 桶，调用方无法通过省略身份来绕过准入。
 func (r *PolicyRegistry) Allow(policy, subject string) bool {
 	return r.AllowN(policy, subject, 1)
 }
@@ -84,7 +83,6 @@ func (r *PolicyRegistry) AllowN(policy, subject string, n int) bool {
 }
 
 // Limiter 返回指定名称的限流器，供已经接受底层 Limiter 类型的集成点使用。
-// 返回的指针应视为只读配置；其桶的并发访问仍然是安全的。
 func (r *PolicyRegistry) Limiter(policy string) *Limiter {
 	if r == nil {
 		return nil
@@ -134,6 +132,7 @@ func (r *PolicyRegistry) CleanupLoop(ctx context.Context) error {
 	}
 }
 
+// normalizeSubject 规范化限流 subject，并为缺失值提供固定键。
 func normalizeSubject(subject string) string {
 	if subject = strings.TrimSpace(subject); subject != "" {
 		return subject
@@ -147,7 +146,6 @@ func NewFromConfig(cfg Config) *Limiter {
 }
 
 // New 构建一个限流器，每秒补充 rate 个令牌，上限为 burst 容量。
-// Rate 与 burst 必须为正数。
 func New(rate float64, burst int) *Limiter {
 	return NewWithCapacity(rate, burst, DefaultBucketCapacity)
 }
@@ -172,8 +170,6 @@ func (l *Limiter) Allow(key string) bool {
 }
 
 // AllowN 报告 key 是否有 n 个令牌可用，为 true 时消耗它们。
-// n 为零或负数时始终返回 true 且不消耗。
-// 请求路径只计算当前桶的令牌，不执行任何全表扫描。
 func (l *Limiter) AllowN(key string, n int) bool {
 	if n <= 0 {
 		return true
@@ -214,7 +210,6 @@ func (l *Limiter) BucketCount() int {
 }
 
 // CleanupLoop 周期清理空闲超过 idleTimeout 的桶，直到 ctx 取消。
-// 由调用方作为受托管后台任务运行；ctx 取消后立即返回，不泄漏 goroutine。
 func (l *Limiter) CleanupLoop(ctx context.Context) error {
 	ticker := time.NewTicker(cleanupPeriod)
 	defer ticker.Stop()

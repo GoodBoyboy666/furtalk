@@ -8,7 +8,6 @@ import (
 )
 
 // Validate 校验解密后的配置可以发送：平台字段完整且 URL 形态合规。
-// 该校验在每次投递前执行，作为持久化校验之外的防御边界。
 func (cfg Config) Validate() error {
 	switch cfg.Platform {
 	case PlatformTelegram:
@@ -58,6 +57,7 @@ func (cfg Config) Validate() error {
 	return nil
 }
 
+// validateBarkBaseURL 校验 Bark 的 HTTP(S) 基础 URL。
 func validateBarkBaseURL(raw string) error {
 	if _, err := urlx.ParseHTTPBase(raw); err != nil {
 		return fmt.Errorf("%w: bark server url must be an absolute http(s) base url", ErrConfig)
@@ -65,9 +65,7 @@ func validateBarkBaseURL(raw string) error {
 	return nil
 }
 
-// ValidateTrustedURL 校验管理员可配置的绝对 http(s) 出站地址（Bark server_url / 通用 WebHook）。
-// 有意允许 HTTP、HTTPS 与私网目标：这是受信管理员部署决策，不增加公网限制或私网阻断。
-// 仍拒绝解析错误、空主机、userinfo、fragment、控制字符与非 http(s) scheme。
+// ValidateTrustedURL 校验管理员可配置的绝对 HTTP(S) 通用 Webhook 地址。
 func ValidateTrustedURL(raw string) error {
 	u, err := urlx.ParseHTTP(raw)
 	if err != nil {
@@ -80,8 +78,6 @@ func ValidateTrustedURL(raw string) error {
 }
 
 // ValidateWebhookURL 校验官方入站 webhook 地址的主机与路径形态。
-// 要求 HTTPS、指定官方主机、路径前缀；DingTalk 要求恰好一个 access_token 查询值。
-// 通用 WebHook 不是本函数的目标，使用 ValidateTrustedURL。
 func ValidateWebhookURL(p Platform, raw string) error {
 	switch p {
 	case PlatformFeishu:
@@ -125,7 +121,6 @@ func validateOfficialWebhookURL(raw, host, pathPrefix, requiredQuery string) err
 }
 
 // validateSlackWebhookURL 校验 Slack incoming webhook 地址。
-// 支持 hooks.slack.com 与 hooks.slack-gov.com 的 /services/ 路径。
 func validateSlackWebhookURL(raw string) error {
 	u, err := urlx.ParseHTTPS(raw)
 	if err != nil {

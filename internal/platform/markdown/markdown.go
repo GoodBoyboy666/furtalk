@@ -20,7 +20,7 @@ var ErrUnsafeDestination = errors.New("markdown: unsafe link destination")
 
 var md = goldmark.New()
 
-// Validate 将 body 解析为 goldmark AST，不含原始 HTML 节点时返回 nil。
+// Validate 解析 Markdown 并校验原始 HTML 与链接目标的安全性。
 func Validate(body string) error {
 	doc := md.Parser().Parse(text.NewReader([]byte(body)))
 	err := ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
@@ -46,6 +46,7 @@ func Validate(body string) error {
 	return nil
 }
 
+// destination 提取链接或图片节点的目标地址。
 func destination(n ast.Node) []byte {
 	switch node := n.(type) {
 	case *ast.Link:
@@ -57,6 +58,7 @@ func destination(n ast.Node) []byte {
 	}
 }
 
+// validateDestination 校验 Markdown 链接目标的协议与字符。
 func validateDestination(raw []byte) error {
 	// 解码HTML实体
 	destination := html.UnescapeString(string(raw))

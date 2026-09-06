@@ -21,6 +21,7 @@ func writeError(c *gin.Context, err error) {
 	httpx.WriteError(c, err)
 }
 
+// errorResponse 构造 HTTP 错误响应数据。
 func errorResponse(c *gin.Context, code, message string) httpx.ErrorResponse {
 	return httpx.Response(c, code, message)
 }
@@ -83,8 +84,7 @@ func actingUserID(c *gin.Context) int64 {
 	return 0
 }
 
-// parsePage 解析页码查询参数：缺省为第 1 页；非正整数页码返回参数错误。
-// 边界校验在本层完成，offset 的推导与溢出保护由领域层 OffsetForPage 负责。
+// parsePage 解析分页参数并填充分页条件。
 func parsePage(c *gin.Context) (int, error) {
 	raw := c.Query("page")
 	if raw == "" {

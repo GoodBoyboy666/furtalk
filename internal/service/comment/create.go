@@ -16,8 +16,7 @@ import (
 	"furtalk/internal/platform/value"
 )
 
-// Create 在单个事务内解析或创建作者与线程，并创建根评论或回复。
-// 普通匿名邮箱走公开提交路径；管理员邮箱与认证模式必须携带有效凭据，请求邮箱只用于一致性校验。
+// Create 创建评论并发布评论创建事件。
 func (s *Service) Create(ctx context.Context, input CreateInput) (*CommentView, error) {
 	if err := s.validateSiteAndOrigin(ctx, input.SiteID, input.Origin); err != nil {
 		return nil, err
@@ -158,14 +157,12 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (*CommentView, 
 		return nil, err
 	}
 
-	// direct 策略下评论创建后即 published，只发布创建事件；
-	// 发布确认与回复通知由通知消费者按状态与审核策略分发。
+	// 评论创建事件携带持久化后的实际状态，通知消费者按状态与审核策略分发后续通知。
 	s.publishCommentCreated(ctx, created, pol.Mode)
 	return s.viewFor(ctx, created)
 }
 
-// resolveAndSyncActor 在事务内解析作者用户并同步资料：
-// 凭据路径使用凭据主体并只校验一致性；匿名路径按规范化邮箱查找或创建普通用户，
+// resolveAndSyncActor 解析评论作者并同步共享资料。
 func (s *Service) resolveAndSyncActor(ctx context.Context, pol domain.CommentPolicy, normalized, original, nickname string, websiteOp WebsiteOperation, credentialActor *int64) (int64, error) {
 	var (
 		user *domain.User
@@ -324,9 +321,7 @@ func (s *Service) CreateReplyFirstParty(ctx context.Context, actorID int64, acto
 	return s.viewFor(ctx, created)
 }
 
-// createComment 在打开的事务内插入评论。
-// initialStatus 是调用方在事务外按“垃圾检测覆盖 → 全局审核策略”计算好的显式初始状态；
-// published_at 只在状态为 published 时写入。
+// createComment 在事务中创建评论。
 func (s *Service) createComment(ctx context.Context, cfg domain.CommentPolicy, siteID, threadID, actorID int64, parentID *int64, body string, ip net.IP, rawUA string, initialStatus domain.CommentStatus) (*domain.Comment, error) {
 	var parentRef, rootID *int64
 	var replyToUserID *int64
@@ -465,6 +460,7 @@ func (s *Service) replyToNickname(ctx context.Context, comment *domain.Comment) 
 	return &replyUser.Nickname, nil
 }
 
+// validateBody 校验评论正文。
 func validateBody(body string) error {
 	if strings.TrimSpace(body) == "" {
 		return fmt.Errorf("%w: body is required", domain.ErrValidation)
@@ -478,6 +474,7 @@ func validateBody(body string) error {
 	return nil
 }
 
+// validatePageKey 校验评论页标识。
 func validatePageKey(pageKey string) error {
 	if strings.TrimSpace(pageKey) == "" {
 		return fmt.Errorf("%w: page_key is required", domain.ErrValidation)
@@ -488,6 +485,7 @@ func validatePageKey(pageKey string) error {
 	return nil
 }
 
+// validatePageURL 校验评论页 URL。
 func validatePageURL(pageURL *string) error {
 	if pageURL == nil || strings.TrimSpace(*pageURL) == "" {
 		return nil
@@ -502,6 +500,7 @@ func validatePageURL(pageURL *string) error {
 	return nil
 }
 
+// validatePageTitle 校验评论页标题。
 func validatePageTitle(pageTitle *string) error {
 	if pageTitle != nil && len(*pageTitle) > maxPageTitleLength {
 		return fmt.Errorf("%w: page_title is too long", domain.ErrValidation)

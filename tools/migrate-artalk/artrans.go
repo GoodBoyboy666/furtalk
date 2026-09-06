@@ -11,9 +11,8 @@ import (
 	"strings"
 )
 
-// Artran is one record in Artalk's Artrans interchange format. Artalk defines
-// every field as a string, but older converters sometimes emit JSON numbers or
-// booleans; flexibleString accepts both representations.
+// Artran 表示 Artalk Artrans 交换格式中的一条记录。
+// 各字段使用 flexibleString 兼容字符串、数字和布尔值输入。
 type Artran struct {
 	ID            flexibleString `json:"id"`
 	RID           flexibleString `json:"rid"`
@@ -39,35 +38,71 @@ type Artran struct {
 	SiteURLs      flexibleString `json:"site_urls"`
 }
 
-func (a Artran) id() string        { return strings.TrimSpace(string(a.ID)) }
-func (a Artran) rid() string       { return strings.TrimSpace(string(a.RID)) }
-func (a Artran) content() string   { return string(a.Content) }
-func (a Artran) ua() string        { return string(a.UA) }
-func (a Artran) ip() string        { return strings.TrimSpace(string(a.IP)) }
+// id 返回去除首尾空白的记录标识。
+func (a Artran) id() string { return strings.TrimSpace(string(a.ID)) }
+
+// rid 返回去除首尾空白的父记录标识。
+func (a Artran) rid() string { return strings.TrimSpace(string(a.RID)) }
+
+// content 返回评论正文。
+func (a Artran) content() string { return string(a.Content) }
+
+// ua 返回原始 User-Agent。
+func (a Artran) ua() string { return string(a.UA) }
+
+// ip 返回去除首尾空白的 IP 地址。
+func (a Artran) ip() string { return strings.TrimSpace(string(a.IP)) }
+
+// createdAt 返回去除首尾空白的创建时间文本。
 func (a Artran) createdAt() string { return strings.TrimSpace(string(a.CreatedAt)) }
+
+// updatedAt 返回去除首尾空白的更新时间文本。
 func (a Artran) updatedAt() string { return strings.TrimSpace(string(a.UpdatedAt)) }
-func (a Artran) nick() string      { return strings.TrimSpace(string(a.Nick)) }
-func (a Artran) email() string     { return strings.TrimSpace(string(a.Email)) }
-func (a Artran) link() string      { return strings.TrimSpace(string(a.Link)) }
-func (a Artran) pageKey() string   { return strings.TrimSpace(string(a.PageKey)) }
+
+// nick 返回去除首尾空白的昵称。
+func (a Artran) nick() string { return strings.TrimSpace(string(a.Nick)) }
+
+// email 返回去除首尾空白的邮箱。
+func (a Artran) email() string { return strings.TrimSpace(string(a.Email)) }
+
+// link 返回去除首尾空白的网站链接。
+func (a Artran) link() string { return strings.TrimSpace(string(a.Link)) }
+
+// pageKey 返回去除首尾空白的页面标识。
+func (a Artran) pageKey() string { return strings.TrimSpace(string(a.PageKey)) }
+
+// pageTitle 返回去除首尾空白的页面标题。
 func (a Artran) pageTitle() string { return strings.TrimSpace(string(a.PageTitle)) }
-func (a Artran) siteName() string  { return strings.TrimSpace(string(a.SiteName)) }
-func (a Artran) siteURLs() string  { return string(a.SiteURLs) }
+
+// siteName 返回去除首尾空白的站点名称。
+func (a Artran) siteName() string { return strings.TrimSpace(string(a.SiteName)) }
+
+// siteURLs 返回原始站点 URL 列表文本。
+func (a Artran) siteURLs() string { return string(a.SiteURLs) }
+
+// isPending 解析记录的待审核标记。
 func (a Artran) isPending() (bool, error) {
 	return parseFlexibleBool("is_pending", string(a.IsPending))
 }
+
+// isCollapsed 解析记录的折叠标记。
 func (a Artran) isCollapsed() (bool, error) {
 	return parseFlexibleBool("is_collapsed", string(a.IsCollapsed))
 }
+
+// isPinned 解析记录的置顶标记。
 func (a Artran) isPinned() (bool, error) {
 	return parseFlexibleBool("is_pinned", string(a.IsPinned))
 }
+
+// pageAdminOnly 解析页面的管理员可见标记。
 func (a Artran) pageAdminOnly() (bool, error) {
 	return parseFlexibleBool("page_admin_only", string(a.PageAdminOnly))
 }
 
 type flexibleString string
 
+// UnmarshalJSON 将 JSON 标量转换为兼容字符串。
 func (s *flexibleString) UnmarshalJSON(data []byte) error {
 	data = bytes.TrimSpace(data)
 	if bytes.Equal(data, []byte("null")) {
@@ -99,9 +134,9 @@ func (s *flexibleString) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// Parse reads a raw Artrans array. It also accepts gzip input and the
-// {"artrans":"[...]"} envelope returned by Artalk's export HTTP API.
+// Parse 读取并解码 Artalk Artrans 数据。
 func Parse(reader io.Reader) ([]Artran, error) {
+	// 输入可以是 gzip 数据，也可以是带 artrans 字段的 JSON 包装。
 	buffered := bufio.NewReader(reader)
 	header, err := buffered.Peek(2)
 	if err != nil && err != io.EOF {
@@ -153,6 +188,7 @@ func Parse(reader io.Reader) ([]Artran, error) {
 	return records, nil
 }
 
+// parseFlexibleBool 将常见布尔文本解析为布尔值。
 func parseFlexibleBool(field, raw string) (bool, error) {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
 	case "", "0", "false", "no", "off":
@@ -164,6 +200,7 @@ func parseFlexibleBool(field, raw string) (bool, error) {
 	}
 }
 
+// nonZero 判断数值文本是否非零或无法解析。
 func nonZero(raw flexibleString) bool {
 	value := strings.TrimSpace(string(raw))
 	if value == "" {

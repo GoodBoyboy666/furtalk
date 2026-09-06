@@ -16,8 +16,7 @@ import (
 	"go.uber.org/fx"
 )
 
-// httpModule 供应错误 translator、认证中间件、路由注册函数、
-// Gin engine 与 http.Server。
+// httpModule 注册 HTTP translator、中间件、路由和服务器。
 func httpModule() fx.Option {
 	return fx.Provide(
 		handler.NewTranslator,
@@ -78,8 +77,7 @@ func provideRegisters(s *services) ([]router.Register, error) {
 	return registers, nil
 }
 
-// provideRouterWithAdmission is the production router provider with the
-// feature-specific temporary-state admission registry.
+// provideRouterWithAdmission 构建带流程准入的 HTTP 路由。
 func provideRouterWithAdmission(
 	readiness *readinessState,
 	cfg config.HTTPConfig,

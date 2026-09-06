@@ -19,13 +19,11 @@ const defaultOAuthClientTimeout = 10 * time.Second
 var ErrResponseTooLarge = errors.New("oauth: provider response too large")
 
 // isResponseTooLarge 即使依赖使用 %v 格式化而非包装 sentinel，也能识别该类别。
-// fallback 只匹配固定文本，不包含请求控制的数据。
 func isResponseTooLarge(err error) bool {
 	return err != nil && (errors.Is(err, ErrResponseTooLarge) || strings.Contains(err.Error(), ErrResponseTooLarge.Error()))
 }
 
-// IsResponseTooLarge 判断 adapter 或依赖是否传播了响应超限类别，
-// 也覆盖依赖仅格式化错误文本的情况。
+// IsResponseTooLarge 判断适配器或依赖是否传播了响应超限类别。
 func IsResponseTooLarge(err error) bool {
 	return isResponseTooLarge(err)
 }
@@ -44,6 +42,7 @@ type boundedTransport struct {
 	base http.RoundTripper
 }
 
+// RoundTrip 执行并缓存受响应大小限制的 HTTP 请求。
 func (t *boundedTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	resp, err := t.base.RoundTrip(req)
 	if err != nil || resp == nil {
@@ -73,8 +72,7 @@ func (t *boundedTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 	return resp, nil
 }
 
-// boundedClient 克隆选定的 client，保留 transport、重定向策略、Jar 等设置，
-// 同时应用配置的 timeout 与共享有界响应 transport。
+// boundedClient 克隆 HTTP client 并应用统一响应大小与超时限制。
 func boundedClient(base *http.Client, timeout time.Duration) *http.Client {
 	if base == nil {
 		base = http.DefaultClient

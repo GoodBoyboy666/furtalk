@@ -113,9 +113,9 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
-	// 先按方言屏蔽未选中的连接字段，避免例如 SQLite 部署因遗留的
-	// PostgreSQL 端口环境变量类型错误而无法解码。未选中字段仍由
-	// UnmarshalExact 识别未知键；这里只清除已知但不适用的字段值。
+	// 按方言屏蔽未选中的连接字段，使 SQLite 部署忽略遗留的
+	// PostgreSQL 端口环境变量类型错误。未选中字段仍由
+	// UnmarshalExact 识别未知键；此操作只清除已知但不适用的字段值。
 	ignoreUnselectedDatabaseFields(v)
 
 	var c Config
@@ -133,7 +133,6 @@ func Load() (Config, error) {
 }
 
 // normalizeWebURLs 将 CORS、站点存储和 WebAuthn 运行时使用的 Origin 统一为同一规范形式。
-// Validate 为兼容性保留值接收者，因此由 Load 在进入应用的配置快照上执行校验后的规范化。
 func (c *Config) normalizeWebURLs() error {
 	var err error
 	if c.HTTP.PublicBaseURL, err = urlx.CanonicalOrigin(c.HTTP.PublicBaseURL); err != nil {
@@ -150,6 +149,7 @@ func (c *Config) normalizeWebURLs() error {
 	return nil
 }
 
+// ignoreUnselectedDatabaseFields 清除未选数据库方言的字段值。
 func ignoreUnselectedDatabaseFields(v *viper.Viper) {
 	ignored := map[string]any{}
 	switch strings.TrimSpace(v.GetString("database.dialect")) {
@@ -344,7 +344,6 @@ func (c Config) checkRequired() error {
 }
 
 // Validate 校验各 section 的静态配置。
-// 必需字段在格式/范围校验之前检查，缺失时直接返回字段错误。
 func (c Config) Validate() error {
 	if err := c.checkRequired(); err != nil {
 		return err
@@ -458,7 +457,6 @@ func (c Config) Validate() error {
 }
 
 // validateRPID 接受 DNS 主机名或 IP 字面量，不含 scheme、方括号、路径或端口。
-// IPv6 冒号属于地址语法，net.ParseIP 识别完整值后即为合法。
 func validateRPID(value string) error {
 	rpid := strings.TrimSpace(value)
 	if rpid == "" {
@@ -476,6 +474,7 @@ func validateRPID(value string) error {
 	return nil
 }
 
+// validHostname 判断字符串是否为合法 DNS 主机名。
 func validHostname(host string) bool {
 	if len(host) > 253 || strings.HasSuffix(host, ".") {
 		return false
@@ -494,9 +493,6 @@ func validHostname(host string) bool {
 }
 
 // newViper 构建独立 viper 实例。
-// 配置文件可选：从 configs/ 自动发现 config.yaml / config.toml / config.json，
-// 也可用 FURTALK_CONFIG 显式指定路径；文件缺失时静默跳过（兼容纯 env 部署）。
-// 优先级：env（FURTALK_ 前缀）> 配置文件 > 默认值。
 func newViper() (*viper.Viper, error) {
 	v := viper.NewWithOptions(viper.ExperimentalBindStruct())
 	v.SetEnvPrefix(envPrefix)
@@ -519,12 +515,14 @@ func newViper() (*viper.Viper, error) {
 	return v, nil
 }
 
+// configureDefaults 向 Viper 注入建议默认值。
 func configureDefaults(v *viper.Viper) {
 	for _, d := range recommendedDefaults {
 		v.SetDefault(d.key, d.def)
 	}
 }
 
+// configDecodeHook 构建配置解码转换器。
 func configDecodeHook() mapstructure.DecodeHookFunc {
 	return mapstructure.ComposeDecodeHookFunc(
 		mapstructure.StringToTimeDurationHookFunc(),
@@ -532,6 +530,7 @@ func configDecodeHook() mapstructure.DecodeHookFunc {
 	)
 }
 
+// stringToTrimmedSliceHook 构建逗号分隔字符串到字符串切片的转换器。
 func stringToTrimmedSliceHook() mapstructure.DecodeHookFunc {
 	return func(from, to reflect.Type, data any) (any, error) {
 		if from.Kind() != reflect.String || to.Kind() != reflect.Slice || to.Elem().Kind() != reflect.String {

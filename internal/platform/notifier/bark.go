@@ -9,16 +9,13 @@ import (
 	"furtalk/internal/platform/urlx"
 )
 
-// bark 载荷的字节预算常量。
-// APNs 将单条远程通知载荷上限设为 4096 字节（含 JSON/APNs 开销），
-// 这里按 UTF-8 字节预算截断正文，并限制标题字符数，保证序列化后远低于上限。
+// Bark 载荷使用的标题字符数与正文 UTF-8 字节预算。
 const (
 	barkTitleMaxRunes = 100
 	barkBodyMaxBytes  = 2500
 )
 
 // sendBark 向 Bark V2 push 端点投递。
-// 端点按 {server_url}/push 拼接；成功判定为 HTTP 2xx 且 code==200。
 func (d *Dispatcher) sendBark(ctx context.Context, cfg Config, msg Message) error {
 	base, err := urlx.ParseHTTPBase(cfg.ServerURL)
 	if err != nil {

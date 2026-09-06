@@ -87,7 +87,6 @@ func (s *Service) DeletePasskey(ctx context.Context, userID, passkeyID int64) er
 }
 
 // RenamePasskey 更新用户 passkey 凭证的名称（1–100 字符，去除首尾空白）。
-// 凭证归属由 repository 按 userID+id 校验；非法名称返回 domain.ErrValidation。
 func (s *Service) RenamePasskey(ctx context.Context, userID, passkeyID int64, name string) error {
 	trimmed := strings.TrimSpace(name)
 	if trimmed == "" || len([]rune(trimmed)) > 100 {

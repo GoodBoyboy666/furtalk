@@ -18,6 +18,7 @@ import (
 	"furtalk/internal/repository"
 )
 
+// bootstrap 配置常量。
 const (
 	setupTokenTTL     = 10 * time.Minute
 	setupTokenByteLen = 32
@@ -52,6 +53,7 @@ type setupToken struct {
 	used      bool
 }
 
+// newSetupToken 生成初始化令牌。
 func newSetupToken(ttl time.Duration) (*setupToken, error) {
 	raw, err := cryptox.RandomToken(setupTokenByteLen)
 	if err != nil {
@@ -94,6 +96,7 @@ func (t *setupToken) verify(candidate string, now time.Time) bool {
 	return true
 }
 
+// Service 实现首次运行引导服务。
 type Service struct {
 	txRunner  TxRunner
 	users     FirstAdminWriter
@@ -203,6 +206,7 @@ func (s *Service) CreateAdmin(ctx context.Context, input AdminInput) error {
 	return nil
 }
 
+// validateInput 校验初始化管理员输入。
 func validateInput(input AdminInput) error {
 	if strings.TrimSpace(input.SetupToken) == "" {
 		return domain.ErrTokenInvalid

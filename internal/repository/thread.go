@@ -14,6 +14,7 @@ import (
 	"gorm.io/gorm/clause"
 )
 
+// ThreadRepo 提供评论线程的持久化操作。
 type ThreadRepo struct {
 	db *gorm.DB
 }
@@ -30,8 +31,7 @@ func NewThreadRepo(db *gorm.DB) *ThreadRepo {
 	return &ThreadRepo{db: db}
 }
 
-// ResolveOrCreate 返回 (site_id, page_key) 对应的 thread，不存在时插入。
-// 冲突时按非 nil 元数据更新 page_url/page_title，并刷新 updated_at。
+// ResolveOrCreate 按站点和页面键解析或创建评论线程。
 func (r *ThreadRepo) ResolveOrCreate(ctx context.Context, siteID int64, pageKey string, pageURL, pageTitle *string) (*domain.Thread, error) {
 	row := &model.Thread{SiteID: siteID, PageKey: pageKey, PageURL: pageURL, PageTitle: pageTitle}
 	assignments := map[string]any{"updated_at": time.Now().UTC()}
@@ -122,6 +122,7 @@ func (r *ThreadRepo) GetBySiteAndIDLocked(ctx context.Context, siteID, threadID 
 	})
 }
 
+// threadLocked 在当前事务中查询并锁定评论线程。
 func (r *ThreadRepo) threadLocked(ctx context.Context, cond func(db *gorm.DB) *gorm.DB) (*domain.Thread, error) {
 	db := gormtx.DB(ctx, r.db)
 	if db.Dialector.Name() != "sqlite" {
@@ -139,8 +140,7 @@ func (r *ThreadRepo) threadLocked(ctx context.Context, cond func(db *gorm.DB) *g
 	return &thread, nil
 }
 
-// ListAdmin 按管理员过滤条件列出线程并关联站点名。
-// q 对 page_key、page_title 与 page_url 做包含匹配；结果使用 (created_at, id) 排序。
+// ListAdmin 按筛选条件列出管理端评论线程。
 func (r *ThreadRepo) ListAdmin(ctx context.Context, filter domain.AdminThreadFilter) ([]domain.AdminThread, error) {
 	query := gormtx.DB(ctx, r.db).
 		Table("threads").
@@ -191,8 +191,7 @@ func applyAdminThreadFilters(query *gorm.DB, filter domain.AdminThreadFilter) *g
 	return query
 }
 
-// UpdateThread 更新线程的元数据字段并返回
-// 同值更新时 RowsAffected 为 0；page_key 违反唯一时返回 domain.ErrConflict。
+// UpdateThread 更新线程元数据并返回最新线程。
 func (r *ThreadRepo) UpdateThread(ctx context.Context, siteID, threadID int64, patch domain.ThreadPatch) (*domain.Thread, error) {
 	db := gormtx.DB(ctx, r.db)
 	var row model.Thread
@@ -264,9 +263,7 @@ func (r *ThreadRepo) UpdateCommentsEnabledMany(ctx context.Context, siteID int64
 	return result.RowsAffected, nil
 }
 
-// DeleteThread 硬删除一条 thread。
-// 依赖数据库复合外键 ON DELETE CASCADE 移除该线程下全部评论，
-// 作者用户、站点与其他线程不受影响；跨站点或缺失的 thread 返回 domain.ErrNotFound。
+// DeleteThread 删除指定站点的评论线程。
 func (r *ThreadRepo) DeleteThread(ctx context.Context, siteID, threadID int64) error {
 	result := gormtx.DB(ctx, r.db).
 		Where("site_id = ? AND id = ?", siteID, threadID).
@@ -282,7 +279,7 @@ func (r *ThreadRepo) DeleteThread(ctx context.Context, siteID, threadID int64) e
 
 // DeleteThreads 删除显式站点范围内的目标集合并返回影响行数。
 func (r *ThreadRepo) DeleteThreads(ctx context.Context, siteID int64, ids []int64) (int64, error) {
-	// 调用方必须已锁定并完整校验目标。
+	// 使用方必须已锁定并完整校验目标。
 	if len(ids) == 0 {
 		return 0, nil
 	}

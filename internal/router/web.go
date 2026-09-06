@@ -12,8 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// RegisterWeb 将 Web 静态资源与 SPA history fallback 挂载到已有 Gin engine。
-// 已注册的 API 与健康路由由 Gin 优先处理；未命中的保留前缀不会回退到首页。
+// RegisterWeb 注册 HTTP 路由。
 func RegisterWeb(engine *gin.Engine, assets fs.FS) error {
 	if engine == nil {
 		return errors.New("router: web engine is nil")
@@ -35,6 +34,7 @@ func RegisterWeb(engine *gin.Engine, assets fs.FS) error {
 	return nil
 }
 
+// serveWeb 处理 Web 静态资源与 SPA 回退请求。
 func serveWeb(c *gin.Context, assets fs.FS, fileServer http.Handler) {
 	if c.Request.Method != http.MethodGet && c.Request.Method != http.MethodHead {
 		c.Status(http.StatusNotFound)
@@ -69,11 +69,13 @@ func serveWeb(c *gin.Context, assets fs.FS, fileServer http.Handler) {
 	serveWebFile(c, fileServer, "index.html")
 }
 
+// isReservedWebPath 判断请求路径是否属于保留 Web 路径。
 func isReservedWebPath(requestPath string) bool {
 	return requestPath == "/api" || strings.HasPrefix(requestPath, "/api/") ||
 		requestPath == "/health" || strings.HasPrefix(requestPath, "/health/")
 }
 
+// cleanWebPath 规范化 Web 请求路径并判断其可用性。
 func cleanWebPath(requestPath string) (string, bool) {
 	if requestPath == "" || requestPath == "/" {
 		return "index.html", true
@@ -95,10 +97,11 @@ func cleanWebPath(requestPath string) (string, bool) {
 	return cleaned, true
 }
 
+// serveWebFile 通过静态文件处理器返回 Web 文件。
 func serveWebFile(c *gin.Context, fileServer http.Handler, name string) {
 	request := c.Request.Clone(c.Request.Context())
 	request.URL.Path = "/" + name
-	// FileServer 会把以 /index.html 结尾的路径重定向到父目录，这里直接按父目录提供内容。
+	// FileServer 会把以 /index.html 结尾的路径重定向到父目录；父目录直接提供页面内容。
 	if strings.HasSuffix(name, "/index.html") || name == "index.html" {
 		request.URL.Path = strings.TrimSuffix(request.URL.Path, "index.html")
 	}

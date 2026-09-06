@@ -26,7 +26,6 @@ type Akismet struct {
 }
 
 // NewAkismet 构建 Akismet 检测器。
-// client 必须携带超时。
 func NewAkismet(client *http.Client, cfg AkismetConfig) *Akismet {
 	if client == nil {
 		client = defaultClient()
@@ -35,7 +34,6 @@ func NewAkismet(client *http.Client, cfg AkismetConfig) *Akismet {
 }
 
 // Check 送检完整评论上下文并按响应判定：
-// true 表示垃圾（Block），false 表示通过（Pass）；其他响应、非成功状态或网络错误为 unknown。
 func (a *Akismet) Check(ctx context.Context, input Input) (Result, error) {
 	form := url.Values{}
 	form.Set("blog", input.BlogURL)
@@ -55,8 +53,7 @@ func (a *Akismet) Check(ctx context.Context, input Input) (Result, error) {
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	resp, err := a.client.Do(req)
 	if err != nil {
-		// The request URL contains the provider API key in its hostname. Do not
-		// wrap the standard-library error because it may retain that URL.
+		// 请求 URL 的主机包含 API key，错误仅暴露固定类别。
 		return ResultPass, fmt.Errorf("%w: transport failure", ErrUnavailable)
 	}
 	defer resp.Body.Close()

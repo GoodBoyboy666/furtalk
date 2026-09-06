@@ -10,6 +10,7 @@ import (
 
 const defaultGravatarBaseURL = "https://www.gravatar.com/avatar"
 
+// normalizeEmailDomain 规范化单个邮箱域名。
 func normalizeEmailDomain(raw string) (string, error) {
 	domainName := strings.ToLower(strings.TrimSpace(raw))
 	if domainName == "" {
@@ -29,6 +30,7 @@ func normalizeEmailDomain(raw string) (string, error) {
 	return domainName, nil
 }
 
+// normalizeEmailDomains 规范化邮箱域名列表。
 func normalizeEmailDomains(raw []string) ([]string, error) {
 	out := make([]string, 0, len(raw))
 	seen := make(map[string]bool, len(raw))
@@ -46,6 +48,7 @@ func normalizeEmailDomains(raw []string) ([]string, error) {
 	return out, nil
 }
 
+// validEmailDomainLabel 校验邮箱域名标签。
 func validEmailDomainLabel(label string) bool {
 	if label == "" || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
 		return false
@@ -58,6 +61,7 @@ func validEmailDomainLabel(label string) bool {
 	return true
 }
 
+// validateEmojiCatalogURL 校验 Emoji 目录 URL。
 func validateEmojiCatalogURL(raw string) error {
 	value := strings.TrimSpace(raw)
 	if value == "" {
@@ -73,6 +77,7 @@ func validateEmojiCatalogURL(raw string) error {
 	return nil
 }
 
+// normalizePublicHTTPSURL 规范化公开 HTTPS URL。
 func normalizePublicHTTPSURL(raw string) (string, error) {
 	value := strings.TrimSpace(raw)
 	if value == "" {
@@ -88,11 +93,13 @@ func normalizePublicHTTPSURL(raw string) (string, error) {
 	return u.String(), nil
 }
 
+// validatePublicHTTPSURL 校验公开 HTTPS URL。
 func validatePublicHTTPSURL(raw string) error {
 	_, err := normalizePublicHTTPSURL(raw)
 	return err
 }
 
+// normalizeHexColor 规范化十六进制颜色值。
 func normalizeHexColor(raw string) (string, error) {
 	value := strings.TrimSpace(raw)
 	if len(value) != 7 || value[0] != '#' {
@@ -106,6 +113,7 @@ func normalizeHexColor(raw string) (string, error) {
 	return strings.ToUpper(value), nil
 }
 
+// validateHexColor 校验十六进制颜色值。
 func validateHexColor(raw string) error {
 	_, err := normalizeHexColor(raw)
 	return err

@@ -38,10 +38,6 @@ func ProtocolErrorMappings() []Mapping {
 }
 
 // DecodeBody 严格解码单个 JSON 对象到 into，拒绝未知字段与尾随内容。
-// 仅接受 application/json（含合法参数，如 application/json; charset=utf-8）；
-// 缺失、格式错误或其它 media type 返回 ErrUnsupportedMediaType。
-// 空请求体返回 ErrMissingBody，格式错误返回 ErrMalformedBody，
-// 多个 JSON 值返回 ErrMultipleObjects。
 func DecodeBody(c *gin.Context, into any) error {
 	if err := requireJSONContentType(c); err != nil {
 		return err
@@ -61,7 +57,6 @@ func DecodeBody(c *gin.Context, into any) error {
 }
 
 // requireJSONContentType 校验请求 Content-Type 为 application/json。
-// 兼容合法参数（如 charset），缺失或其它 media type 返回 ErrUnsupportedMediaType。
 func requireJSONContentType(c *gin.Context) error {
 	raw := c.GetHeader("Content-Type")
 	if raw == "" {
@@ -89,7 +84,6 @@ func ParseDecimalID(raw string) (int64, error) {
 }
 
 // ParseOptionalID 解析可选的十进制 id。
-// 空字符串或 nil 返回 nil，否则按 ParseDecimalID 解析。
 func ParseOptionalID(raw *string) (*int64, error) {
 	if raw == nil || strings.TrimSpace(*raw) == "" {
 		return nil, nil

@@ -30,7 +30,7 @@ type Profile struct {
 	DeletedAt *time.Time
 }
 
-// Get 返回用户资料、角色与状态以及通知偏好。
+// Get 读取当前用户资料。
 func (s *Service) Get(ctx context.Context, userID int64) (*Profile, error) {
 	return s.getWithPrefs(ctx, userID)
 }
@@ -67,7 +67,7 @@ func (s *Service) UpdateNotificationPreferences(ctx context.Context, userID int6
 	return domain.NotificationPreferences{ReplyEnabled: replyEnabled, ModerationEnabled: moderationEnabled}, nil
 }
 
-// List 按搜索词列出用户，供管理端使用。sort 控制 id 排序方向，page 控制页码。
+// List 分页列出用户资料。
 func (s *Service) List(ctx context.Context, search string, sort domain.CommentSort, page, limit int) ([]Profile, error) {
 	limit = normalizeUserLimit(limit)
 	rows, err := s.users.List(ctx, search, sort, limit, domain.OffsetForPage(page, limit))
@@ -86,7 +86,6 @@ func (s *Service) List(ctx context.Context, search string, sort domain.CommentSo
 }
 
 // normalizeUserLimit 把管理端用户列表的每页数量限制在默认 50、上限 100，
-// 与 UserRepo.List 的归一化保持一致，使 offset 计算与行数取用对齐。
 func normalizeUserLimit(limit int) int {
 	if limit <= 0 || limit > 100 {
 		return 50
@@ -113,7 +112,7 @@ func (s *Service) ListWithTotal(ctx context.Context, search string, sort domain.
 	return &ListResult{Users: users, Total: total}, nil
 }
 
-// Create 预创建普通用户或额外的管理员。
+// Create 创建用户资料。
 func (s *Service) Create(ctx context.Context, email, nickname string, role domain.Role) (*Profile, error) {
 	original, normalized, err := value.NormalizeEmail(email)
 	if err != nil {
@@ -144,6 +143,7 @@ func (s *Service) UpdateRoleStatus(ctx context.Context, targetID int64, role *do
 	return s.AdminUpdateUser(ctx, targetID, AdminUpdateUserInput{Role: role, Status: status})
 }
 
+// getWithPrefs 加载用户资料及通知偏好。
 func (s *Service) getWithPrefs(ctx context.Context, userID int64) (*Profile, error) {
 	user, err := s.users.FindByID(ctx, userID)
 	if err != nil {
@@ -152,6 +152,7 @@ func (s *Service) getWithPrefs(ctx context.Context, userID int64) (*Profile, err
 	return s.profileOf(ctx, user)
 }
 
+// profileOf 将用户转换为资料视图。
 func (s *Service) profileOf(ctx context.Context, user *domain.User) (*Profile, error) {
 	prefs := domain.NotificationPreferences{ReplyEnabled: true, ModerationEnabled: true}
 	if row, err := s.prefs.GetByUserID(ctx, user.ID); err == nil {

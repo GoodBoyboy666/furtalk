@@ -12,14 +12,10 @@ import (
 	"strconv"
 )
 
-// feishuMaxRunes 是飞书自定义机器人文本的保守字符上限，
-// 使整体 JSON 请求体远低于平台约 30KB 的建议上限。
+// feishuMaxRunes 是飞书自定义机器人文本的字符预算。
 const feishuMaxRunes = 4000
 
 // feishuSign 计算飞书自定义机器人签名：
-// string_to_sign = timestamp + "\n" + secret；
-// 以 string_to_sign 为 HMAC 密钥、空消息计算 SHA-256，再 Base64 编码。
-// 与钉钉的 HMAC 操作数顺序和 timestamp 单位不同，不能共享签名 helper。
 func feishuSign(secret string, timestamp int64) string {
 	stringToSign := fmt.Sprintf("%d\n%s", timestamp, secret)
 	mac := hmac.New(sha256.New, []byte(stringToSign))
@@ -27,8 +23,6 @@ func feishuSign(secret string, timestamp int64) string {
 }
 
 // sendFeishu 向飞书自定义机器人 webhook 投递文本消息。
-// 配置签名密钥时在 JSON 顶层附带 timestamp 与 sign；
-// 成功判定为 HTTP 2xx 且 code==0 或遗留 StatusCode==0。
 func (d *Dispatcher) sendFeishu(ctx context.Context, cfg Config, msg Message) error {
 	text, _ := TruncateRunes(breakMentions(msg.Title)+"\n\n"+breakMentions(msg.Text), feishuMaxRunes)
 	if msg.PageURL != "" {
@@ -67,7 +61,7 @@ func (d *Dispatcher) sendFeishu(ctx context.Context, cfg Config, msg Message) er
 		return httpStatusError(resp.StatusCode)
 	}
 	// 成功判定：显式存在的成功判别字段（code / 遗留 StatusCode）必须都为 0。
-	// 缺失/未知成功字段失败关闭，避免空响应被误判为成功。
+	// 缺失或未知成功字段时默认拒绝，空响应不会被视为成功。
 	var disc struct {
 		Code       *int `json:"code"`
 		StatusCode *int `json:"StatusCode"`

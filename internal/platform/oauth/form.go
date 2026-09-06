@@ -11,8 +11,6 @@ import (
 )
 
 // postForm 向指定端点发送 application/x-www-form-urlencoded 请求并把 JSON 响应
-// 解码到 out。非 200 或 JSON 解析失败返回错误；错误文本只包含状态码类别，
-// 不包含表单值（code/secret/id_token/verifier/nonce）。
 func postForm(ctx context.Context, client *http.Client, endpoint string, form url.Values, out any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(form.Encode()))
 	if err != nil {

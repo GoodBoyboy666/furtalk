@@ -15,6 +15,7 @@ const maxUserBatchLimit = 100
 // 角色不属于批量操作；角色编辑仍只通过单条用户更新命令完成。
 type AdminUserBatchAction string
 
+// AdminUserBatchAction 的取值定义用户批量命令支持的动作。
 const (
 	AdminUserBatchEnable        AdminUserBatchAction = "enable"
 	AdminUserBatchDisable       AdminUserBatchAction = "disable"

@@ -14,8 +14,6 @@ import (
 const telegramMaxRunes = 4096
 
 // sendTelegram 向 Telegram Bot API sendMessage 投递。
-// 固定端点嵌入令牌路径；JSON 载荷不带 parse_mode/entities，并禁用链接预览；
-// 成功判定为 HTTP 2xx 且 ok==true。
 func (d *Dispatcher) sendTelegram(ctx context.Context, cfg Config, msg Message) error {
 	base, err := urlx.ParseHTTPSBase("https://api.telegram.org")
 	if err != nil {

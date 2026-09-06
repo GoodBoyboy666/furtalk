@@ -9,14 +9,12 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// FlowAdmission is the narrow HTTP boundary for a named temporary-state budget.
-// Implementations must be safe for concurrent requests and must not expose
-// request secrets in their keys or logs.
+// FlowAdmission 定义按流程名称和主体标识执行临时状态预算的 HTTP 边界。
 type FlowAdmission interface {
 	Allow(policy, subject string) bool
 }
 
-// HTTP 边界拥有的固定流程预算名称。
+// 以下常量标识 HTTP 边界使用的固定流程预算。
 const (
 	PolicyPasskeyLoginOptions        = "passkey_login_options"
 	PolicyOAuthStart                 = "oauth_start"
@@ -25,14 +23,14 @@ const (
 	PolicyWidgetAuthCode             = "widget_auth_code"
 )
 
-// flowAdmission rejects a request before the handler can allocate ephemeral
-// state. Missing subjects use one stable fail-closed bucket.
+// flowAdmission 在 HTTP 处理器前执行流程准入预算检查。
 func flowAdmission(admission FlowAdmission, policy string, subject func(*gin.Context) string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if admission == nil {
 			c.Next()
 			return
 		}
+		// 无法解析主体时共用 unknown 预算桶，仍按预算结果处理请求。
 		key := "unknown"
 		if subject != nil {
 			if candidate := subject(c); candidate != "" {
@@ -47,10 +45,12 @@ func flowAdmission(admission FlowAdmission, policy string, subject func(*gin.Con
 	}
 }
 
+// clientIPSubject 返回请求的客户端 IP 主体标识。
 func clientIPSubject(c *gin.Context) string {
 	return c.GetString(httpx.ClientIPKey)
 }
 
+// principalSubject 返回当前认证主体的预算标识。
 func principalSubject(c *gin.Context) string {
 	principal, ok := middleware.CurrentPrincipal(c)
 	if !ok || principal.UserID <= 0 {

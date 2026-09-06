@@ -26,8 +26,7 @@ func (a policyReader) Policy(ctx context.Context) (bool, string, error) {
 	return v.Settings.PublicRegistration, v.Settings.CommentMode, nil
 }
 
-// EmailPolicy 返回当前邮箱域名名单与 Gravatar 基址。
-// 返回的切片是原始数据的拷贝，调用方修改返回值不影响缓存快照。
+// EmailPolicy 返回邮箱域名策略与 Gravatar 基址的副本。
 func (a policyReader) EmailPolicy(ctx context.Context) ([]string, []string, string, error) {
 	v, err := a.svc.Get(ctx)
 	if err != nil {
@@ -53,11 +52,12 @@ func (a captchaPolicyReader) CaptchaPolicy(ctx context.Context) (map[string]bool
 	return v.Settings.CaptchaPolicy, nil
 }
 
-// notificationSettingsReader 把全局设置投影为 notification 的最小开关快照。
+// notificationSettingsReader 把全局设置映射为 notification 的最小开关快照。
 type notificationSettingsReader struct {
 	svc *setting.Service
 }
 
+// NotificationSettings 返回通知投递所需的设置快照。
 func (a notificationSettingsReader) NotificationSettings(ctx context.Context) (notification.Settings, error) {
 	v, err := a.svc.Get(ctx)
 	if err != nil {
@@ -69,11 +69,12 @@ func (a notificationSettingsReader) NotificationSettings(ctx context.Context) (n
 	}, nil
 }
 
-// notificationProviderReader 把解密后的 setting DTO 投影为 notification 通道配置。
+// notificationProviderReader 把解密后的 setting DTO 映射为 notification 通道配置。
 type notificationProviderReader struct {
 	svc *setting.ProviderService
 }
 
+// EnabledNotificationProviders 返回已启用的通知通道配置。
 func (a notificationProviderReader) EnabledNotificationProviders(ctx context.Context) ([]notification.ChannelProvider, error) {
 	providers, err := a.svc.EnabledNotificationProviders(ctx)
 	if err != nil {
@@ -89,6 +90,7 @@ func (a notificationProviderReader) EnabledNotificationProviders(ctx context.Con
 	return out, nil
 }
 
+// projectNotificationConfig 将通知配置转换为通道配置。
 func projectNotificationConfig(cfg setting.NotificationConfig) notification.ChannelConfig {
 	var signingSecret *string
 	if cfg.SigningSecret != nil {
@@ -135,6 +137,7 @@ func (a oauthProviderReader) OAuthProvider(ctx context.Context, providerKey stri
 	return &projected, nil
 }
 
+// projectAuthProvider 将设置层 OAuth 配置转换为身份提供商配置。
 func projectAuthProvider(provider setting.AuthProvider) identity.AuthProvider {
 	return identity.AuthProvider{
 		ProviderKey:     provider.ProviderKey,
@@ -182,7 +185,7 @@ func (a commentPolicyReader) CommentPolicy(ctx context.Context) (domain.CommentP
 	}, nil
 }
 
-// captchaProviderReader 把当前 CAPTCHA provider 投影给共享业务 gateway。
+// captchaProviderReader 把当前 CAPTCHA provider 配置提供给共享业务 gateway。
 type captchaProviderReader struct {
 	svc *setting.ProviderService
 }
@@ -199,11 +202,12 @@ func (a captchaProviderReader) SelectedCaptcha(ctx context.Context) (*servicecap
 	return &servicecaptcha.Config{Provider: cfg.Provider, SiteKey: cfg.SiteKey, SecretKey: cfg.SecretKey, Endpoint: cfg.Endpoint}, nil
 }
 
-// commentCaptchaProviderReader 把当前 CAPTCHA provider 的运行时公开投影提供给 comment。
+// commentCaptchaProviderReader 把当前 CAPTCHA provider 的运行时配置提供给 comment。
 type commentCaptchaProviderReader struct {
 	svc *setting.ProviderService
 }
 
+// SelectedCaptcha 返回当前 CAPTCHA 提供商配置。
 func (a commentCaptchaProviderReader) SelectedCaptcha(ctx context.Context) (*comment.CaptchaConfig, error) {
 	cfg, err := a.svc.SelectedCaptcha(ctx)
 	if err != nil {
@@ -216,7 +220,7 @@ func (a commentCaptchaProviderReader) SelectedCaptcha(ctx context.Context) (*com
 }
 
 // spamProviderReader 把 setting.ProviderService 的垃圾检测 provider 解密配置
-// 投影为 comment.SpamProviderConfig。
+// 映射为 comment.SpamProviderConfig。
 type spamProviderReader struct {
 	svc *setting.ProviderService
 }

@@ -24,7 +24,6 @@ func NewRedis(opts *redis.Options) *Redis {
 }
 
 // NewRedisWithClient 使用现有的 Redis client 创建存储，并接管其所有权。
-// 返回的 Redis 关闭时会关闭传入的 client。
 func NewRedisWithClient(client *redis.Client) *Redis {
 	return &Redis{client: client}
 }
@@ -49,8 +48,7 @@ func (s *Redis) Get(ctx context.Context, key string, out any) error {
 	return json.Unmarshal(data, out)
 }
 
-// GetRawJSON returns the exact JSON payload stored under key without decoding
-// it, allowing a higher-level protocol to handle malformed records safely.
+// GetRawJSON 读取键对应的原始 JSON 数据。
 func (s *Redis) GetRawJSON(ctx context.Context, key string) (json.RawMessage, error) {
 	data, err := s.client.Get(ctx, key).Bytes()
 	if errors.Is(err, redis.Nil) {
@@ -82,7 +80,7 @@ func (s *Redis) Delete(ctx context.Context, key string) error {
 	return nil
 }
 
-// AtomicConsume 使用 Lua GETDEL 在单个原子操作中读取并移除一个键，
+// AtomicConsume 使用 Lua 在单个原子操作中读取并移除一个键。
 func (s *Redis) AtomicConsume(ctx context.Context, key string) (string, error) {
 	value, err := consumeScript.Run(ctx, s.client, []string{key}).Text()
 	if errors.Is(err, redis.Nil) {
@@ -141,9 +139,7 @@ end
 return value
 `)
 
-// compareAndSwapJSONScript compares the exact stored payload and replaces it
-// while preserving the key's remaining TTL. The script deliberately does not
-// decode JSON; payload semantics belong to the focused capability using it.
+// compareAndSwapJSONScript 按原始 JSON 值替换记录并保留剩余 TTL；脚本不解析 JSON。
 var compareAndSwapJSONScript = redis.NewScript(`
 local value = redis.call("GET", KEYS[1])
 if not value or value ~= ARGV[1] then
@@ -162,8 +158,7 @@ redis.call("DEL", KEYS[1])
 return 0
 `)
 
-// compareAndDeleteJSONScript compares the exact stored payload and deletes it
-// in the same Redis operation.
+// compareAndDeleteJSONScript 按原始 JSON 值在同一 Redis 操作中删除记录。
 var compareAndDeleteJSONScript = redis.NewScript(`
 local value = redis.call("GET", KEYS[1])
 if not value or value ~= ARGV[1] then
@@ -173,8 +168,7 @@ redis.call("DEL", KEYS[1])
 return 1
 `)
 
-// CompareAndSwapJSON atomically replaces key when its exact JSON value matches
-// expected, preserving the current TTL.
+// CompareAndSwapJSON 按期望 JSON 值原子替换缓存条目。
 func (s *Redis) CompareAndSwapJSON(ctx context.Context, key string, expected, replacement json.RawMessage) (bool, error) {
 	if !json.Valid(replacement) {
 		return false, errors.New("cache: replacement is not valid JSON")
@@ -186,8 +180,7 @@ func (s *Redis) CompareAndSwapJSON(ctx context.Context, key string, expected, re
 	return result == 1, nil
 }
 
-// CompareAndDeleteJSON atomically deletes key when its exact JSON value
-// matches expected.
+// CompareAndDeleteJSON 按期望 JSON 值原子删除缓存条目。
 func (s *Redis) CompareAndDeleteJSON(ctx context.Context, key string, expected json.RawMessage) (bool, error) {
 	result, err := compareAndDeleteJSONScript.Run(ctx, s.client, []string{key}, []byte(expected)).Int()
 	if err != nil {

@@ -20,9 +20,7 @@ import (
 
 var errDryRunRollback = errors.New("artalk migration dry-run rollback")
 
-// Options controls a migration. TargetSiteID merges every source site into an
-// existing Furtalk site. Without it, source sites are resolved by canonical
-// origin and created when absent.
+// Options 配置一次迁移及其目标站点、时区和隐私字段处理方式。
 type Options struct {
 	TargetSiteID   int64
 	DefaultSiteURL string
@@ -32,7 +30,7 @@ type Options struct {
 	DryRun         bool
 }
 
-// Report summarizes both committed imports and dry runs.
+// Report 汇总已提交或试运行的迁移结果。
 type Report struct {
 	InputComments       int
 	ImportedComments    int
@@ -57,6 +55,7 @@ type Report struct {
 	DryRun              bool
 }
 
+// Importer 执行 Artalk 数据到 Furtalk 的迁移。
 type Importer struct {
 	tx       *gormtx.Runner
 	users    *repository.UserRepo
@@ -65,8 +64,7 @@ type Importer struct {
 	comments *repository.CommentRepo
 }
 
-// NewImporter constructs an importer from the same repository boundary used
-// by the application.
+// NewImporter 创建使用应用仓储边界的迁移器。
 func NewImporter(
 	tx *gormtx.Runner,
 	users *repository.UserRepo,
@@ -122,11 +120,10 @@ type sourceThread struct {
 	targetID  int64
 }
 
-// Import validates the entire source before opening one target transaction.
-// A dry run performs the same writes and constraints checks, then rolls the
-// transaction back deliberately.
+// Import 校验源数据并执行一次完整迁移。
 func (i *Importer) Import(ctx context.Context, records []Artran, options Options) (Report, error) {
 	report := Report{InputComments: len(records), DryRun: options.DryRun}
+	// 输入和隐私模式在事务外完成校验。
 	if options.TargetSiteID < 0 {
 		return report, fmt.Errorf("target site id must not be negative")
 	}
@@ -145,6 +142,7 @@ func (i *Importer) Import(ctx context.Context, records []Artran, options Options
 			return err
 		}
 		if options.DryRun {
+			// 试运行复用完整写入路径，再回滚事务。
 			return errDryRunRollback
 		}
 		return nil
@@ -155,6 +153,7 @@ func (i *Importer) Import(ctx context.Context, records []Artran, options Options
 	return report, err
 }
 
+// prepare 将源记录解析为可导入的评论，并建立父子索引。
 func prepare(records []Artran, options Options) ([]*preparedComment, map[string]*preparedComment, error) {
 	if len(records) == 0 {
 		return nil, nil, fmt.Errorf("Artrans contains no comments")
@@ -254,6 +253,7 @@ func prepare(records []Artran, options Options) ([]*preparedComment, map[string]
 	return ordered, byID, nil
 }
 
+// importPrepared 将已准备的评论写入目标仓储。
 func (i *Importer) importPrepared(
 	ctx context.Context,
 	comments []*preparedComment,
@@ -337,6 +337,7 @@ func (i *Importer) importPrepared(
 	return nil
 }
 
+// resolveSites 解析或创建源记录对应的目标站点。
 func (i *Importer) resolveSites(ctx context.Context, comments []*preparedComment, options Options, report *Report) (map[string]*sourceSite, error) {
 	result := make(map[string]*sourceSite)
 	if options.TargetSiteID > 0 {
@@ -445,6 +446,7 @@ func (i *Importer) resolveSites(ctx context.Context, comments []*preparedComment
 	return result, nil
 }
 
+// resolveUsers 按规范化邮箱解析或创建迁移用户。
 func (i *Importer) resolveUsers(ctx context.Context, comments []*preparedComment, report *Report) (map[string]*sourceUser, error) {
 	users := make(map[string]*sourceUser)
 	for _, comment := range comments {
@@ -537,6 +539,7 @@ func (i *Importer) resolveUsers(ctx context.Context, comments []*preparedComment
 	return users, nil
 }
 
+// fallbackNickname 从规范化邮箱生成缺失昵称。
 func fallbackNickname(normalizedEmail string) string {
 	local := strings.SplitN(normalizedEmail, "@", 2)[0]
 	if strings.TrimSpace(local) == "" {
@@ -545,6 +548,7 @@ func fallbackNickname(normalizedEmail string) string {
 	return local
 }
 
+// resolveThreads 解析或创建评论所属的目标线程。
 func (i *Importer) resolveThreads(ctx context.Context, comments []*preparedComment, sites map[string]*sourceSite, report *Report) (map[string]*sourceThread, error) {
 	threads := make(map[string]*sourceThread)
 	for _, comment := range comments {
@@ -587,6 +591,7 @@ func (i *Importer) resolveThreads(ctx context.Context, comments []*preparedComme
 	return threads, nil
 }
 
+// parseTime 按源时区解析时间文本并转换为 UTC。
 func parseTime(raw string, location *time.Location) (time.Time, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -616,6 +621,7 @@ func parseTime(raw string, location *time.Location) (time.Time, error) {
 	return time.Time{}, fmt.Errorf("unsupported time %q", raw)
 }
 
+// normalizeParentID 将空值和零值转换为空父记录标识。
 func normalizeParentID(raw string) string {
 	raw = strings.TrimSpace(raw)
 	if raw == "" || raw == "0" || strings.EqualFold(raw, "null") {
@@ -624,6 +630,7 @@ func normalizeParentID(raw string) string {
 	return raw
 }
 
+// normalizeOrigin 校验并规范化站点来源地址。
 func normalizeOrigin(raw string) (string, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -636,6 +643,7 @@ func normalizeOrigin(raw string) (string, error) {
 	return normalized, nil
 }
 
+// originsFromArtran 收集记录中的规范化站点来源地址。
 func originsFromArtran(record Artran) []string {
 	var origins []string
 	for _, raw := range strings.Split(record.siteURLs(), ",") {
@@ -651,22 +659,23 @@ func originsFromArtran(record Artran) []string {
 	return origins
 }
 
+// originFromPageURL 从页面地址提取站点来源。
 func originFromPageURL(raw string) (string, error) {
 	return migrationOrigin(raw)
 }
 
-// migrationOrigin 接受可能包含部署子路径的旧站点/页面 URL，
-// 再通过 urlx 提取精确 Origin；这样既保留 Artalk 的历史导入行为，
-// 又能应用共享的主机和 scheme 校验。
+// migrationOrigin 从旧站点或页面地址提取规范化来源。
 func migrationOrigin(raw string) (string, error) {
 	u, err := urlx.ParseHTTP(raw)
 	if err != nil {
 		return "", err
 	}
+	// 来源只保留 scheme、主机和端口，部署子路径属于页面信息。
 	u.Path, u.RawPath, u.RawQuery, u.Fragment, u.ForceQuery = "", "", "", "", false
 	return urlx.CanonicalOrigin(u.String())
 }
 
+// preferredCanonical 从候选来源中选择优先级最高的规范来源。
 func preferredCanonical(origins []string) string {
 	best := origins[0]
 	bestScore := originScore(best)
@@ -679,6 +688,7 @@ func preferredCanonical(origins []string) string {
 	return best
 }
 
+// originScore 计算来源地址的安全和本地环境优先级。
 func originScore(origin string) int {
 	u, _ := urlx.ParseHTTP(origin)
 	local := u.Hostname() == "localhost" || u.Hostname() == "127.0.0.1" || u.Hostname() == "::1"
@@ -691,6 +701,7 @@ func originScore(origin string) int {
 	return 1
 }
 
+// absoluteHTTPURL 返回通过校验的绝对 HTTP(S) 地址。
 func absoluteHTTPURL(raw string) string {
 	u, err := urlx.ParseHTTP(raw)
 	if err != nil {
@@ -699,6 +710,7 @@ func absoluteHTTPURL(raw string) string {
 	return u.String()
 }
 
+// migrateIP 按隐私模式转换源 IP 地址。
 func migrateIP(raw string, mode domain.PrivacyMode, report *Report) (domain.PrivacyMode, *string) {
 	if raw == "" {
 		return mode, nil
@@ -720,6 +732,7 @@ func migrateIP(raw string, mode domain.PrivacyMode, report *Report) (domain.Priv
 	return mode, stringPtr(value.String())
 }
 
+// migrateUA 按隐私模式转换源 User-Agent。
 func migrateUA(raw string, mode domain.PrivacyMode, report *Report) (domain.PrivacyMode, *clientip.UARecord, error) {
 	if raw == "" {
 		return mode, &clientip.UARecord{}, nil
@@ -731,10 +744,12 @@ func migrateUA(raw string, mode domain.PrivacyMode, report *Report) (domain.Priv
 	return mode, record, err
 }
 
+// validPrivacyMode 判断隐私模式是否受支持。
 func validPrivacyMode(mode domain.PrivacyMode) bool {
 	return mode == domain.PrivacyModeNone || mode == domain.PrivacyModeCoarse || mode == domain.PrivacyModeFull
 }
 
+// countUnsupported 统计无法映射到目标模型的源字段。
 func countUnsupported(record Artran, report *Report) {
 	if value, err := record.isCollapsed(); err == nil && value {
 		report.IgnoredCollapsed++
@@ -753,6 +768,7 @@ func countUnsupported(record Artran, report *Report) {
 	}
 }
 
+// sortedSiteKeys 返回按字典序排列的站点键。
 func sortedSiteKeys(sites map[string]*sourceSite) []string {
 	keys := make([]string, 0, len(sites))
 	for key := range sites {
@@ -762,6 +778,7 @@ func sortedSiteKeys(sites map[string]*sourceSite) []string {
 	return keys
 }
 
+// appendUnique 向字符串切片追加尚未出现的非空值。
 func appendUnique(values []string, additions ...string) []string {
 	seen := make(map[string]bool, len(values)+len(additions))
 	for _, value := range values {
@@ -776,12 +793,18 @@ func appendUnique(values []string, additions ...string) []string {
 	return values
 }
 
+// threadKey 生成站点和页面组合的线程键。
 func threadKey(siteID int64, pageKey string) string {
 	return fmt.Sprintf("%d\x00%s", siteID, pageKey)
 }
 
+// stringPtr 返回字符串地址。
 func stringPtr(value string) *string { return &value }
-func int64Ptr(value int64) *int64    { return &value }
+
+// int64Ptr 返回整数地址。
+func int64Ptr(value int64) *int64 { return &value }
+
+// timePtr 返回时间地址。
 func timePtr(value time.Time) *time.Time {
 	return &value
 }

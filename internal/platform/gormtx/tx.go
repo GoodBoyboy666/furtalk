@@ -12,7 +12,7 @@ import (
 )
 
 // txKey 是挂载事务句柄的私有上下文键。
-// 私有类型防止其他包冲突或直接访问。
+// 私有类型限制上下文键的作用域，并隔离其他包的键。
 type txKey struct{}
 
 // Runner 隐式满足各 feature 自有的事务接口。
@@ -26,9 +26,6 @@ func NewRunner(db *gorm.DB) *Runner {
 }
 
 // RunInTx 在单个数据库事务内运行 fn。
-// ctx 已携带事务句柄时复用该事务（支持嵌套，不会创建 SavePoint）；
-// 否则开启新事务并把事务句柄挂载到子 ctx。
-// 使用方不得在 fn 内部调用 SMTP、CAPTCHA、OAuth 或 Redis。
 func (r *Runner) RunInTx(ctx context.Context, fn func(ctx context.Context) error) error {
 	if _, ok := ctx.Value(txKey{}).(*gorm.DB); ok {
 		return fn(ctx)
@@ -39,7 +36,6 @@ func (r *Runner) RunInTx(ctx context.Context, fn func(ctx context.Context) error
 }
 
 // DB 返回 ctx 中的事务句柄；无事务时返回绑定 ctx 的默认 DB。
-// 仓储方法用它替换自己的 r.db，自动感知当前是否在事务内。
 func DB(ctx context.Context, defaultDB *gorm.DB) *gorm.DB {
 	if tx, ok := ctx.Value(txKey{}).(*gorm.DB); ok {
 		return tx

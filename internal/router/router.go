@@ -1,5 +1,5 @@
 // Package router 路由层：统一注册路由与中间件。
-// 不 import 任何 service；业务中间件与注册函数由组合根注入。
+// 不 import 任何 service；业务中间件与注册函数由依赖组装入口注入。
 package router
 
 import (
@@ -66,6 +66,7 @@ func New(
 	return r, nil
 }
 
+// healthLive 返回存活探针响应。
 // @Summary 存活探针
 // @Tags health
 // @Produce json
@@ -75,6 +76,7 @@ func healthLive(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
 }
 
+// healthReady 返回就绪探针处理器。
 // @Summary 就绪探针
 // @Tags health
 // @Produce json

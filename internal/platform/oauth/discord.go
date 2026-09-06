@@ -40,6 +40,7 @@ type discordProvider struct {
 	httpClient   *http.Client
 }
 
+// newDiscordProvider 创建 Discord OAuth2 适配器。
 func newDiscordProvider(cfg Config, client *http.Client) *discordProvider {
 	authURL := cfg.AuthURL
 	if authURL == "" {
@@ -73,8 +74,7 @@ func (p *discordProvider) Name() string {
 	return "Discord"
 }
 
-// clientContext 返回注入共享 HTTP client 的上下文，
-// 使 token/userinfo 的全部网络请求走同一 client（含超时）。
+// clientContext 返回注入共享 HTTP client 的上下文。
 func (p *discordProvider) clientContext(ctx context.Context) context.Context {
 	if p.httpClient == nil {
 		return ctx
@@ -82,6 +82,7 @@ func (p *discordProvider) clientContext(ctx context.Context) context.Context {
 	return context.WithValue(ctx, oauth2.HTTPClient, p.httpClient)
 }
 
+// oauthConfig 构建 Discord OAuth 配置。
 func (p *discordProvider) oauthConfig(redirectURI string) *oauth2.Config {
 	return &oauth2.Config{
 		ClientID:     p.clientID,
@@ -97,16 +98,11 @@ func (p *discordProvider) oauthConfig(redirectURI string) *oauth2.Config {
 }
 
 // BuildAuthURL 为新的 state 生成 Discord 授权 URL。
-// Discord 普通网页登录未定义 PKCE，即使请求中带 verifier 也不会附加 code_challenge；
-// 同样不会发送 nonce。
 func (p *discordProvider) BuildAuthURL(ctx context.Context, req AuthorizationRequest) (string, error) {
 	return p.oauthConfig(req.RedirectURI).AuthCodeURL(req.State), nil
 }
 
 // Exchange 用 code 换取 token，通过 Bearer 拉取 /users/@me 并返回标准化后的 Identity。
-// subject 是 User 的 snowflake id；VerifiedEmail 只在 email 非空且 verified=true 时填充，
-// 否则保留空字符串（缺失/未验证邮箱不会否定 subject）。
-// 任何失败映射为 ErrIdentity。
 func (p *discordProvider) Exchange(ctx context.Context, req ExchangeRequest) (*Identity, error) {
 	token, err := p.oauthConfig(req.RedirectURI).Exchange(p.clientContext(ctx), req.Code)
 	if err != nil {
@@ -134,7 +130,6 @@ type discordUser struct {
 }
 
 // fetchUserInfo 用 Bearer token 请求 /users/@me。
-// 非 200 或 JSON 解析失败返回错误（由 Exchange 统一映射为 ErrIdentity）。
 func (p *discordProvider) fetchUserInfo(ctx context.Context, token *oauth2.Token) (*discordUser, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.userInfoURL, nil)
 	if err != nil {

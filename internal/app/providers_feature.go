@@ -218,8 +218,7 @@ func (a notificationTesterAdapter) TestNotification(ctx context.Context, provide
 	return a.svc.TestChannel(ctx, providerKey, projectNotificationConfig(cfg))
 }
 
-// provideNotificationJob 贡献通知消费任务。任务只要事件总线存在就运行，
-// SMTP 缺失时通知服务只跳过邮件、不跳过实例级管理员通道投递。
+// provideNotificationJob 提供通知消费后台任务。
 func provideNotificationJob(s *services) jobContribution {
 	return jobContribution{Jobs: []BackgroundJob{{Name: "notification-consumer", Run: s.notifications.Run}}}
 }
@@ -233,14 +232,12 @@ func provideCacheMonitorJob(store cache.Store, logger *slog.Logger) jobContribut
 	return jobContribution{Jobs: []BackgroundJob{{Name: "cache-monitor", Run: monitor}}}
 }
 
-// provideRateLimitCleanupJob 贡献限流器空闲桶后台清理任务。
-// 清理循环随 Fx 生命周期启动、取消与等待，应用退出时不泄漏 goroutine。
+// provideRateLimitCleanupJob 提供限流器清理后台任务。
 func provideRateLimitCleanupJob(limiter *ratelimit.Limiter) jobContribution {
 	return jobContribution{Jobs: []BackgroundJob{{Name: "rate-limit-cleanup", Run: limiter.CleanupLoop}}}
 }
 
-// provideFlowRateLimitCleanupJob contributes the single managed cleanup loop
-// for F-03 named flow-admission buckets.
+// provideFlowRateLimitCleanupJob 提供限流准入桶的清理任务。
 func provideFlowRateLimitCleanupJob(admission *ratelimit.PolicyRegistry) jobContribution {
 	return jobContribution{Jobs: []BackgroundJob{{Name: "flow-rate-limit-cleanup", Run: admission.CleanupLoop}}}
 }

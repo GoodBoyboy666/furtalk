@@ -109,8 +109,8 @@ type notificationProviderSpec struct {
 	optionalSecretFields []string
 }
 
-// notificationProviderKeys 固定的通知通道 provider key 顺序（投递顺序）。
-// 独立命名空间，避免与 OAuth 的 line/discord 等 key 冲突。
+// notificationProviderKeys 固定通知通道 provider key 的投递顺序。
+// 独立命名空间与 OAuth 的 line/discord 等 key 隔离。
 var notificationProviderKeys = []string{
 	"notification.telegram",
 	"notification.feishu",
@@ -211,7 +211,7 @@ var spamProviderSpecs = map[string]spamProviderSpec{
 	},
 }
 
-// ValidSpamProviderKey 报告 key 否为固定垃圾检测 provider key。
+// ValidSpamProviderKey 检查 key 是否为固定垃圾检测提供商标识。
 func ValidSpamProviderKey(providerKey string) bool {
 	_, ok := spamProviderSpecs[providerKey]
 	return ok
@@ -230,8 +230,8 @@ func validateSpamAction(action string) error {
 	return nil
 }
 
-// ProviderMeta 提供商配置的只读管理表示（异类列表投影），不含 nonce、密文或明文机密。
-// Enabled 仅 OAuth/OIDC 有意义；CAPTCHA 提供商没有启用语义。
+// ProviderMeta 表示管理端读取的提供商配置摘要，不含 nonce、密文或明文机密。
+// Enabled 用于 OAuth/OIDC、垃圾检测和通知提供商；CAPTCHA 通过独立选择项启用。
 type ProviderMeta struct {
 	ProviderKey  string
 	Kind         domain.ProviderKind
@@ -260,7 +260,7 @@ type Prober interface {
 }
 
 // NotificationTester 向通知通道发送显式标记的测试消息。
-// 由组合根在通知服务装配完成后接线，设置层不感知通知业务消息内容；
+// 由依赖组装入口在通知服务装配完成后接线，设置层不感知通知业务消息内容；
 // 测试允许在通道停用时执行，但要求配置完整。
 type NotificationTester interface {
 	TestNotification(ctx context.Context, providerKey string, cfg NotificationConfig) error
@@ -284,7 +284,7 @@ func (networkProber) ProbeURL(ctx context.Context, rawURL string) error {
 	return netprobe.ProbeURL(ctx, rawURL, testProbeTimeout)
 }
 
-// NewProviderService 构建提供商服务，并只保留 provider envelope v2 的派生密钥。
+// NewProviderService 构建提供商服务。
 func NewProviderService(txRunner TxRunner, settings *repository.SettingsRepo, secretKey []byte, logger *slog.Logger) (*ProviderService, error) {
 	key, err := cryptox.DeriveProviderKey(secretKey)
 	if err != nil {
@@ -300,7 +300,6 @@ func NewProviderService(txRunner TxRunner, settings *repository.SettingsRepo, se
 }
 
 // AuditSecrets 在启动阶段只读检查所有已知 provider 的密文。
-// 持久化数据问题只产生聚合 warning，不影响应用启动；具体 provider 在实际使用时仍 fail closed。
 func (s *ProviderService) AuditSecrets(ctx context.Context) {
 	type row struct {
 		version    int
@@ -398,8 +397,7 @@ func (s *ProviderService) SetNotificationTester(t NotificationTester) {
 	}
 }
 
-// List 返回全部提供商的只读管理表示（异类投影），按 provider key 升序。
-// CAPTCHA 项无启用语义；OAuth/OIDC、垃圾检测与通知通道项携带 enabled。
+// List 返回提供商管理视图。
 func (s *ProviderService) List(ctx context.Context) ([]ProviderMeta, error) {
 	captchas, err := s.settings.ListCaptchaProviders(ctx)
 	if err != nil {
@@ -458,8 +456,6 @@ func (s *ProviderService) List(ctx context.Context) ([]ProviderMeta, error) {
 }
 
 // spamConfigured 判定垃圾检测 provider 的已配置状态。
-// 本地词库渠道由合法公开字段决定（其信封允许无 Secret）；
-// 外部渠道必须有非空密文。旧行中的 file_path 仅作为历史数据忽略。
 func spamConfigured(row repository.SpamProviderRow) bool {
 	if row.ProviderKey == "spam.local" {
 		var public struct {
@@ -473,8 +469,7 @@ func spamConfigured(row repository.SpamProviderRow) bool {
 	return len(row.SecretCiphertext) > 0
 }
 
-// publicSpamRaw 返回垃圾检测公开配置；固定本地词库渠道过滤旧行中的
-// file_path 字段，防止历史路径继续出现在管理 API 响应中。
+// publicSpamRaw 返回垃圾检测公开配置。
 func publicSpamRaw(providerKey string, raw []byte) json.RawMessage {
 	if providerKey != "spam.local" || len(raw) == 0 {
 		return publicRaw(raw)
@@ -499,8 +494,7 @@ func publicRaw(raw []byte) json.RawMessage {
 	return json.RawMessage(raw)
 }
 
-// validateProviderKey 校验 provider key 非空、不与公开选择设置行 key 冲突，
-// 且不占用保留的 spam.* / notification.* 命名空间（这两类 key 只允许对应类型的 upsert）。
+// validateProviderKey 校验提供商标识的格式及保留命名空间。
 func validateProviderKey(providerKey string) error {
 	if strings.TrimSpace(providerKey) == "" {
 		return fmt.Errorf("%w: provider key must not be empty", domain.ErrValidation)
@@ -518,7 +512,6 @@ func validateProviderKey(providerKey string) error {
 }
 
 // UpsertCaptcha 校验并写入 CAPTCHA provider 配置；CAPTCHA 没有 enabled 语义。
-// provider key 必须与 config.provider 类型一致（每种验证码类型只允许一个配置）。
 func (s *ProviderService) UpsertCaptcha(ctx context.Context, providerKey string, config json.RawMessage) error {
 	if err := validateProviderKey(providerKey); err != nil {
 		return err
@@ -552,9 +545,6 @@ func (s *ProviderService) UpsertCaptcha(ctx context.Context, providerKey string,
 }
 
 // UpsertAuth 校验并写入 OAuth/OIDC provider 配置；enabled 独立启用并允许多个同时启用。
-// key/kind 矩阵在持久化前强制：固定 catalog 预设要求其目录 kind，未知 key 只允许自定义 OIDC。
-// Secret 更新契约：新建必须提供该 provider 的机密字段（client_secret 或 Apple private_key）；
-// 编辑缺省/空机密原样复用现有 envelope，非空机密才加密替换；无现有 envelope 且无新机密返回 validation。
 func (s *ProviderService) UpsertAuth(ctx context.Context, providerKey string, kind domain.ProviderKind, enabled bool, config json.RawMessage) error {
 	if err := validateProviderKey(providerKey); err != nil {
 		return err
@@ -597,7 +587,6 @@ func (s *ProviderService) UpsertAuth(ctx context.Context, providerKey string, ki
 }
 
 // validateAuthKeyKind 强制 OAuth/OIDC 的 key/kind 支持矩阵：
-// 固定 catalog 预设必须使用其目录 kind，未知 key 保持自定义 OIDC；其余组合一律拒绝。
 func validateAuthKeyKind(providerKey string, kind domain.ProviderKind) error {
 	if spec, ok := oauth.LookupProvider(providerKey); ok {
 		if spec.Kind != string(kind) {
@@ -612,10 +601,6 @@ func validateAuthKeyKind(providerKey string, kind domain.ProviderKind) error {
 }
 
 // UpsertSpam 校验并写入垃圾检测 provider 配置；enabled 独立启用并允许多个渠道同时启用。
-// 只接受固定 key：spam.local、spam.akismet、spam.aliyun、spam.tencent。
-// Secret 更新契约：本地渠道无机密；外部渠道新建必须提供完整 Secret 组，编辑时整组
-// 为空表示原样保留，部分提交拒绝，完整非空组才替换信封。
-// enabled=true 必须同时满足公开配置与 Secret 完整，不能保存看似启用但不可运行的渠道。
 func (s *ProviderService) UpsertSpam(ctx context.Context, providerKey string, enabled bool, config json.RawMessage) error {
 	if !ValidSpamProviderKey(providerKey) {
 		return fmt.Errorf("%w: unknown spam provider key %q", domain.ErrValidation, providerKey)
@@ -657,7 +642,6 @@ func (s *ProviderService) UpsertSpam(ctx context.Context, providerKey string, en
 }
 
 // validateSpamRunnable 校验 enabled=true 的渠道确实具备运行条件：
-// 本地渠道必须有合法公开字段；外部渠道必须有可用 Secret 信封。
 func validateSpamRunnable(providerKey string, row *repository.SpamProviderRow) error {
 	if providerKey == "spam.local" {
 		var public struct {
@@ -683,7 +667,6 @@ type SpamProvider struct {
 }
 
 // SpamProvider 返回一个垃圾检测 provider 的解密配置。
-// provider 缺失、类型不符或未配置时返回 domain.ErrProviderNotFound；密钥损坏时返回 domain.ErrSecretCorrupt。
 func (s *ProviderService) SpamProvider(ctx context.Context, providerKey string) (*SpamProvider, error) {
 	row, err := s.settings.GetSpamProvider(ctx, providerKey)
 	if err != nil {
@@ -719,7 +702,6 @@ func (s *ProviderService) EnabledSpamProviders(ctx context.Context) ([]SpamProvi
 }
 
 // spamProvider 合并公开字段与解密后的机密字段为类型化配置。
-// 只合并该渠道声明的机密字段，防止字段串位；本地渠道无信封直接返回公开配置。
 func (s *ProviderService) spamProvider(row *repository.SpamProviderRow) (*SpamProvider, error) {
 	provider := &SpamProvider{ProviderKey: row.ProviderKey, Enabled: row.Enabled, Configured: spamConfigured(*row)}
 	if err := decodeConfigFields(row.PublicConfig, &provider.Config); err != nil {
@@ -774,7 +756,6 @@ func (s *ProviderService) splitSpamConfig(providerKey string, raw json.RawMessag
 }
 
 // validateSpamConfig 校验垃圾检测 provider 的字段：二元渠道的 action、本地固定词库
-// 与云渠道的 region 必填。
 func validateSpamConfig(providerKey string, spec spamProviderSpec, cfg *SpamConfig) error {
 	if spec.binary {
 		if err := validateSpamAction(cfg.Action); err != nil {
@@ -824,7 +805,6 @@ func publicSpamConfig(cfg SpamConfig, spec spamProviderSpec) ([]byte, error) {
 }
 
 // secretSpamConfig 构建待加密的 Secret JSON。
-// 外部渠道 Secret 组必须全部为空或全部非空：部分提交拒绝，整组为空返回 nil（保留现有 envelope）。
 func secretSpamConfig(cfg SpamConfig, spec spamProviderSpec) ([]byte, error) {
 	if len(spec.secretFields) == 0 {
 		return nil, nil
@@ -881,9 +861,6 @@ func decodeSpam(raw json.RawMessage, into *SpamConfig) error {
 }
 
 // UpsertNotification 校验并写入通知通道 provider 配置；enabled 独立启用。
-// 只接受固定 key。Secret 更新契约：新建必须提供该平台全部必填机密字段；
-// 编辑时必填机密字段为空保留现值，非空才替换；可选签名密钥三态处理
-// （缺失=保留、null=清除、非空=替换）。启用前必须校验合并后的完整配置。
 func (s *ProviderService) UpsertNotification(ctx context.Context, providerKey string, enabled bool, config json.RawMessage) error {
 	if !ValidNotificationProviderKey(providerKey) {
 		return fmt.Errorf("%w: unknown notification provider key %q", domain.ErrValidation, providerKey)
@@ -954,7 +931,6 @@ type NotificationProvider struct {
 }
 
 // NotificationProvider 返回单个通知通道的解密配置。
-// provider 缺失时返回 domain.ErrProviderNotFound；密钥损坏时返回 domain.ErrSecretCorrupt。
 func (s *ProviderService) NotificationProvider(ctx context.Context, providerKey string) (*NotificationProvider, error) {
 	row, err := s.settings.GetNotificationProvider(ctx, providerKey)
 	if err != nil {
@@ -967,7 +943,6 @@ func (s *ProviderService) NotificationProvider(ctx context.Context, providerKey 
 }
 
 // EnabledNotificationProviders 返回全部已启用通知通道的解密配置，按固定 key 顺序。
-// 配置损坏会整体失败（fail closed），绝不静默跳过某个通道。
 func (s *ProviderService) EnabledNotificationProviders(ctx context.Context) ([]NotificationProvider, error) {
 	rows, err := s.settings.ListNotificationProviders(ctx)
 	if err != nil {
@@ -991,7 +966,6 @@ func (s *ProviderService) EnabledNotificationProviders(ctx context.Context) ([]N
 }
 
 // notificationProvider 合并公开字段与解密后的机密字段为类型化配置。
-// 只合并该平台声明的机密字段，防止字段串位；无信封时只返回公开配置。
 func (s *ProviderService) notificationProvider(row *repository.NotificationProviderRow) (*NotificationProvider, error) {
 	provider := &NotificationProvider{
 		ProviderKey: row.ProviderKey,
@@ -1037,7 +1011,6 @@ func (s *ProviderService) notificationProvider(row *repository.NotificationProvi
 }
 
 // effectiveNotificationConfig 把输入合并到既有配置：必填字段为空保留现值，
-// signing_secret 三态处理（缺失=保留、null=清除、显式空串=清除、非空=替换）。
 func effectiveNotificationConfig(providerKey string, input notificationConfigInput, existing *NotificationConfig) (*NotificationConfig, error) {
 	if !ValidNotificationProviderKey(providerKey) {
 		return nil, fmt.Errorf("%w: unknown notification provider key %q", domain.ErrValidation, providerKey)
@@ -1088,7 +1061,6 @@ func effectiveNotificationConfig(providerKey string, input notificationConfigInp
 }
 
 // validateNotificationConfig 校验平台必填字段与 URL 形态。
-// 完整合并后的配置每次 upsert 都校验，保证保存的通道始终可运行。
 func validateNotificationConfig(providerKey string, cfg *NotificationConfig) error {
 	switch providerKey {
 	case "notification.telegram":
@@ -1140,7 +1112,6 @@ func validateNotificationConfig(providerKey string, cfg *NotificationConfig) err
 }
 
 // validateNotificationRunnable 校验启用通道可运行：要求配置完整且可解密。
-// 由于 upsert 已对合并结果做完整校验，这里与常规校验等价。
 func validateNotificationRunnable(providerKey string, cfg *NotificationConfig) error {
 	return validateNotificationConfig(providerKey, cfg)
 }
@@ -1167,7 +1138,6 @@ func publicNotificationConfig(cfg NotificationConfig, spec notificationProviderS
 }
 
 // secretNotificationConfig 构建待加密的 Secret JSON，只包含该平台声明的机密字段；
-// 可选机密字段未设置时从 JSON 中省略。
 func secretNotificationConfig(cfg NotificationConfig, spec notificationProviderSpec) ([]byte, error) {
 	values := map[string]string{}
 	for _, field := range spec.secretFields {
@@ -1216,8 +1186,7 @@ func decodeNotificationInput(raw json.RawMessage) (*notificationConfigInput, err
 	return &input, nil
 }
 
-// Delete 删除提供商配置；删除当前选中的 CAPTCHA provider 时在同一事务清空选择设置，
-// 删除未选中的 provider 不影响当前选择。
+// Delete 删除提供商配置并在删除当前选中的 CAPTCHA 提供商时清空选择。
 func (s *ProviderService) Delete(ctx context.Context, providerKey string) error {
 	err := s.txRunner.RunInTx(ctx, func(ctx context.Context) error {
 		if err := s.clearSelectionIfSelected(ctx, providerKey); err != nil {
@@ -1278,9 +1247,7 @@ func (s *ProviderService) deleteProviderRow(ctx context.Context, providerKey str
 	return domain.ErrNotFound
 }
 
-// Test 对已配置的提供商执行有界外部连通性检查。
-// CAPTCHA/OAuth 沿用探测目标检查；通知通道通过 NotificationTester 发送显式测试消息，
-// 测试允许在通道停用时执行，但要求配置完整（无效配置→validation，远程失败→unavailable）。
+// Test 执行提供商连通性或发送测试消息。
 func (s *ProviderService) Test(ctx context.Context, providerKey string) error {
 	if cfg, err := s.CaptchaProvider(ctx, providerKey); err == nil {
 		if err := s.prober.ProbeCaptcha(ctx, *cfg); err != nil {
@@ -1331,9 +1298,7 @@ const (
 	appleJWKSProbeURL  = "https://appleid.apple.com/auth/keys"
 )
 
-// authProbeTarget 返回 OAuth/OIDC provider 的连通性探测目标：
-// discovery 类探测其 issuer/discovery 端点，固定 OAuth 探测授权端点；
-// Apple 探测其固定 JWKS 端点（私钥解析由 ProviderService.Test 提前完成）。
+// authProbeTarget 返回 OAuth/OIDC 提供商的连通性探测地址。
 func authProbeTarget(provider *AuthProvider) (string, error) {
 	spec, ok := oauth.LookupProvider(provider.ProviderKey)
 	if !ok {
@@ -1387,7 +1352,6 @@ func authProbeTarget(provider *AuthProvider) (string, error) {
 const testProbeTimeout = 5 * time.Second
 
 // CaptchaProvider 返回指定 CAPTCHA provider 的解密配置（含机密）。
-// provider 缺失、类型不符或未配置时返回 domain.ErrProviderNotFound；密钥损坏时返回 domain.ErrSecretCorrupt。
 func (s *ProviderService) CaptchaProvider(ctx context.Context, providerKey string) (*CaptchaConfig, error) {
 	row, err := s.settings.GetCaptchaProvider(ctx, providerKey)
 	if err != nil {
@@ -1403,8 +1367,6 @@ func (s *ProviderService) CaptchaProvider(ctx context.Context, providerKey strin
 }
 
 // SelectedCaptcha 返回当前选择的 CAPTCHA provider 的解密配置。
-// 未选择时返回 domain.ErrProviderNotFound；选择指向缺失、类型不符、未配置或密钥损坏的
-// provider 时返回相应错误（默认拒绝，绝不回退到其他 provider）。
 func (s *ProviderService) SelectedCaptcha(ctx context.Context) (*CaptchaConfig, error) {
 	selected, err := s.selectedCaptchaProvider(ctx)
 	if err != nil {
@@ -1417,7 +1379,6 @@ func (s *ProviderService) SelectedCaptcha(ctx context.Context) (*CaptchaConfig, 
 }
 
 // ValidateSelection 校验 captcha_provider 选择指向可用的 CAPTCHA provider。
-// 空选择（清空）直接通过；选择缺失、类型不符、未配置或密钥损坏时返回 domain.ErrCaptchaUnavailable。
 func (s *ProviderService) ValidateSelection(ctx context.Context, providerKey string) error {
 	if providerKey == "" {
 		return nil
@@ -1502,7 +1463,6 @@ func (s *ProviderService) AuthProviders(ctx context.Context) ([]AuthProvider, er
 }
 
 // AuthProvider 返回一个 OAuth/OIDC 提供商的解密配置。
-// provider 缺失、类型不符、未启用或未配置时返回 domain.ErrProviderNotFound；密钥损坏时返回 domain.ErrSecretCorrupt。
 func (s *ProviderService) AuthProvider(ctx context.Context, providerKey string) (*AuthProvider, error) {
 	row, err := s.settings.GetAuthProvider(ctx, providerKey)
 	if err != nil {
@@ -1612,9 +1572,6 @@ func splitConfig(kind domain.ProviderKind, raw json.RawMessage) ([]byte, []byte,
 }
 
 // splitAuthConfig 解析并校验 OAuth/OIDC provider 配置。
-// 固定 catalog 预设按目录 schema 拆分公开字段与机密字段；未知 key 按自定义 OIDC 处理
-// （必须提供 HTTPS Issuer）。GitHub 固定 auth/token 端点，Google 固定 Issuer，由目录预设锁定。
-// 返回公共 JSON 与可选的新 Secret JSON（缺省/空机密返回 nil，表示保留现有 envelope）。
 func splitAuthConfig(providerKey string, kind domain.ProviderKind, raw json.RawMessage) ([]byte, []byte, error) {
 	if err := validateAuthKeyKind(providerKey, kind); err != nil {
 		return nil, nil, err
@@ -1676,8 +1633,6 @@ func applyAuthConfigDefaults(cfg *AuthConfig, spec oauth.ProviderSpec) {
 }
 
 // validateAuthConfig 按 provider 的配置 schema 校验必填字段与规范化规则。
-// client_id 对所有 provider 必填；instance_url 按预设要求默认/必填并做 HTTPS 规范化；
-// Apple 的 key_id 与 private_key 必须作为原子对出现；自定义 OIDC 必须提供 HTTPS Issuer。
 func validateAuthConfig(providerKey string, cfg *AuthConfig, spec oauth.ProviderSpec) error {
 	if strings.TrimSpace(cfg.ClientID) == "" {
 		return fmt.Errorf("%w: %s client id is required", domain.ErrValidation, providerKey)
@@ -1716,7 +1671,7 @@ func validateAuthConfig(providerKey string, cfg *AuthConfig, spec oauth.Provider
 	return nil
 }
 
-// publicAuthConfig 构建存储到 public_config 的 JSON，只包含预设公开字段的非空值，绝不包含机密。
+// publicAuthConfig 构建存储到 public_config 的 JSON，仅包含预设公开字段的非空值。
 func publicAuthConfig(cfg AuthConfig, spec oauth.ProviderSpec) ([]byte, error) {
 	values := map[string]any{}
 	for _, field := range spec.Config.PublicFields {
@@ -1803,9 +1758,7 @@ func decode(raw json.RawMessage, into any) error {
 	return nil
 }
 
-// Validate 校验验证码提供商的类型、site key/secret key 必填，以及 CAP 的绝对端点。
-// endpoint 对任意类型都允许（覆盖 siteverify 端点）；非空必须为 http(s) 绝对 URL，
-// CAP 类型必填。
+// Validate 校验 CAPTCHA 提供商字段及 endpoint 基址。
 func (c CaptchaConfig) Validate() error {
 	switch c.Provider {
 	case "turnstile", "recaptcha", "hcaptcha", "cap":
@@ -1838,9 +1791,7 @@ func normalizeHTTPSURL(raw string) (string, error) {
 	return u.String(), nil
 }
 
-// normalizeInstanceURL 校验并规范化自托管实例地址：
-// 仅接受 https，拒绝 userinfo/query/fragment，主机名小写并去掉默认端口与尾部斜杠；
-// rootOnly 时禁止部署子路径（Mastodon 的规范部署根是 origin）。
+// normalizeInstanceURL 规范化自托管提供商地址。
 func normalizeInstanceURL(raw string, rootOnly bool) (string, error) {
 	u, err := urlx.ParseHTTPSBase(raw)
 	if err != nil {
@@ -1883,7 +1834,7 @@ func (s *SMTPProbe) SetProber(p SMTPProber) {
 	}
 }
 
-// Test 对静态 SMTP 配置执行有界连通性检查。
+// Test 执行提供商连通性或发送测试消息。
 func (s *SMTPProbe) Test(ctx context.Context) error {
 	if s.cfg.Host == "" {
 		return fmt.Errorf("%w: smtp is not configured", domain.ErrValidation)

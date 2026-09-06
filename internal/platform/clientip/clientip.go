@@ -35,9 +35,6 @@ func ParseTrustedCIDRs(cidrs []string) ([]*net.IPNet, error) {
 }
 
 // Extract 返回请求的有效客户端 IP。
-// 仅当位于某个可信代理 CIDR 内时，才解析 X-Forwarded-For 可信代理链；否则直接使用 RemoteAddr。
-// 链解析从最右一跳向左遍历，跳过位于可信代理 CIDR 的地址，选择第一个非可信地址；
-// 全部跳都可信时返回最左一跳。任一非空跳格式错误都返回错误。
 func Extract(r *http.Request, trusted []*net.IPNet) (net.IP, error) {
 	remote, err := peerIP(r.RemoteAddr)
 	if err != nil {
@@ -80,6 +77,7 @@ func xffHops(values []string) ([]net.IP, error) {
 	return hops, nil
 }
 
+// isTrusted 判断 IP 是否属于可信代理网段。
 func isTrusted(ip net.IP, trusted []*net.IPNet) bool {
 	for _, cidr := range trusted {
 		if cidr.Contains(ip) {
@@ -97,6 +95,7 @@ func peerIP(remoteAddr string) (net.IP, error) {
 	return parseIP(remoteAddr)
 }
 
+// parseIP 解析相关输入。
 func parseIP(host string) (net.IP, error) {
 	host = strings.TrimSpace(host)
 	if idx := strings.IndexByte(host, '%'); idx >= 0 {
@@ -109,8 +108,7 @@ func parseIP(host string) (net.IP, error) {
 	return ip, nil
 }
 
-// Normalize 返回单一形式的IP
-// IPv4 为 4 字节形式，IPv6 为 16 字节形式，并去除 zone。
+// Normalize 将 IP 转换为单一的 4 字节或 16 字节形式。
 func Normalize(ip net.IP) net.IP {
 	if ip == nil {
 		return nil
@@ -121,10 +119,7 @@ func Normalize(ip net.IP) net.IP {
 	return ip.To16()
 }
 
-// CoarsenIP 对 IP 应用隐私模式：
-// none 返回 nil（使用方不得持久化该值）；
-// coarse IPv4 返回 /24 前缀，IPv6 返回 /48 前缀；
-// full 返回格式化后的原始值。
+// CoarsenIP 按隐私模式返回不记录、粗粒度或完整的 IP。
 func CoarsenIP(ip net.IP, mode string) (net.IP, error) {
 	ip = Normalize(ip)
 	if ip == nil {
@@ -145,6 +140,7 @@ func CoarsenIP(ip net.IP, mode string) (net.IP, error) {
 	}
 }
 
+// masked 对 IP 应用指定掩码并返回副本。
 func masked(ip net.IP, mask net.IPMask) net.IP {
 	out := make(net.IP, len(ip))
 	copy(out, ip)
@@ -159,6 +155,7 @@ type UARecord struct {
 	Device  *string
 }
 
+// strPtr 将非空字符串转换为指针。
 func strPtr(s string) *string {
 	if s == "" {
 		return nil

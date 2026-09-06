@@ -13,7 +13,7 @@ import (
 
 // AuthCodeRecord 与已签发授权码绑定的元数据。
 // CredentialMode 记录用户批准签发的 widget 凭证模式；交换时必须与实时评论模式
-// 一致，缺失/未知模式一律失败关闭。
+// 一致，缺失或未知模式默认拒绝。
 type AuthCodeRecord struct {
 	SiteID         int64     `json:"site_id"`
 	Origin         string    `json:"origin"`
@@ -23,7 +23,7 @@ type AuthCodeRecord struct {
 	CredentialMode string    `json:"credential_mode"`
 }
 
-// CaptchaProjection 单个 action 的公共 CAPTCHA 渲染投影，只携带公开字段。
+// CaptchaProjection 保存单个 action 的公共 CAPTCHA 配置字段。
 // APIEndpoint 仅 CAP 使用，已解析为官方 widget 端点。
 type CaptchaProjection struct {
 	Required    bool
@@ -32,7 +32,7 @@ type CaptchaProjection struct {
 	APIEndpoint string
 }
 
-// RuntimeCaptcha  widget 运行时配置中的按 action 公共 CAPTCHA 投影。
+// RuntimeCaptcha 保存 Widget 运行时按 action 划分的公共 CAPTCHA 配置。
 // 渲染提示而非授权决策：写端点始终以实时策略为最终权威。
 type RuntimeCaptcha struct {
 	Comment *CaptchaProjection
@@ -232,6 +232,7 @@ type AdminListResult struct {
 // AdminBatchAction 管理员评论批量命令的受控动作集合。
 type AdminBatchAction string
 
+// AdminBatchAction 的取值定义评论批量命令支持的动作。
 const (
 	AdminBatchPending    AdminBatchAction = "pending"
 	AdminBatchPublish    AdminBatchAction = "publish"
@@ -243,7 +244,7 @@ const (
 	AdminBatchUnpin      AdminBatchAction = "unpin"
 )
 
-// ValidAdminBatchAction 报告动作否属于评论批量命令白名单。
+// ValidAdminBatchAction 检查动作是否属于评论批量命令白名单。
 func ValidAdminBatchAction(action string) bool {
 	switch AdminBatchAction(action) {
 	case AdminBatchPending, AdminBatchPublish, AdminBatchSpam,
@@ -265,6 +266,7 @@ type AdminBatchInput struct {
 // AdminThreadBatchAction 管理员评论区批量命令的受控动作集合。
 type AdminThreadBatchAction string
 
+// AdminThreadBatchAction 的取值定义评论区批量命令支持的动作。
 const (
 	AdminThreadBatchEnable     AdminThreadBatchAction = "enable"
 	AdminThreadBatchDisable    AdminThreadBatchAction = "disable"

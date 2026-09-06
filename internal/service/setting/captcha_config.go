@@ -12,8 +12,7 @@ import (
 // maxActionLength 是公共 CAPTCHA 配置查询允许的 action 名最大长度。
 const maxActionLength = 64
 
-// PublicCaptchaConfig 是单个 action 的公共 CAPTCHA 配置投影。
-// 只含公开字段，绝不携带 provider 的 secret key。
+// PublicCaptchaConfig 单个 action 的公共 CAPTCHA 配置。
 type PublicCaptchaConfig struct {
 	Required    bool
 	Provider    string
@@ -35,8 +34,6 @@ func NewCaptchaConfigService(settings *Service, providers *ProviderService) *Cap
 }
 
 // PublicConfig 返回给定 action 的公共 CAPTCHA 配置。
-// 策略关闭或 action 不存在时不读取 provider 配置，直接返回 required=false；
-// 策略开启但 provider 缺失/损坏/不可用时返回 ErrCaptchaUnavailable（默认拒绝）。
 func (s *CaptchaConfigService) PublicConfig(ctx context.Context, action string) (*PublicCaptchaConfig, error) {
 	action = strings.TrimSpace(action)
 	if action == "" || len(action) > maxActionLength {

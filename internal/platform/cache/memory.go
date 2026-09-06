@@ -58,9 +58,7 @@ func (s *Memory) Get(ctx context.Context, key string, out any) error {
 	return json.Unmarshal(item.data, out)
 }
 
-// GetRawJSON returns the exact JSON payload stored under key. Unlike Get, it
-// does not attempt to validate or decode the payload, allowing higher-level
-// protocols to classify malformed records and remove them atomically.
+// GetRawJSON 读取键对应的原始 JSON 数据。
 func (s *Memory) GetRawJSON(ctx context.Context, key string) (json.RawMessage, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -82,7 +80,6 @@ func (s *Memory) GetRawJSON(ctx context.Context, key string) (json.RawMessage, e
 }
 
 // Set 将 value 序列化后以 ttl 存储到 key 下。
-// 容量已满且没有过期条目可淘汰时返回 ErrCapacity。
 func (s *Memory) Set(ctx context.Context, key string, value any, ttl time.Duration) error {
 	data, err := json.Marshal(value)
 	if err != nil {
@@ -135,6 +132,7 @@ func (s *Memory) AtomicConsume(ctx context.Context, key string) (string, error) 
 	return value, nil
 }
 
+// evictExpired 清理内存存储中的过期条目。
 func (s *Memory) evictExpired(now time.Time) {
 	for key, item := range s.items {
 		if !now.Before(item.expires) {
@@ -144,9 +142,7 @@ func (s *Memory) evictExpired(now time.Time) {
 	}
 }
 
-// CompareAndSwapJSON atomically replaces key when its exact JSON value matches
-// expected. The existing expiry is retained and stale or missing keys return
-// false without an error.
+// CompareAndSwapJSON 按期望 JSON 值原子替换缓存条目。
 func (s *Memory) CompareAndSwapJSON(ctx context.Context, key string, expected, replacement json.RawMessage) (bool, error) {
 	if err := ctx.Err(); err != nil {
 		return false, err
@@ -174,9 +170,7 @@ func (s *Memory) CompareAndSwapJSON(ctx context.Context, key string, expected, r
 	return true, nil
 }
 
-// CompareAndDeleteJSON atomically deletes key when its exact JSON value
-// matches expected. Stale, missing, and expired keys return false without an
-// error.
+// CompareAndDeleteJSON 按期望 JSON 值原子删除缓存条目。
 func (s *Memory) CompareAndDeleteJSON(ctx context.Context, key string, expected json.RawMessage) (bool, error) {
 	if err := ctx.Err(); err != nil {
 		return false, err
@@ -202,9 +196,7 @@ func (s *Memory) CompareAndDeleteJSON(ctx context.Context, key string, expected 
 	return true, nil
 }
 
-// ensure JSON validation errors are returned before modifying a live entry.
-// This is intentionally separate from the cache Store interface so unrelated
-// cache implementations do not need to expose a CAS capability.
+// 以下断言确保内存实现提供原始 JSON 与原子比较操作能力。
 var _ AtomicJSONComparer = (*Memory)(nil)
 var _ RawJSONReader = (*Memory)(nil)
 

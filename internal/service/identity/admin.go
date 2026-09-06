@@ -57,7 +57,6 @@ type AdminUpdateUserInput struct {
 }
 
 // AdminCreateUser 原子创建用户：资料、可选密码哈希与可选验证时间在同一事务写入。
-// 密码与验证开关相互独立：设置密码不自动验证邮箱，验证默认关闭。
 func (s *Service) AdminCreateUser(ctx context.Context, input AdminCreateUserInput) (*Profile, error) {
 	original, normalized, err := value.NormalizeEmail(input.Email)
 	if err != nil {
@@ -117,8 +116,6 @@ func (s *Service) AdminCreateUser(ctx context.Context, input AdminCreateUserInpu
 }
 
 // AdminUpdateUser 合并写入管理端更新字段。
-// 邮箱变化执行与创建一致的规范化/唯一性校验并默认保留验证状态；
-// 角色/状态变化保持最后活跃管理员守卫，提交后同步失效 authz 缓存。
 func (s *Service) AdminUpdateUser(ctx context.Context, targetID int64, input AdminUpdateUserInput) (*Profile, error) {
 	var roleStatusChanged bool
 	runInTx := s.txRunner.RunInTx
@@ -244,9 +241,6 @@ func (s *Service) AdminUpdateUser(ctx context.Context, targetID int64, input Adm
 }
 
 // AdminResetPassword 直接为目标用户设置新密码，不要求旧密码。
-// 只替换 Argon2id 密码状态，不改变资料与验证状态；在密码写入的同一事务内
-// 递增会话代次，提交后失效 authz 缓存，使目标用户全部既有 JWT 失效。
-// 不签发替代会话。
 func (s *Service) AdminResetPassword(ctx context.Context, targetID int64, newPassword string) error {
 	if len(newPassword) < minPasswordLength {
 		return domain.ErrValidation
@@ -263,10 +257,6 @@ func (s *Service) AdminResetPassword(ctx context.Context, targetID int64, newPas
 }
 
 // AdminDeleteUser 按 mode 软删除或硬删除目标用户。
-// 管理员不能删除自己（ErrForbidden）；不能删除最后一名活跃管理员（ErrLastAdmin）；
-// 硬删除需显式确认。软删除把用户改为 deleted 并只软删其本人评论；硬删除先解除
-// 保留评论对目标用户评论的引用，再物理删除用户行并级联删除关联评论、passkey、
-// 外部身份与通知偏好。提交后同步失效 authz 缓存。
 func (s *Service) AdminDeleteUser(ctx context.Context, actingID, targetID int64, mode string, confirm bool) error {
 	if actingID == targetID {
 		return domain.ErrForbidden
@@ -294,7 +284,6 @@ func (s *Service) AdminDeleteUser(ctx context.Context, actingID, targetID int64,
 }
 
 // AdminRestoreUser 恢复被软删除的用户账号：清除删除标记，回到删除前状态，
-// 缺失历史状态时默认 active。恢复只改变账号生命周期，不恢复任何评论。
 func (s *Service) AdminRestoreUser(ctx context.Context, targetID int64) (*Profile, error) {
 	restored := false
 	err := s.txRunner.RunInTx(ctx, func(txCtx context.Context) error {

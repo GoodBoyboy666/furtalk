@@ -24,12 +24,12 @@ type SiteUpdate struct {
 	Status       *domain.SiteStatus
 }
 
-// NewService 构建站点服务，并注入站点仓储。
+// NewService 构建站点服务。
 func NewService(sites *repository.SiteRepo) *Service {
 	return &Service{sites: sites}
 }
 
-// List 返回全部站点及其 origins，按 id 升序排列。
+// List 列出全部站点。
 func (s *Service) List(ctx context.Context) ([]domain.Site, error) {
 	rows, err := s.sites.List(ctx)
 	if err != nil {
@@ -47,7 +47,7 @@ func (s *Service) List(ctx context.Context) ([]domain.Site, error) {
 	return out, nil
 }
 
-// Create 规范化站点名称与规范 URL 后创建站点，并返回带 origins 的完整站点。
+// Create 创建站点。
 func (s *Service) Create(ctx context.Context, name, canonicalURL string) (*domain.Site, error) {
 	name, canonical, err := normalizeSiteInput(name, canonicalURL)
 	if err != nil {
@@ -64,7 +64,7 @@ func (s *Service) Create(ctx context.Context, name, canonicalURL string) (*domai
 	return s.Get(ctx, row.ID)
 }
 
-// Get 按 ID 返回站点及其 origins；站点不存在时返回 domain.ErrNotFound。
+// Get 读取指定站点。
 func (s *Service) Get(ctx context.Context, id int64) (*domain.Site, error) {
 	row, err := s.sites.Get(ctx, id)
 	if err != nil {
@@ -108,7 +108,7 @@ func (s *Service) Update(ctx context.Context, id int64, patch SiteUpdate) (*doma
 	return s.Get(ctx, id)
 }
 
-// Delete 需要显式确认后才执行破坏性级联删除。
+// Delete 删除站点。
 func (s *Service) Delete(ctx context.Context, id int64, confirm bool) error {
 	if !confirm {
 		return domain.ErrConfirmationRequired
@@ -117,7 +117,6 @@ func (s *Service) Delete(ctx context.Context, id int64, confirm bool) error {
 }
 
 // AddOrigin 校验站点存在后规范化并添加一个 origin；
-// 站点不存在返回 domain.ErrNotFound，重复时返回 domain.ErrConflict。
 func (s *Service) AddOrigin(ctx context.Context, siteID int64, origin string) (*domain.Origin, error) {
 	if _, err := s.sites.Get(ctx, siteID); err != nil {
 		return nil, err
@@ -137,7 +136,6 @@ func (s *Service) AddOrigin(ctx context.Context, siteID int64, origin string) (*
 }
 
 // UpdateOrigin 按 site 与 origin ID 更新 origin 值并返回更新后的记录；
-// 记录不存在返回 domain.ErrNotFound，重复值返回 domain.ErrConflict。
 func (s *Service) UpdateOrigin(ctx context.Context, siteID, originID int64, origin string) (*domain.Origin, error) {
 	normalized, err := urlx.CanonicalOrigin(origin)
 	if err != nil {

@@ -15,6 +15,7 @@ import (
 	"gorm.io/gorm/clause"
 )
 
+// UserRepo 提供用户及认证状态的持久化操作。
 type UserRepo struct {
 	db *gorm.DB
 }
@@ -82,15 +83,12 @@ func (r *UserRepo) FindByID(ctx context.Context, id int64) (*domain.User, error)
 	return r.findByID(ctx, id, false)
 }
 
-// FindByIDLocked 在写事务内按主键读取用户，并在支持的数据库上锁定用户行。
-// SQLite 不支持 FOR UPDATE，沿用事务的单写者与忙等待语义。
+// FindByIDLocked 在写事务中查询并按需锁定用户。
 func (r *UserRepo) FindByIDLocked(ctx context.Context, id int64) (*domain.User, error) {
 	return r.findByID(ctx, id, true)
 }
 
-// List 按 id 顺序返回用户，可用匹配格式化邮箱或昵称的搜索词收窄结果。
-// sort 控制 id 排序方向：asc 表示最早的账号优先，desc 表示最新优先。
-// offset 允许按页跳过已返回的行；Count 使用同一搜索词统计总数。
+// List 按搜索条件分页列出用户。
 func (r *UserRepo) List(ctx context.Context, search string, sort domain.CommentSort, limit, offset int) ([]domain.User, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 50
@@ -157,9 +155,7 @@ func (r *UserRepo) UpdateRoleStatus(ctx context.Context, id int64, role domain.R
 	return nil
 }
 
-// UpdateAdmin 合并写入管理端用户更新字段（邮箱/昵称/网站/角色/状态/验证时间）。
-// 更新前先确认用户行存在，因为 SQLite 只统计实际变更行，缺失行会造出假 not-found；
-// 唯一约束（email_normalized）冲突映射为 domain.ErrConflict。
+// UpdateAdmin 更新管理端指定的用户字段。
 func (r *UserRepo) UpdateAdmin(ctx context.Context, id int64, fields map[string]any) error {
 	var row model.User
 	err := gormtx.DB(ctx, r.db).Where("id = ?", id).First(&row).Error
@@ -199,7 +195,7 @@ func (r *UserRepo) UpdateStatusMany(ctx context.Context, ids []int64, status dom
 
 // MarkEmailVerifiedMany 为已校验目标集合设置邮箱验证时间。
 func (r *UserRepo) MarkEmailVerifiedMany(ctx context.Context, ids []int64, verifiedAt time.Time) (int64, error) {
-	// 目标已在同一事务内锁定并预校验，条件仅用于防止意外重复写入。
+	// 目标已在同一事务内锁定并预校验，条件用于确认本次更新仍匹配目标。
 	if len(ids) == 0 {
 		return 0, nil
 	}
@@ -214,7 +210,7 @@ func (r *UserRepo) MarkEmailVerifiedMany(ctx context.Context, ids []int64, verif
 
 // UnverifyEmailMany 清除已校验目标集合的邮箱验证时间。
 func (r *UserRepo) UnverifyEmailMany(ctx context.Context, ids []int64) (int64, error) {
-	// 目标已在同一事务内锁定并预校验，条件仅用于防止意外重复写入。
+	// 目标已在同一事务内锁定并预校验，条件用于确认本次更新仍匹配目标。
 	if len(ids) == 0 {
 		return 0, nil
 	}
@@ -291,8 +287,7 @@ func (r *UserRepo) CountByRoleAndStatus(ctx context.Context, role domain.Role, s
 	return count, nil
 }
 
-// LockActiveAdmins 在写事务内按稳定 id 顺序锁定全部活跃管理员并返回行数。
-// PostgreSQL 使用 FOR UPDATE；SQLite 不支持该子句，沿用事务的写者锁语义。
+// LockActiveAdmins 在写事务中锁定全部活跃管理员。
 func (r *UserRepo) LockActiveAdmins(ctx context.Context) (int64, error) {
 	db := gormtx.DB(ctx, r.db).Model(&model.User{}).Select("id")
 	if db.Dialector.Name() != "sqlite" {
@@ -322,8 +317,7 @@ func (r *UserRepo) Count(ctx context.Context, search string) (int64, error) {
 	return count, nil
 }
 
-// SoftDelete 软删除用户：记录删除时间与删除前的账户状态。
-// 更新前先确认用户行存在，因为 SQLite 只统计实际变更行，缺失行会造出假 not-found。
+// SoftDelete 记录用户删除时间和删除前状态。
 func (r *UserRepo) SoftDelete(ctx context.Context, id int64, statusBefore domain.UserStatus, deletedAt time.Time) error {
 	var row model.User
 	err := gormtx.DB(ctx, r.db).Where("id = ?", id).First(&row).Error
@@ -375,8 +369,7 @@ func (r *UserRepo) Restore(ctx context.Context, id int64) error {
 	return nil
 }
 
-// Delete 物理删除用户行；passkey、外部身份、通知偏好与该用户本人的评论
-// 经外键级联删除，其他用户对其评论的回复在调用方解除引用后保留。
+// Delete 物理删除用户及其级联数据。
 func (r *UserRepo) Delete(ctx context.Context, id int64) error {
 	result := gormtx.DB(ctx, r.db).Where("id = ?", id).Delete(&model.User{})
 	if result.Error != nil {
@@ -405,8 +398,7 @@ func (r *UserRepo) ListActiveAdmins(ctx context.Context) ([]domain.User, error) 
 	return out, nil
 }
 
-// CreateWithPassword 插入用户行，并把密码哈希与变更时间随行写入。
-// 与 Create 一样回填生成的 ID 与时间戳；邮箱冲突返回 domain.ErrConflict。
+// CreateWithPassword 创建带密码哈希的用户。
 func (r *UserRepo) CreateWithPassword(ctx context.Context, user *domain.User, passwordHash string, changedAt time.Time) error {
 	row := fromUser(user)
 	hash := passwordHash
@@ -425,9 +417,7 @@ func (r *UserRepo) CreateWithPassword(ctx context.Context, user *domain.User, pa
 	return nil
 }
 
-// SetPassword 同时更新用户的密码哈希、变更时间并递增会话代次，返回递增后的新代次。
-// 会话代次由数据库表达式原子递增，并从同一条 UPDATE 的 RETURNING
-// 结果读取，避免并发事务丢失递增。调用方应在数据库事务内执行。
+// SetPassword 更新密码并递增会话代次。
 func (r *UserRepo) SetPassword(ctx context.Context, userID int64, passwordHash string, changedAt time.Time) (int64, error) {
 	var row model.User
 	result := gormtx.DB(ctx, r.db).
@@ -448,9 +438,7 @@ func (r *UserRepo) SetPassword(ctx context.Context, userID int64, passwordHash s
 	return row.SessionVersion, nil
 }
 
-// BumpSessionVersion 只递增用户会话代次并返回新代次，用于主动注销全部设备。
-// 会话代次由数据库表达式原子递增，并从同一条 UPDATE 的 RETURNING 结果读取，
-// 避免并发事务丢失递增。调用方应在数据库事务内执行。
+// BumpSessionVersion 递增用户会话代次并返回新值。
 func (r *UserRepo) BumpSessionVersion(ctx context.Context, userID int64) (int64, error) {
 	var row model.User
 	result := gormtx.DB(ctx, r.db).
@@ -483,9 +471,7 @@ func (r *UserRepo) PasswordHash(ctx context.Context, userID int64) (string, erro
 	return *row.PasswordHash, nil
 }
 
-// ResetPasswordByEmail 在单个语句中更新密码哈希、变更时间与会话代次，并只在邮箱未验证时写入验证时间；
-// 已验证邮箱保留原验证时间。会话代次由数据库表达式原子递增，
-// 并与目标用户 id 一起从同一条 UPDATE 的 RETURNING 结果读取。调用方应在数据库事务内执行。
+// ResetPasswordByEmail 按邮箱重置密码并递增会话代次。
 func (r *UserRepo) ResetPasswordByEmail(ctx context.Context, normalizedEmail, passwordHash string, changedAt, verifiedAt time.Time) (int64, int64, error) {
 	var row model.User
 	result := gormtx.DB(ctx, r.db).
@@ -507,9 +493,7 @@ func (r *UserRepo) ResetPasswordByEmail(ctx context.Context, normalizedEmail, pa
 	return row.ID, row.SessionVersion, nil
 }
 
-// MarkEmailVerified 幂等地把用户标记为邮箱已验证：只在邮箱尚未验证时写入
-// verifiedAt，已验证用户保留原验证时间，不覆盖。返回是否实际写入了验证时间。
-// 更新前先确认用户行存在，因为 SQLite 只统计实际变更行，缺失行会造出假 not-found。
+// MarkEmailVerified 幂等地标记用户邮箱已验证。
 func (r *UserRepo) MarkEmailVerified(ctx context.Context, userID int64, verifiedAt time.Time) (bool, error) {
 	var row model.User
 	err := gormtx.DB(ctx, r.db).Where("id = ?", userID).First(&row).Error

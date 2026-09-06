@@ -37,8 +37,6 @@ type Translator struct {
 }
 
 // NewTranslator 合并若干错误映射组并校验合法性：
-// 目标错误必须非空且可比较，状态码必须位于 4xx/5xx，
-// code 与 message 非空，且目标错误不能重复。
 func NewTranslator(groups ...[]Mapping) (*Translator, error) {
 	total := 0
 	for _, group := range groups {
@@ -71,7 +69,6 @@ func NewTranslator(groups ...[]Mapping) (*Translator, error) {
 }
 
 // Translate 在映射表中查找能匹配 err 的错误。
-// 入参为 nil 或未找到匹配时返回空映射与 false。
 func (t *Translator) Translate(err error) (Mapping, bool) {
 	if t == nil || err == nil {
 		return Mapping{}, false
@@ -87,13 +84,11 @@ func (t *Translator) Translate(err error) (Mapping, bool) {
 const translatorContextKey = "httpx.error_translator"
 
 // WriteError 使用上下文中的翻译器把 err 转为响应。
-// 未匹配到映射或未挂载翻译器时，回退为 500 内部错误。
 func WriteError(c *gin.Context, err error) {
 	WriteErrorWithDetails(c, err, nil)
 }
 
-// WriteErrorWithDetails 使用上下文中的翻译器把 err 转为脱敏的 details 的响应。
-// 未匹配到映射或未挂载翻译器时，回退为 500 内部错误。
+// WriteErrorWithDetails 使用上下文中的翻译器组装携带 details 的错误响应。
 func WriteErrorWithDetails(c *gin.Context, err error, details map[string]any) {
 	translator, _ := c.Get(translatorContextKey)
 	if typed, ok := translator.(*Translator); ok {
@@ -116,7 +111,7 @@ func Response(c *gin.Context, code, message string) ErrorResponse {
 	return ResponseWithDetails(c, code, message, nil)
 }
 
-// ResponseWithDetails 构造携带当前请求 ID 与脱敏 details 的错误响应体。
+// ResponseWithDetails 构造携带当前请求 ID 与使用方提供 details 的错误响应体。
 func ResponseWithDetails(c *gin.Context, code, message string, details map[string]any) ErrorResponse {
 	if details == nil {
 		details = map[string]any{}

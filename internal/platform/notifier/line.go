@@ -11,8 +11,6 @@ import (
 const lineMaxUTF16 = 5000
 
 // sendLine 向 LINE Messaging API push 端点投递。
-// 端点固定为 https://api.line.me/v2/bot/message/push，使用原始 text 消息对象
-// （不使用 textV2，避免替代/mention 行为）；成功判定为 HTTP 200 且响应为合法 JSON。
 func (d *Dispatcher) sendLine(ctx context.Context, cfg Config, msg Message) error {
 	text := composeTextUTF16(msg.Title, msg.Text, msg.PageURL, lineMaxUTF16)
 	payload := map[string]any{
