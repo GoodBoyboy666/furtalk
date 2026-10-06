@@ -144,6 +144,31 @@ type ThreadView struct {
 	NextCursor      *string
 }
 
+// RootCommentView 保存公开根评论及其回复提示。
+type RootCommentView struct {
+	CommentView
+	HasReplies bool
+}
+
+// RootThreadView 保存线程元数据与独立分页的根评论。
+type RootThreadView struct {
+	ID              int64
+	SiteID          int64
+	PageKey         string
+	PageURL         *string
+	PageTitle       *string
+	CommentsEnabled bool
+	Comments        []RootCommentView
+	NextCursor      *string
+}
+
+// ReplyPageView 保存指定可见根的回复分页。
+type ReplyPageView struct {
+	RootID     int64
+	Comments   []CommentView
+	NextCursor *string
+}
+
 // LatestCommentView 站点公开最新评论视图。
 type LatestCommentView struct {
 	ID              int64

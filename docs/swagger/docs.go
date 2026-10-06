@@ -4606,6 +4606,85 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/widget/sites/{site_id}/comments/{comment_id}/replies": {
+            "get": {
+                "description": "按 created_at、id 升序返回所有深度的回复，保留可见关系和原始深度；游标绑定站点、线程和根评论。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "widget"
+                ],
+                "summary": "分页列出 widget 可见根评论的全部可见回复",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "站点 ID（十进制字符串）",
+                        "name": "site_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "可见根评论 ID（十进制字符串）",
+                        "name": "comment_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "页面标识（必填，根评论须属于该线程）",
+                        "name": "page_key",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "回复专用游标，必须匹配站点、线程和根评论",
+                        "name": "cursor",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "每页回复数量（默认 50，最大 100）",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "回复分页；可见根无回复或游标耗尽时返回空数组",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.CommentRepliesResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "路径参数无效",
+                        "schema": {
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "站点已停用",
+                        "schema": {
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "站点、线程或可见根不存在",
+                        "schema": {
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "页面标识或游标无效",
+                        "schema": {
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/widget/sites/{site_id}/latest-comments": {
             "get": {
                 "produces": [
@@ -4651,6 +4730,84 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "站点不存在",
+                        "schema": {
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/widget/sites/{site_id}/root-comments": {
+            "get": {
+                "description": "仅返回根评论及 has_replies；先按置顶分组，再按根自身的时间或点赞数排序，游标绑定站点、线程和排序。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "widget"
+                ],
+                "summary": "分页列出 widget 线程的可见根评论",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "站点 ID（十进制字符串）",
+                        "name": "site_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "页面标识（必填）",
+                        "name": "page_key",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "排序：asc、desc 或 hot；缺省使用实例设置",
+                        "name": "sort",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "根评论专用游标，必须匹配站点、线程和 sort",
+                        "name": "cursor",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "每页根评论数量（默认 50，最大 100）",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "根评论分页",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.ThreadRootCommentsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "路径参数无效",
+                        "schema": {
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "站点已停用",
+                        "schema": {
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "站点不存在",
+                        "schema": {
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "页面标识、排序或游标无效",
                         "schema": {
                             "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
@@ -5325,6 +5482,23 @@ const docTemplate = `{
                 },
                 "is_pinned": {
                     "type": "boolean"
+                }
+            }
+        },
+        "internal_handler.CommentRepliesResponse": {
+            "type": "object",
+            "properties": {
+                "comments": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_handler.CommentResponse"
+                    }
+                },
+                "next_cursor": {
+                    "type": "string"
+                },
+                "root_id": {
+                    "type": "string"
                 }
             }
         },
@@ -6062,6 +6236,78 @@ const docTemplate = `{
                 }
             }
         },
+        "internal_handler.RootCommentResponse": {
+            "type": "object",
+            "properties": {
+                "author_nickname": {
+                    "type": "string"
+                },
+                "author_role": {
+                    "type": "string"
+                },
+                "author_website": {
+                    "type": "string"
+                },
+                "avatar_url": {
+                    "type": "string"
+                },
+                "body": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "depth": {
+                    "type": "integer"
+                },
+                "has_replies": {
+                    "type": "boolean"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "is_pinned": {
+                    "type": "boolean"
+                },
+                "like_count": {
+                    "description": "LikeCount 公开的 Like 计数，始终存在。",
+                    "type": "integer"
+                },
+                "liked_by_me": {
+                    "description": "LikedByMe 只反映已验证查看者是否点赞；匿名读取恒为 false。",
+                    "type": "boolean"
+                },
+                "parent_id": {
+                    "type": "string"
+                },
+                "published_at": {
+                    "type": "string"
+                },
+                "reply_to_nickname": {
+                    "description": "ReplyToNickname 被回复作者的当前昵称；缺失或已注销时为 nil。",
+                    "type": "string"
+                },
+                "reply_to_user_id": {
+                    "description": "ReplyToUserID 被回复作者的 id；根评论为 nil，被回复者注销后也为 nil。",
+                    "type": "string"
+                },
+                "root_id": {
+                    "type": "string"
+                },
+                "site_id": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "thread_id": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "string"
+                }
+            }
+        },
         "internal_handler.RuntimeCaptchaResponse": {
             "type": "object",
             "properties": {
@@ -6227,6 +6473,23 @@ const docTemplate = `{
                 },
                 "site_id": {
                     "type": "string"
+                }
+            }
+        },
+        "internal_handler.ThreadRootCommentsResponse": {
+            "type": "object",
+            "properties": {
+                "comments": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_handler.RootCommentResponse"
+                    }
+                },
+                "next_cursor": {
+                    "type": "string"
+                },
+                "thread": {
+                    "$ref": "#/definitions/internal_handler.ThreadMetaResponse"
                 }
             }
         },

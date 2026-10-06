@@ -145,6 +145,8 @@
 |---|---|---|---|
 | GET | /api/v1/widget/sites/{site_id}/runtime-config | 公开 | 站点运行时配置（含按 action 的公共 CAPTCHA 投影） |
 | GET | /api/v1/widget/sites/{site_id}/comments | 公开（可选 widget credential） | 评论列表（`page_key` 必填；`sort=asc|desc|hot`，缺省用实例策略；置顶根评论先于普通评论、组内继续按所选排序；keyset 游标分页；响应含 `thread.comments_enabled`、`next_cursor`、每条评论 `is_pinned`、`like_count` 与查看者 `liked_by_me`） |
+| GET | /api/v1/widget/sites/{site_id}/root-comments | 公开（可选 widget credential） | 根评论独立分页；`page_key` 必填，`sort=asc\|desc\|hot`；返回 `{thread, comments, next_cursor}`，根评论增加 `has_replies` |
+| GET | /api/v1/widget/sites/{site_id}/comments/{comment_id}/replies | 公开（可选 widget credential） | 指定可见根的全部深度回复独立分页；`page_key` 必填；返回 `{root_id, comments, next_cursor}`，回复固定按 `(created_at,id)` 升序 |
 | GET | /api/v1/widget/sites/{site_id}/latest-comments | 公开 | 站点最新评论列表（默认 25，最大 25；按 `(created_at DESC, id DESC)` 排序，包含页面元数据） |
 | POST | /api/v1/widget/sites/{site_id}/comments | 可选 widget credential | 统一评论创建：匿名普通邮箱单次提交；管理员邮箱无凭据时返回受控 `need_auth_code`（线程关闭时 409 `thread_closed`） |
 | DELETE | /api/v1/widget/comments/{comment_id} | widget credential | 删除自己的评论 |
@@ -155,6 +157,32 @@
 | POST | /api/v1/widget/comment-authorizations/exchange | 公开 | 把一次性授权码兑换为 `widget_authenticated` 并写入 CHIPS Cookie |
 | GET | /api/v1/widget/session | 公开（CHIPS cookie） | 会话探测 |
 | DELETE | /api/v1/widget/session | 公开 | 清除会话 |
+
+### Widget 根评论与回复独立分页
+
+- 两个新增 GET 接口均支持 `limit`（默认 50，最大 100）和 `cursor`；每次最多返回
+  `limit` 条根评论或回复，有下一页才返回 `next_cursor`。原 `/comments` 的混合行分页、
+  字段和游标保持兼容，新版 Widget 分别请求 10 条根评论和 10 条回复。
+- 根评论按公开投影的 `parent_id=null` 识别，包括隐藏祖先下提升的非零深度评论；
+  只返回已发布根评论正文。置顶优先，组内按 `asc`、`desc` 或根自身点赞数的 `hot`
+  排序，时间相同时由 ID 决胜；回复点赞不影响根排序。
+- 根评论的 `has_replies` 表示任意深度有已发布可见后代。Widget 显示根评论后自动
+  加载各根首批回复，后续通过该根的“加载更多回复”继续分页。各根回复数据与游标
+  独立保存，根评论追加保留已有回复；缺失中间父节点的回复仍显示在请求根下。
+- 回复接口的 `comment_id` 必须是当前站点及 `page_key` 线程的可见根；回复固定按
+  `(created_at,id)` 升序，保留隐藏祖先压缩后的 `parent_id`、`root_id`、原始 `depth`
+  和被回复作者信息。已发布的普通后代不能作为该接口的根。
+- 缺失根列表页面返回只读合成线程 `id="0"`、`comments_enabled=true` 和空数组；
+  回复线程/根缺失、隐藏或作用域不符返回 404。根有效但无回复或游标已耗尽时返回
+  空 `comments` 和 `next_cursor=null`。关闭线程仍可读取，两个接口都不会创建线程。
+- 新游标使用独立的版本化命名空间：根游标绑定站点、线程、排序，回复游标绑定
+  站点、线程、根。格式错误、跨接口、跨站点/线程/根、根排序互换以及旧混合行游标
+  返回 422 `invalid_input`；根游标取最后返回的根，回复游标取最后返回的回复。
+- 两个接口及其 OPTIONS 复用站点精确 Origin CORS 和可选已验证 Widget 查看者；
+  `liked_by_me` 在匿名读取时恒为 false。公开数据不含邮箱/IP/UA 或 SQL 空页标记。
+  沿用现有全局 HTTP ratelimit，不新增接口限流规则或 Widget 并发队列/上限。
+- 部署时先提供新后端接口，再更新 Widget；旧 Widget 继续使用原 `/comments`。
+  每次响应的条数有界，但可见树投影仍遍历线程，跨请求修改保持既有实时游标语义。
 
 ### 点赞（PUT/DELETE /widget/sites/{site_id}/comments/{comment_id}/like）
 

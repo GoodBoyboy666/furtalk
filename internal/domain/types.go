@@ -312,6 +312,12 @@ type PublicComment struct {
 	LikedByMe             bool
 }
 
+// PublicRootComment 保存可见根评论及其可见回复提示。
+type PublicRootComment struct {
+	PublicComment
+	HasReplies bool
+}
+
 // LatestPublicComment 站点公开最新评论与所属线程元数据及作者当前公开资料。
 type LatestPublicComment struct {
 	Comment

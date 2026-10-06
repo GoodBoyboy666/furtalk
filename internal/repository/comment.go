@@ -184,11 +184,8 @@ const publicListCteStep = `
 	  JOIN visible AS v ON c.parent_id = v.id AND c.site_id = v.site_id AND c.thread_id = v.thread_id
 	 WHERE c.site_id = ? AND c.thread_id = ?`
 
-// publicListProjection 只选择 published 行，把递归得到的 vis_parent_id/vis_root_id
-// 映射为公开响应的 parent_id/root_id，并关联作者与回复目标资料。
-// like_count 是相关子查询，对 (site_id, comment_id) 前缀索引做计数；
-// liked_by_me 只在有已验证查看者时输出 EXISTS，否则输出常量 0。
-const publicListProjection = `
+// publicCommentColumns 复用可见关系、作者资料和查看者点赞状态的公开映射。
+const publicCommentColumns = `
 SELECT visible.id, visible.site_id, visible.thread_id, visible.user_id,
        visible.vis_parent_id AS parent_id, visible.vis_root_id AS root_id,
        visible.reply_to_user_id, visible.depth, visible.body_markdown, visible.status,
@@ -202,7 +199,10 @@ SELECT visible.id, visible.site_id, visible.thread_id, visible.user_id,
        users.role AS author_role,
        reply_users.nickname AS reply_to_nickname,
        (SELECT COUNT(*) FROM comment_likes AS cl WHERE cl.site_id = visible.site_id AND cl.comment_id = visible.id) AS like_count,
-       %s AS liked_by_me
+       %s AS liked_by_me`
+
+// publicListProjection 选择已发布评论并关联作者与回复目标资料。
+const publicListProjection = publicCommentColumns + `
   FROM visible
   JOIN users ON users.id = visible.user_id
   LEFT JOIN users AS reply_users ON reply_users.id = visible.reply_to_user_id
