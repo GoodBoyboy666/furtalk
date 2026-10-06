@@ -109,6 +109,10 @@ definitions:
         type: boolean
       parent_id:
         type: string
+      page_title:
+        type: string
+      page_url:
+        type: string
       published_at:
         type: string
       reply_to_nickname:
@@ -2322,6 +2326,18 @@ paths:
         in: query
         name: sort
         type: string
+      - description: 账户状态：active、disabled 或 deleted
+        in: query
+        name: status
+        type: string
+      - description: 邮箱是否已验证：true 或 false
+        in: query
+        name: email_verified
+        type: boolean
+      - description: 用户角色：admin 或 user
+        in: query
+        name: role
+        type: string
       - description: 页码（从 1 开始，默认 1）
         in: query
         name: page
@@ -2347,6 +2363,10 @@ paths:
             $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
         "403":
           description: 权限不足
+          schema:
+            $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
+        "422":
+          description: 筛选参数无效
           schema:
             $ref: '#/definitions/furtalk_internal_platform_httpx.ErrorResponse'
       summary: 按关键字分页列出用户

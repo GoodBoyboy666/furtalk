@@ -2029,6 +2029,24 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
+                        "type": "string",
+                        "description": "账户状态：active、disabled 或 deleted",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "邮箱是否已验证：true 或 false",
+                        "name": "email_verified",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "用户角色：admin 或 user",
+                        "name": "role",
+                        "in": "query"
+                    },
+                    {
                         "type": "integer",
                         "description": "页码（从 1 开始，默认 1）",
                         "name": "page",
@@ -2062,6 +2080,12 @@ const docTemplate = `{
                     },
                     "403": {
                         "description": "权限不足",
+                        "schema": {
+                            "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "筛选参数无效",
                         "schema": {
                             "$ref": "#/definitions/furtalk_internal_platform_httpx.ErrorResponse"
                         }
@@ -4895,6 +4919,12 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "parent_id": {
+                    "type": "string"
+                },
+                "page_title": {
+                    "type": "string"
+                },
+                "page_url": {
                     "type": "string"
                 },
                 "published_at": {

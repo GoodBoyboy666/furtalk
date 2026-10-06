@@ -366,6 +366,8 @@ type AdminCommentResponse struct {
 	AuthorEmail    string  `json:"author_email"`
 	AuthorNickname string  `json:"author_nickname"`
 	AuthorWebsite  *string `json:"author_website"`
+	PageTitle      *string `json:"page_title"`
+	PageURL        *string `json:"page_url"`
 	AvatarURL      string  `json:"avatar_url"`
 	// ReplyToUserID 被回复作者的 id；根评论为 nil，被回复者注销后也为 nil。
 	ReplyToUserID *string `json:"reply_to_user_id"`
@@ -615,6 +617,8 @@ func toAdminCommentResponse(view comment.AdminCommentView) AdminCommentResponse 
 		AuthorEmail:     view.Email,
 		AuthorNickname:  base.AuthorNickname,
 		AuthorWebsite:   base.AuthorWebsite,
+		PageTitle:       view.PageTitle,
+		PageURL:         view.PageURL,
 		AvatarURL:       base.AvatarURL,
 		ReplyToUserID:   base.ReplyToUserID,
 		ReplyToNickname: base.ReplyToNickname,

@@ -30,6 +30,14 @@ const (
 	UserStatusDeleted UserStatus = "deleted"
 )
 
+// AdminUserFilter 管理端用户列表的可组合筛选条件；零值表示不筛选。
+type AdminUserFilter struct {
+	Search        string
+	Status        UserStatus
+	Role          Role
+	EmailVerified *bool
+}
+
 // SiteStatus 站点状态。
 type SiteStatus string
 

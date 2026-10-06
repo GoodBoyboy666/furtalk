@@ -213,6 +213,8 @@ type AuthorizationContextView struct {
 // AdminCommentView 仅管理员可见的视图。
 type AdminCommentView struct {
 	CommentView
+	PageTitle *string
+	PageURL   *string
 	Email     string
 	IPMode    domain.PrivacyMode
 	IPValue   *string

@@ -90,6 +90,11 @@ func (r *UserRepo) FindByIDLocked(ctx context.Context, id int64) (*domain.User, 
 
 // List 按搜索条件分页列出用户。
 func (r *UserRepo) List(ctx context.Context, search string, sort domain.CommentSort, limit, offset int) ([]domain.User, error) {
+	return r.ListFiltered(ctx, domain.AdminUserFilter{Search: search}, sort, limit, offset)
+}
+
+// ListFiltered 按组合条件分页列出用户。
+func (r *UserRepo) ListFiltered(ctx context.Context, filter domain.AdminUserFilter, sort domain.CommentSort, limit, offset int) ([]domain.User, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 50
 	}
@@ -100,11 +105,7 @@ func (r *UserRepo) List(ctx context.Context, search string, sort domain.CommentS
 	if sort == domain.CommentSortDesc {
 		order = "id DESC"
 	}
-	query := gormtx.DB(ctx, r.db).Order(order)
-	if search = strings.TrimSpace(search); search != "" {
-		like := "%" + search + "%"
-		query = query.Where("email_normalized LIKE ? OR nickname LIKE ?", like, like)
-	}
+	query := applyAdminUserFilter(gormtx.DB(ctx, r.db), filter).Order(order)
 	if offset > 0 {
 		query = query.Offset(offset)
 	}
@@ -305,16 +306,38 @@ func (r *UserRepo) LockActiveAdmins(ctx context.Context) (int64, error) {
 
 // Count 按与 List 相同的搜索词统计匹配用户总数，与分页 limit 无关。
 func (r *UserRepo) Count(ctx context.Context, search string) (int64, error) {
-	query := gormtx.DB(ctx, r.db).Model(&model.User{})
-	if search = strings.TrimSpace(search); search != "" {
-		like := "%" + search + "%"
-		query = query.Where("email_normalized LIKE ? OR nickname LIKE ?", like, like)
-	}
+	return r.CountFiltered(ctx, domain.AdminUserFilter{Search: search})
+}
+
+// CountFiltered 使用与 ListFiltered 相同的条件统计匹配用户。
+func (r *UserRepo) CountFiltered(ctx context.Context, filter domain.AdminUserFilter) (int64, error) {
+	query := applyAdminUserFilter(gormtx.DB(ctx, r.db).Model(&model.User{}), filter)
 	var count int64
 	if err := query.Count(&count).Error; err != nil {
 		return 0, fmt.Errorf("count users: %w", err)
 	}
 	return count, nil
+}
+
+func applyAdminUserFilter(query *gorm.DB, filter domain.AdminUserFilter) *gorm.DB {
+	if search := strings.TrimSpace(filter.Search); search != "" {
+		like := "%" + search + "%"
+		query = query.Where("email_normalized LIKE ? OR nickname LIKE ?", like, like)
+	}
+	if filter.Status != "" {
+		query = query.Where("status = ?", filter.Status)
+	}
+	if filter.Role != "" {
+		query = query.Where("role = ?", filter.Role)
+	}
+	if filter.EmailVerified != nil {
+		if *filter.EmailVerified {
+			query = query.Where("email_verified_at IS NOT NULL")
+		} else {
+			query = query.Where("email_verified_at IS NULL")
+		}
+	}
+	return query
 }
 
 // SoftDelete 记录用户删除时间和删除前状态。

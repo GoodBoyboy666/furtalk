@@ -101,11 +101,25 @@ type ListResult struct {
 
 // ListWithTotal 按搜索词分页列出用户并统计与同一搜索条件匹配的总数，供管理端展示。
 func (s *Service) ListWithTotal(ctx context.Context, search string, sort domain.CommentSort, page, limit int) (*ListResult, error) {
-	users, err := s.List(ctx, search, sort, page, limit)
+	return s.ListWithTotalFiltered(ctx, domain.AdminUserFilter{Search: search}, sort, page, limit)
+}
+
+// ListWithTotalFiltered 使用相同组合条件查询分页用户与总数。
+func (s *Service) ListWithTotalFiltered(ctx context.Context, filter domain.AdminUserFilter, sort domain.CommentSort, page, limit int) (*ListResult, error) {
+	limit = normalizeUserLimit(limit)
+	rows, err := s.users.ListFiltered(ctx, filter, sort, limit, domain.OffsetForPage(page, limit))
 	if err != nil {
 		return nil, err
 	}
-	total, err := s.users.Count(ctx, search)
+	users := make([]Profile, 0, len(rows))
+	for i := range rows {
+		profile, err := s.profileOf(ctx, &rows[i])
+		if err != nil {
+			return nil, err
+		}
+		users = append(users, *profile)
+	}
+	total, err := s.users.CountFiltered(ctx, filter)
 	if err != nil {
 		return nil, err
 	}

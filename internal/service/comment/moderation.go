@@ -222,6 +222,10 @@ func (s *Service) adminViewFor(ctx context.Context, comment *domain.Comment) (*A
 	if err != nil {
 		return nil, err
 	}
+	thread, err := s.threads.GetBySiteAndID(ctx, comment.SiteID, comment.ThreadID)
+	if err != nil {
+		return nil, err
+	}
 	gravatarBase, err := s.avatarBaseURL(ctx)
 	if err != nil {
 		return nil, err
@@ -234,6 +238,8 @@ func (s *Service) adminViewFor(ctx context.Context, comment *domain.Comment) (*A
 	view.ReplyToNickname = replyNickname
 	return &AdminCommentView{
 		CommentView: view,
+		PageTitle:   thread.PageTitle,
+		PageURL:     thread.PageURL,
 		Email:       user.Email,
 		IPMode:      comment.IPMode,
 		IPValue:     comment.IPValue,

@@ -819,10 +819,14 @@ func adminUsersBatch(service *identity.Service) gin.HandlerFunc {
 // @Produce json
 // @Param q query string false "邮箱/昵称搜索关键字"
 // @Param sort query string false "排序方向：asc（最早优先）或 desc（最新优先，默认）"
+// @Param status query string false "账户状态：active、disabled 或 deleted"
+// @Param email_verified query boolean false "邮箱是否已验证：true 或 false"
+// @Param role query string false "用户角色：admin 或 user"
 // @Param page query integer false "页码（从 1 开始，默认 1）"
 // @Param limit query integer false "每页数量（默认 50）"
 // @Success 200 {object} AdminUserListResponse "用户列表与真实总数"
 // @Failure 400 {object} httpx.ErrorResponse "请求参数无效"
+// @Failure 422 {object} httpx.ErrorResponse "筛选参数无效"
 // @Failure 401 {object} httpx.ErrorResponse "需要管理员登录"
 // @Failure 403 {object} httpx.ErrorResponse "权限不足"
 // @Router /api/v1/admin/users [get]
@@ -847,7 +851,30 @@ func adminUsersList(service *identity.Service) gin.HandlerFunc {
 			writeError(c, err)
 			return
 		}
-		result, err := service.ListWithTotal(c.Request.Context(), c.Query("q"), sort, page, limit)
+		filter := domain.AdminUserFilter{Search: c.Query("q")}
+		if raw, present := c.GetQuery("status"); present {
+			filter.Status = domain.UserStatus(raw)
+			if filter.Status != domain.UserStatusActive && filter.Status != domain.UserStatusDisabled && filter.Status != domain.UserStatusDeleted {
+				writeError(c, domain.ErrValidation)
+				return
+			}
+		}
+		if raw, present := c.GetQuery("role"); present {
+			filter.Role = domain.Role(raw)
+			if filter.Role != domain.RoleAdmin && filter.Role != domain.RoleUser {
+				writeError(c, domain.ErrValidation)
+				return
+			}
+		}
+		if raw, present := c.GetQuery("email_verified"); present {
+			if raw != "true" && raw != "false" {
+				writeError(c, domain.ErrValidation)
+				return
+			}
+			verified := raw == "true"
+			filter.EmailVerified = &verified
+		}
+		result, err := service.ListWithTotalFiltered(c.Request.Context(), filter, sort, page, limit)
 		if err != nil {
 			writeError(c, err)
 			return
