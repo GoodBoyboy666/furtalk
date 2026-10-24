@@ -30,6 +30,14 @@ const (
 	UserStatusDeleted UserStatus = "deleted"
 )
 
+// AdminUserFilter 管理端用户列表的可组合筛选条件；零值表示不筛选。
+type AdminUserFilter struct {
+	Search        string
+	Status        UserStatus
+	Role          Role
+	EmailVerified *bool
+}
+
 // SiteStatus 站点状态。
 type SiteStatus string
 
@@ -302,6 +310,12 @@ type PublicComment struct {
 	ReplyToNickname       *string
 	LikeCount             int64
 	LikedByMe             bool
+}
+
+// PublicRootComment 保存可见根评论及其可见回复提示。
+type PublicRootComment struct {
+	PublicComment
+	HasReplies bool
 }
 
 // LatestPublicComment 站点公开最新评论与所属线程元数据及作者当前公开资料。

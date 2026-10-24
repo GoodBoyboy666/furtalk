@@ -24,6 +24,10 @@ func RegisterWidget(api *gin.RouterGroup, service *comment.Service, verifier com
 	widget.OPTIONS("/sites/:site_id/runtime-config", httpx.CORSForSiteParam("site_id", origins))
 	widget.GET("/sites/:site_id/comments", httpx.CORSForSiteParam("site_id", origins), widgetOptionalCredential, widgetListComments(service))
 	widget.OPTIONS("/sites/:site_id/comments", httpx.CORSForSiteParam("site_id", origins))
+	widget.GET("/sites/:site_id/root-comments", httpx.CORSForSiteParam("site_id", origins), widgetOptionalCredential, widgetListRootComments(service))
+	widget.OPTIONS("/sites/:site_id/root-comments", httpx.CORSForSiteParam("site_id", origins))
+	widget.GET("/sites/:site_id/comments/:comment_id/replies", httpx.CORSForSiteParam("site_id", origins), widgetOptionalCredential, widgetListReplies(service))
+	widget.OPTIONS("/sites/:site_id/comments/:comment_id/replies", httpx.CORSForSiteParam("site_id", origins))
 	widget.GET("/sites/:site_id/latest-comments", httpx.CORSForSiteParam("site_id", origins), widgetListLatestComments(service))
 	widget.OPTIONS("/sites/:site_id/latest-comments", httpx.CORSForSiteParam("site_id", origins))
 

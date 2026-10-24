@@ -239,6 +239,26 @@ type ThreadCommentsResponse struct {
 	NextCursor *string            `json:"next_cursor"`
 }
 
+// RootCommentResponse 保存公开根评论与可见回复提示。
+type RootCommentResponse struct {
+	CommentResponse
+	HasReplies bool `json:"has_replies"`
+}
+
+// ThreadRootCommentsResponse 保存线程元数据与根评论分页。
+type ThreadRootCommentsResponse struct {
+	Thread     ThreadMetaResponse    `json:"thread"`
+	Comments   []RootCommentResponse `json:"comments"`
+	NextCursor *string               `json:"next_cursor"`
+}
+
+// CommentRepliesResponse 保存指定可见根下的回复分页。
+type CommentRepliesResponse struct {
+	RootID     string            `json:"root_id"`
+	Comments   []CommentResponse `json:"comments"`
+	NextCursor *string           `json:"next_cursor"`
+}
+
 // LatestCommentResponse 站点公开最新评论视图。
 type LatestCommentResponse struct {
 	ID              string     `json:"id"`
@@ -366,6 +386,8 @@ type AdminCommentResponse struct {
 	AuthorEmail    string  `json:"author_email"`
 	AuthorNickname string  `json:"author_nickname"`
 	AuthorWebsite  *string `json:"author_website"`
+	PageTitle      *string `json:"page_title"`
+	PageURL        *string `json:"page_url"`
 	AvatarURL      string  `json:"avatar_url"`
 	// ReplyToUserID 被回复作者的 id；根评论为 nil，被回复者注销后也为 nil。
 	ReplyToUserID *string `json:"reply_to_user_id"`
@@ -468,6 +490,30 @@ func toThreadCommentsResponse(view *comment.ThreadView) ThreadCommentsResponse {
 	}
 	for _, c := range view.Comments {
 		resp.Comments = append(resp.Comments, toCommentResponse(c))
+	}
+	return resp
+}
+
+// toThreadRootCommentsResponse 将根评论分页转换为公开响应。
+func toThreadRootCommentsResponse(view *comment.RootThreadView) ThreadRootCommentsResponse {
+	resp := ThreadRootCommentsResponse{
+		Thread: ThreadMetaResponse{
+			ID: strconv.FormatInt(view.ID, 10), SiteID: strconv.FormatInt(view.SiteID, 10), PageKey: view.PageKey,
+			PageURL: view.PageURL, PageTitle: view.PageTitle, CommentsEnabled: view.CommentsEnabled,
+		},
+		Comments: make([]RootCommentResponse, 0, len(view.Comments)), NextCursor: view.NextCursor,
+	}
+	for _, row := range view.Comments {
+		resp.Comments = append(resp.Comments, RootCommentResponse{CommentResponse: toCommentResponse(row.CommentView), HasReplies: row.HasReplies})
+	}
+	return resp
+}
+
+// toCommentRepliesResponse 将回复分页转换为公开响应。
+func toCommentRepliesResponse(view *comment.ReplyPageView) CommentRepliesResponse {
+	resp := CommentRepliesResponse{RootID: strconv.FormatInt(view.RootID, 10), Comments: make([]CommentResponse, 0, len(view.Comments)), NextCursor: view.NextCursor}
+	for _, row := range view.Comments {
+		resp.Comments = append(resp.Comments, toCommentResponse(row))
 	}
 	return resp
 }
@@ -615,6 +661,8 @@ func toAdminCommentResponse(view comment.AdminCommentView) AdminCommentResponse 
 		AuthorEmail:     view.Email,
 		AuthorNickname:  base.AuthorNickname,
 		AuthorWebsite:   base.AuthorWebsite,
+		PageTitle:       view.PageTitle,
+		PageURL:         view.PageURL,
 		AvatarURL:       base.AvatarURL,
 		ReplyToUserID:   base.ReplyToUserID,
 		ReplyToNickname: base.ReplyToNickname,

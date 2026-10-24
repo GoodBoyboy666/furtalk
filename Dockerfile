@@ -6,7 +6,7 @@ FROM --platform=$BUILDPLATFORM node:24-alpine AS web-builder
 WORKDIR /src/web
 
 RUN corepack enable \
-    && corepack prepare pnpm@10.15.0 --activate
+    && corepack prepare pnpm@12.15.0 --activate
 
 COPY web/package.json web/pnpm-lock.yaml web/pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
@@ -14,7 +14,7 @@ RUN pnpm install --frozen-lockfile
 COPY web/ ./
 RUN pnpm build
 
-FROM --platform=$BUILDPLATFORM golang:1.25.13-alpine AS go-builder
+FROM --platform=$BUILDPLATFORM golang:1.27.3-alpine AS go-builder
 WORKDIR /src
 
 COPY go.mod go.sum ./

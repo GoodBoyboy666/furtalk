@@ -686,6 +686,84 @@ func TestAdminUsersListAcceptsSortDirection(t *testing.T) {
 	}
 }
 
+// TestAdminUsersListCombinedFilters 验证筛选结果与分页总数使用同一条件。
+func TestAdminUsersListCombinedFilters(t *testing.T) {
+	env := newAdminUsersEnv(t)
+	createAdminUser(t, env, `{"email":"match1@example.com","nickname":"match one","role":"user","email_verified":true}`)
+	createAdminUser(t, env, `{"email":"match2@example.com","nickname":"match two","role":"user","email_verified":true}`)
+	createAdminUser(t, env, `{"email":"other@example.com","nickname":"other","role":"admin","email_verified":true}`)
+	createAdminUser(t, env, `{"email":"match3@example.com","nickname":"match three","role":"user"}`)
+	if err := env.userDB.Model(&model.User{}).Where("email = ?", "match2@example.com").Update("status", domain.UserStatusDisabled).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := env.userDB.Model(&model.User{}).Where("email = ?", "match3@example.com").Update("status", domain.UserStatusDeleted).Error; err != nil {
+		t.Fatal(err)
+	}
+	router := adminUsersRouter(t, env.svc)
+	for _, tc := range []struct {
+		query string
+		want  string
+		total int64
+	}{
+		{"?q=match&status=active&email_verified=true&role=user", "match1@example.com", 1},
+		{"?q=match&status=disabled&email_verified=true&role=user", "match2@example.com", 1},
+		{"?q=match&status=deleted&email_verified=false&role=user", "match3@example.com", 1},
+		{"?role=admin&email_verified=true", "other@example.com", 1},
+	} {
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/admin/users"+tc.query, nil))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s: status=%d body=%s", tc.query, rec.Code, rec.Body.String())
+		}
+		var result struct {
+			Users []struct {
+				Email string `json:"email"`
+			} `json:"users"`
+			Total int64 `json:"total"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil {
+			t.Fatal(err)
+		}
+		if result.Total != tc.total || len(result.Users) != 1 || result.Users[0].Email != tc.want {
+			t.Fatalf("%s: result=%+v want %s total %d", tc.query, result, tc.want, tc.total)
+		}
+	}
+
+	for _, page := range []string{"1", "2", "3"} {
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/admin/users?q=match&email_verified=true&role=user&limit=1&page="+page, nil))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("page %s status=%d", page, rec.Code)
+		}
+		var result struct {
+			Users []json.RawMessage `json:"users"`
+			Total int64             `json:"total"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil {
+			t.Fatal(err)
+		}
+		wantRows := 1
+		if page == "3" {
+			wantRows = 0
+		}
+		if result.Total != 2 || len(result.Users) != wantRows {
+			t.Fatalf("page %s: %+v", page, result)
+		}
+	}
+}
+
+func TestAdminUsersListRejectsInvalidFilters(t *testing.T) {
+	env := newAdminUsersEnv(t)
+	router := adminUsersRouter(t, env.svc)
+	for _, query := range []string{"status=paused", "status=", "role=moderator", "role=", "email_verified=yes", "email_verified="} {
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/admin/users?"+query, nil))
+		if rec.Code != http.StatusUnprocessableEntity || !strings.Contains(rec.Body.String(), `"code":"invalid_input"`) {
+			t.Fatalf("%s: status=%d body=%s", query, rec.Code, rec.Body.String())
+		}
+	}
+}
+
 // idOf 把十进制字符串 ID 转为 int64。
 func idOf(t *testing.T, raw string) int64 {
 	t.Helper()

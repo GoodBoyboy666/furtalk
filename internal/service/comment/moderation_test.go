@@ -8,6 +8,7 @@ import (
 
 	"furtalk/internal/domain"
 	"furtalk/internal/repository"
+	"furtalk/internal/repository/model"
 	"gorm.io/gorm"
 )
 
@@ -30,6 +31,41 @@ func seedAdminComment(t *testing.T, db *gorm.DB, fx ownerFixture, status domain.
 		t.Fatalf("create %s comment: %v", status, err)
 	}
 	return c.ID
+}
+
+// TestAdminGetIncludesThreadPageMetadata 验证详情从评论所属线程取得页面信息。
+func TestAdminGetIncludesThreadPageMetadata(t *testing.T) {
+	db := ownerTestDB(t)
+	fx := seedOwnerComments(t, db)
+	thread, err := repository.NewThreadRepo(db).GetBySiteAndKey(context.Background(), fx.SiteID, "page-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	title := "Article title"
+	url := "https://example.com/article"
+	if err := db.Model(&model.Thread{}).Where("site_id = ? AND id = ?", fx.SiteID, thread.ID).
+		Updates(map[string]any{"page_title": title, "page_url": url}).Error; err != nil {
+		t.Fatal(err)
+	}
+	svc := ownerService(db, "soft")
+	view, err := svc.AdminGet(context.Background(), fx.Published)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if view.PageTitle == nil || *view.PageTitle != title || view.PageURL == nil || *view.PageURL != url {
+		t.Fatalf("page metadata = title %v, url %v", view.PageTitle, view.PageURL)
+	}
+	if err := db.Model(&model.Thread{}).Where("site_id = ? AND id = ?", fx.SiteID, thread.ID).
+		Updates(map[string]any{"page_title": nil, "page_url": nil}).Error; err != nil {
+		t.Fatal(err)
+	}
+	view, err = svc.AdminGet(context.Background(), fx.Published)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if view.PageTitle != nil || view.PageURL != nil {
+		t.Fatalf("page metadata should be null: %+v", view)
+	}
 }
 
 // applyAdminTransition 应用目标状态对应的服务动作并返回更新后的评论。
