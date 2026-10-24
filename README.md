@@ -25,8 +25,8 @@ Furtalk 是一个自托管的网站评论系统。后端提供完整的评论 AP
 ## 技术栈
 
 | 层     | 技术                                                                      |
-| ------ | ------------------------------------------------------------------------- |
-| 后端   | Go ≥ 1.25.13、Gin、GORM、go.uber.org/fx、Viper                            |
+| ------ |---------------------------------------------------------------------------|
+| 后端   | Go ≥ 1.27.3、Gin、GORM、go.uber.org/fx、Viper                             |
 | 数据库 | SQLite（纯 Go glebarez 驱动）或 PostgreSQL（pgx）                         |
 | 缓存   | 进程内缓存（默认）或 Redis                                                |
 | 认证   | golang-jwt（HS256）、WebAuthn、go-oidc                                    |
@@ -56,7 +56,7 @@ widget/            可嵌入评论组件（子模块，见 widget/README.md）
 
 ### 环境要求
 
-- Go ≥ 1.25.13
+- Go ≥ 1.27.3
 - pnpm（构建 Web 与 Widget）
 - Task（推荐，`task` 命令；详见 Taskfile.yml）
 - Atlas Community v1.3.0（非容器部署手动迁移需要；官方镜像已内置，见 `docs/database-migrations.md`）
